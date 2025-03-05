@@ -42,6 +42,8 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/calculator"
 	advisorapi "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpuadvisor"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpueviction"
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/tuner"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/state"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/validator"
 	cpuutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/util"
@@ -101,6 +103,9 @@ type DynamicPolicy struct {
 
 	cpuPressureEviction       agent.Component
 	cpuPressureEvictionCancel context.CancelFunc
+
+	irqTuner       irqtuner.Tuner
+	enableIRQTuner *bool
 
 	// those are parsed from configurations
 	// todo if we want to use dynamic configuration, we'd better not use self-defined conf
@@ -165,7 +170,6 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 			return false, agent.ComponentStub{}, err
 		}
 	}
-
 	// since the reservedCPUs won't influence stateImpl directly.
 	// so we don't modify stateImpl with reservedCPUs here.
 	// for those pods have already been allocated reservedCPUs,
@@ -183,8 +187,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 
 		advisorValidator: validator.NewCPUAdvisorValidator(stateImpl, agentCtx.KatalystMachineInfo),
 
-		cpuPressureEviction: cpuPressureEviction,
-
+		cpuPressureEviction:           cpuPressureEviction,
 		qosConfig:                     conf.QoSConfiguration,
 		dynamicConfig:                 conf.DynamicAgentConfiguration,
 		cpuAdvisorSocketAbsPath:       conf.CPUAdvisorSocketAbsPath,
@@ -208,6 +211,14 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		sharedCoresNUMABindingResultAnnotationKey: conf.SharedCoresNUMABindingResultAnnotationKey,
 		transitionPeriod:                          30 * time.Second,
 		reservedReclaimedCPUsSize:                 general.Max(reservedReclaimedCPUsSize, agentCtx.KatalystMachineInfo.NumNUMANodes),
+	}
+
+	// TODO(KFX): ensure
+	policyImplement.irqTuner = tuner.NewIRQTunerStub(conf, policyImplement)
+	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
+		if dc.IRQTuningConfiguration != nil {
+			policyImplement.enableIRQTuner = &dc.IRQTuningConfiguration.EnableTuner
+		}
 	}
 
 	// register allocation behaviors for pods with different QoS level
@@ -238,7 +249,19 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initReclaimPool failed with error: %v", err)
 	}
 
+	// TODO: ensure
+	if policyImplement.enableIRQTuner != nil && *policyImplement.enableIRQTuner {
+		if err := policyImplement.initInterruptPool(); err != nil {
+			return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initInterruptPool failed with error: %v", err)
+		}
+	}
+
 	err = agentCtx.MetaServer.ConfigurationManager.AddConfigWatcher(crd.AdminQoSConfigurationGVR)
+	if err != nil {
+		return false, nil, err
+	}
+
+	err = agentCtx.ConfigurationManager.AddConfigWatcher(crd.IRQTuningConfigurationGVR)
 	if err != nil {
 		return false, nil, err
 	}
@@ -351,6 +374,10 @@ func (p *DynamicPolicy) Start() (err error) {
 	}
 	go p.advisorMonitor.Run(p.stopCh)
 
+	if p.enableIRQTuner != nil && *p.enableIRQTuner {
+		go p.irqTuner.Run(p.stopCh)
+	}
+
 	go wait.BackoffUntil(func() { p.serveForAdvisor(p.stopCh) }, wait.NewExponentialBackoffManager(
 		800*time.Millisecond, 30*time.Second, 2*time.Minute, 2.0, 0, &clock.RealClock{}), true, p.stopCh)
 
@@ -390,6 +417,8 @@ func (p *DynamicPolicy) Start() (err error) {
 
 	go wait.BackoffUntil(communicateWithCPUAdvisorServer, wait.NewExponentialBackoffManager(800*time.Millisecond,
 		30*time.Second, 2*time.Minute, 2.0, 0, &clock.RealClock{}), true, p.stopCh)
+
+	general.Infof("[DEBUG] DynamicPolicy start ...")
 
 	return nil
 }
@@ -1199,6 +1228,15 @@ func (p *DynamicPolicy) initReclaimPool() error {
 	} else {
 		general.Infof("exist initial %s: %s", commonstate.PoolNameReclaim, reclaimedAllocationInfo.AllocationResult.String())
 	}
+
+	return nil
+}
+
+func (p *DynamicPolicy) initInterruptPool() error {
+	allocationInfo := &state.AllocationInfo{
+		AllocationMeta: commonstate.GenerateGenericPoolAllocationMeta(commonstate.FakedContainerName),
+	}
+	p.state.SetAllocationInfo(commonstate.PoolNameInterrupt, commonstate.FakedContainerName, allocationInfo, true)
 
 	return nil
 }
