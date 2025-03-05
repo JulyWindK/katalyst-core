@@ -26,6 +26,7 @@ import (
 
 	configapi "github.com/kubewharf/katalyst-api/pkg/apis/config/v1alpha1"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/commonstate"
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/state"
 	"github.com/kubewharf/katalyst-core/pkg/agent/sysadvisor/plugin/qosaware/resource/cpu/assembler/headroomassembler"
 	"github.com/kubewharf/katalyst-core/pkg/agent/sysadvisor/plugin/qosaware/resource/cpu/assembler/provisionassembler"
 	"github.com/kubewharf/katalyst-core/pkg/agent/sysadvisor/plugin/qosaware/resource/cpu/region"
@@ -153,11 +154,23 @@ func (cra *cpuResourceAdvisor) initializeHeadroomAssembler() error {
 }
 
 // updateNumasAvailableResource updates available resource of all numa nodes.
-// available = total - reserved pool
+// available = total - reserved pool - prohibited pool
 func (cra *cpuResourceAdvisor) updateNumasAvailableResource() {
 	cra.numaAvailable = make(map[int]int)
 	reservePoolInfo, _ := cra.metaCache.GetPoolInfo(commonstate.PoolNameReserve)
 	cpusPerNuma := cra.metaServer.CPUsPerNuma()
+
+	// TODO(KFX): ensure logic
+	prohibitedCPUsMap := make(map[int]int)
+	for _, poolName := range state.ProhibitedPools.List() {
+		poolInfo, ok := cra.metaCache.GetPoolInfo(poolName)
+		if poolInfo == nil || !ok {
+			continue
+		}
+		for numaID, cpuset := range poolInfo.TopologyAwareAssignments {
+			prohibitedCPUsMap[numaID] += cpuset.Size()
+		}
+	}
 
 	cra.updateReservedForReclaim()
 
@@ -166,7 +179,12 @@ func (cra *cpuResourceAdvisor) updateNumasAvailableResource() {
 		if cpuset, ok := reservePoolInfo.TopologyAwareAssignments[id]; ok {
 			reservePoolNuma = cpuset.Size()
 		}
-		cra.numaAvailable[id] = cpusPerNuma - reservePoolNuma
+		// TODO(KFX): ensure logic
+		prohibitedPoolNuma := 0
+		if v, ok := prohibitedCPUsMap[id]; ok {
+			prohibitedPoolNuma = v
+		}
+		cra.numaAvailable[id] = cpusPerNuma - reservePoolNuma - prohibitedPoolNuma
 	}
 }
 
