@@ -504,6 +504,47 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 		availableCPUs = availableCPUs.Difference(blockCPUSet[blockID])
 	}
 
+	// walk through prohibited pools to construct blockCPUSet (for prohibited pool),
+	// and calculate availableCPUs after deducting prohibited pools
+	// TODO(KFX): Determine if the logic is correct
+	for _, poolName := range state.ProhibitedPools.List() {
+		allocationInfo := p.state.GetAllocationInfo(poolName, commonstate.FakedContainerName)
+		if allocationInfo == nil {
+			continue
+		}
+
+		blocks, ok := resp.GeEntryNUMABlocks(poolName, commonstate.FakedContainerName, commonstate.FakedNUMAID)
+		if !ok {
+			return nil, fmt.Errorf("blocks of pool: %s is invalid", poolName)
+		}
+
+		for _, block := range blocks {
+			if block == nil {
+				general.Warningf("got nil block")
+				continue
+			}
+
+			blockID := block.BlockId
+
+			if _, found := blockCPUSet[blockID]; found {
+				general.Warningf("block: %v already allocated", blockID)
+				continue
+			}
+
+			blockResult, err := general.CovertUInt64ToInt(block.Result)
+			if err != nil {
+				return nil, fmt.Errorf("parse block: %s result failed with error: %v",
+					blockID, err)
+			}
+
+			cpuset := machine.NewCPUSet()
+			cpuset.Add(blockResult)
+
+			blockCPUSet[blockID] = cpuset
+			availableCPUs = availableCPUs.Difference(blockCPUSet[blockID])
+		}
+	}
+
 	// walk through all blocks with specified NUMA ids
 	// for each block, add them into blockCPUSet (if not exist) and renew availableCPUs
 	for numaID, blocks := range numaToBlocks {
@@ -594,7 +635,6 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 	newEntries := make(state.PodEntries)
 	dedicatedCPUSet := machine.NewCPUSet()
 	pooledUnionDedicatedCPUSet := machine.NewCPUSet()
-
 	// calculate NUMAs without actual numa_binding reclaimed pods
 	nonReclaimActualBindingNUMAs := p.state.GetMachineState().GetFilteredNUMASet(state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckReclaimedActualNUMABinding))
 
@@ -613,7 +653,6 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 			if err != nil {
 				return err
 			}
-
 			// transform cpuset into topologyAwareAssignments
 			topologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, entryCPUSet)
 			if err != nil {
@@ -699,7 +738,6 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 		Difference(p.reservedCPUs).
 		Difference(dedicatedCPUSet).
 		Difference(sharedBindingNUMACPUs)
-
 	rampUpCPUsTopologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, rampUpCPUs)
 	if err != nil {
 		return fmt.Errorf("unable to calculate topologyAwareAssignments for rampUpCPUs, result cpuset: %s, error: %v",
