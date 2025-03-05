@@ -73,6 +73,14 @@ func (p *DynamicPolicy) sharedCoresWithoutNUMABindingAllocationHandler(_ context
 	pooledCPUs := machineState.GetFilteredAvailableCPUSet(p.reservedCPUs,
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckDedicated),
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckSharedOrDedicatedNUMABinding))
+	// TODO(KFX): ensure
+	// cores that are prohibited from user binding need to be deducted from the pool.
+	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, p.state.GetPodEntries())
+	if err != nil {
+		return nil, fmt.Errorf("getProhibitedCPUs failed with error: %v", err)
+	}
+
+	pooledCPUs.Difference(prohibitedCPUs)
 
 	if pooledCPUs.IsEmpty() {
 		general.Errorf("pod: %s/%s, container: %s get empty pooledCPUs", req.PodNamespace, req.PodName, req.ContainerName)
@@ -382,6 +390,14 @@ func (p *DynamicPolicy) dedicatedCoresWithNUMABindingAllocationHandler(ctx conte
 			"numCPUsFloat64", reqFloat64)
 		return nil, err
 	}
+
+	// TODO(KFX): ensure
+	// avoid running services on prohibited CPUs.
+	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, p.state.GetPodEntries())
+	if err != nil {
+		return nil, fmt.Errorf("getProhibitedCPUs failed with error: %v", err)
+	}
+	result = result.Difference(prohibitedCPUs)
 
 	general.InfoS("allocate CPUs successfully",
 		"podNamespace", req.PodNamespace,
@@ -702,7 +718,10 @@ func (p *DynamicPolicy) putAllocationsAndAdjustAllocationEntriesResizeAware(orig
 	if p.enableCPUAdvisor &&
 		!cpuutil.AdvisorDegradation(p.advisorMonitor.GetHealthy(), p.dynamicConfig.GetDynamicConfiguration().EnableReclaim) {
 		// if sys advisor is enabled, we believe the pools' ratio that sys advisor indicates
+		// TODO(KFX): ensure whether need to ignore interrupt pool
 		csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools)
+		//csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(sets.NewString(commonstate.PoolNameInterrupt)))
+		//csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(state.ProhibitedPools))
 		if err != nil {
 			return fmt.Errorf("GetFilteredPoolsCPUSetMap failed with error: %v", err)
 		}
@@ -866,7 +885,10 @@ func (p *DynamicPolicy) adjustAllocationEntries(persistCheckpoint bool) error {
 	var poolsQuantityMap map[string]map[int]int
 	if p.enableCPUAdvisor &&
 		!cpuutil.AdvisorDegradation(p.advisorMonitor.GetHealthy(), p.dynamicConfig.GetDynamicConfiguration().EnableReclaim) {
+		// TODO(KFX): ensure whether need to ignore interrupt pool
 		poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools)
+		//poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(sets.NewString(commonstate.PoolNameInterrupt)))
+		//poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(state.ProhibitedPools))
 		if err != nil {
 			return fmt.Errorf("GetFilteredPoolsCPUSetMap failed with error: %v", err)
 		}
@@ -902,6 +924,17 @@ func (p *DynamicPolicy) adjustPoolsAndIsolatedEntries(
 ) error {
 	availableCPUs := machineState.GetFilteredAvailableCPUSet(p.reservedCPUs, nil,
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckDedicatedNUMABinding))
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries init availableCPUs: %v", availableCPUs)
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries init entries: %v", entries)
+
+	// TODO(KFX): ensure logic
+	// deduct the cpus that is prohibited from being used by user containers.
+	prohibitedPoolCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, entries)
+	if err != nil {
+		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
+	}
+	availableCPUs = availableCPUs.Difference(prohibitedPoolCPUs)
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries prohibitedPoolCPUs: %v", prohibitedPoolCPUs)
 
 	reclaimOverlapShareRatio, err := p.getReclaimOverlapShareRatio(entries)
 	if err != nil {
@@ -914,6 +947,9 @@ func (p *DynamicPolicy) adjustPoolsAndIsolatedEntries(
 	if err != nil {
 		return fmt.Errorf("generatePoolsAndIsolation failed with error: %v", err)
 	}
+
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries poolsCPUSet: %v", poolsCPUSet)
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries isolatedCPUSet: %v", isolatedCPUSet)
 
 	err = p.reclaimOverlapNUMABinding(poolsCPUSet, entries)
 	if err != nil {
@@ -989,7 +1025,6 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 
 	// calculate NUMAs without actual numa_binding reclaimed pods
 	nonReclaimActualBindingNUMAs := p.state.GetMachineState().GetFilteredNUMASet(state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckReclaimedActualNUMABinding))
-
 	// 1. construct entries for isolated containers (probably be dedicated_cores not numa_binding )
 	for podUID, containerEntries := range isolatedCPUSet {
 		for containerName, isolatedCPUs := range containerEntries {
@@ -1042,7 +1077,6 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 
 	for poolName, cset := range poolsCPUSet {
 		general.Infof("try to apply pool %s: %s", poolName, cset.String())
-
 		topologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, cset)
 		if err != nil {
 			return fmt.Errorf("unable to calculate topologyAwareAssignments for pool: %s, result cpuset: %s, error: %v",
@@ -1086,6 +1120,14 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckDedicatedNUMABinding)).
 		Difference(unionDedicatedIsolatedCPUSet).
 		Difference(sharedBindingNUMACPUs)
+	// TODO(KFX): ensure logic
+	general.Infof("[DEBUG]GetUnitedPoolsCPUs before newPodEntries:%v", newPodEntries)
+	prohibitedPoolsCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, newPodEntries)
+	if err != nil {
+		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
+	}
+	general.Infof("[DEBUG]applyPoolsAndIsolatedInfo get rampUpCPUs:%v", rampUpCPUs)
+	rampUpCPUs = rampUpCPUs.Difference(prohibitedPoolsCPUs)
 
 	rampUpCPUsTopologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, rampUpCPUs)
 	if err != nil {
@@ -1101,6 +1143,7 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 
 	containerLoop:
 		for containerName, allocationInfo := range containerEntries {
+			general.Infof("[DEBUG]applyPoolsAndIsolatedInfo construct pod:%v container:%v allocationInfo:%v", podUID, containerName, allocationInfo)
 			if allocationInfo == nil {
 				general.Errorf("pod: %s, container: %s has nil allocationInfo", podUID, containerName)
 				continue
@@ -1233,6 +1276,7 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 	if err != nil {
 		return fmt.Errorf("calculate machineState by newPodEntries failed with error: %v", err)
 	}
+	general.Infof("[DEBUG]applyPoolsAndIsolatedInfo set podEntries:%v", newPodEntries)
 	p.state.SetPodEntries(newPodEntries, false)
 	p.state.SetMachineState(machineState, false)
 	if persistCheckpoint {
@@ -1309,6 +1353,8 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 	reclaimOverlapShareRatio map[string]float64) (poolsCPUSet map[string]machine.CPUSet,
 	isolatedCPUSet map[string]map[string]machine.CPUSet, err error,
 ) {
+	general.Infof("[DEBUG]generatePoolsAndIsolation init availableCPUs:%v", availableCPUs)
+
 	poolsBindingNUMAs := sets.NewInt()
 	poolsToSkip := make([]string, 0, len(poolsQuantityMap))
 	nonBindingPoolsQuantityMap := make(map[string]int)
@@ -1359,6 +1405,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		err = fmt.Errorf("generateNUMABindingPoolsCPUSetInPlace failed with error: %v", nbpErr)
 		return
 	}
+	general.Infof("[DEBUG]generatePoolsAndIsolation generateNUMABindingPoolsCPUSetInPlace availableCPUs:%v poolsCPUSet:%v", availableCPUs, poolsCPUSet)
 
 	nonBindingAvailableCPUs := machine.NewCPUSet()
 	for _, numaID := range p.machineInfo.CPUDetails.NUMANodes().ToSliceNoSortInt() {
@@ -1369,6 +1416,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		nonBindingAvailableCPUs = nonBindingAvailableCPUs.Union(p.machineInfo.CPUDetails.CPUsInNUMANodes(numaID).Intersection(availableCPUs))
 	}
 	availableCPUs = availableCPUs.Difference(nonBindingAvailableCPUs)
+	general.Infof("[DEBUG]generatePoolsAndIsolation diff nonbindingcpu availableCPUs:%v nonBindingAvailableCPUs:%v", availableCPUs, nonBindingAvailableCPUs)
 
 	nonBindingAvailableSize := nonBindingAvailableCPUs.Size()
 	nonBindingPoolsTotalQuantity := general.SumUpMapValues(nonBindingPoolsQuantityMap)
@@ -1434,6 +1482,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 	}
 
 	availableCPUs = availableCPUs.Union(nonBindingAvailableCPUs)
+	general.Infof("[DEBUG]generatePoolsAndIsolation union nonbinding availableCPUs:%v", availableCPUs)
 
 	// deal with reserve pool
 	if poolsCPUSet[commonstate.PoolNameReserve].IsEmpty() {
@@ -1486,6 +1535,19 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		general.Infof("fallback takeByNUMABalance in generatePoolsAndIsolation for reclaimedCPUSet: %s", p.reservedReclaimedCPUSet.String())
 		poolsCPUSet[commonstate.PoolNameReclaim] = p.reservedReclaimedCPUSet.Clone()
 	}
+
+	// TODO: whether if deal with prohibited pools
+	// deal with prohibited pools
+	currentPodEntries := p.state.GetPodEntries()
+	for _, poolName := range state.ProhibitedPools.List() {
+		cset, err := currentPodEntries.GetCPUSetForPool(poolName)
+		if err != nil {
+			general.Infof("can't get CPUSet for pool %s: %v", poolName, err)
+			continue
+		}
+		poolsCPUSet[poolName] = cset.Clone()
+	}
+	general.Infof("[DEBUG]generatePoolsAndIsolation finished, poolsCPUSet: %+v isolatedCPUSet:%v", poolsCPUSet, isolatedCPUSet)
 
 	return
 }

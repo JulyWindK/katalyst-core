@@ -19,6 +19,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/spf13/pflag"
 	cliflag "k8s.io/component-base/cli/flag"
@@ -33,6 +34,12 @@ func main() {
 	opt := options.NewOptions()
 	fss := &cliflag.NamedFlagSets{}
 	opt.AddFlags(fss)
+
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Printf("panic: %v\n%s", err, debug.Stack())
+		}
+	}()
 
 	commandLine := pflag.NewFlagSet(os.Args[0], pflag.ExitOnError)
 	for _, f := range fss.FlagSets {

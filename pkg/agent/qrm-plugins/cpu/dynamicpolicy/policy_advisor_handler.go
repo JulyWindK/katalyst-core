@@ -218,6 +218,7 @@ func (p *DynamicPolicy) pushCPUAdvisor() error {
 
 func (p *DynamicPolicy) createGetAdviceRequest() (*advisorapi.GetAdviceRequest, error) {
 	stateEntries := p.state.GetPodEntries()
+	general.Infof("[DEBUG]createGetAdviceRequest current stateEntries: %v", stateEntries)
 	chkEntries := make(map[string]*advisorapi.ContainerAllocationInfoEntries)
 	for uid, containerEntries := range stateEntries {
 		if chkEntries[uid] == nil {
@@ -310,6 +311,7 @@ func (p *DynamicPolicy) getAdviceFromAdvisor(ctx context.Context) (isImplemented
 	}()
 
 	request, err := p.createGetAdviceRequest()
+	general.Infof("[DEBUG]getAdviceFromAdvisor createGetAdviceRequest request: %v", request)
 	if err != nil {
 		return false, fmt.Errorf("create GetAdviceRequest failed with error: %w", err)
 	}
@@ -484,6 +486,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 	machineInfo := p.machineInfo
 	topology := machineInfo.CPUTopology
 	availableCPUs := topology.CPUDetails.CPUs()
+	general.Infof("[DEBUG]generateBlockCPUSet init availableCPUs: %v", availableCPUs)
 
 	// walk through static pools to construct blockCPUSet (for static pool),
 	// and calculate availableCPUs after deducting static pools
@@ -503,6 +506,21 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 		blockCPUSet[blockID] = allocationInfo.AllocationResult.Clone()
 		availableCPUs = availableCPUs.Difference(blockCPUSet[blockID])
 	}
+	general.Infof("[DEBUG]generateBlockCPUSet diff staic pool, availableCPUs: %v", availableCPUs)
+
+	// walk through prohibited pools to construct blockCPUSet (for prohibited pool),
+	// and calculate availableCPUs after deducting prohibited pools
+	// TODO(KFX): Determine if the logic is correct
+	for _, poolName := range state.ProhibitedPools.List() {
+		allocationInfo := p.state.GetAllocationInfo(poolName, commonstate.FakedContainerName)
+		if allocationInfo == nil {
+			continue
+		}
+		general.Infof("[DEBUG]generateBlockCPUSet prohibited pool %v, AllocationResult: %v", poolName, allocationInfo.AllocationResult)
+
+		availableCPUs = availableCPUs.Difference(allocationInfo.AllocationResult.Clone())
+	}
+	general.Infof("[DEBUG]generateBlockCPUSet diff prohibited pool, availableCPUs: %v", availableCPUs)
 
 	// walk through all blocks with specified NUMA ids
 	// for each block, add them into blockCPUSet (if not exist) and renew availableCPUs
@@ -542,6 +560,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 			availableCPUs = availableCPUs.Difference(cpuset)
 		}
 	}
+	general.Infof("[DEBUG]generateBlockCPUSet diff special numaID, availableCPUs: %v", availableCPUs)
 
 	// walk through all blocks without specified NUMA id
 	// for each block, add them into blockCPUSet (if not exist) and renew availableCPUs
@@ -576,6 +595,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 		blockCPUSet[blockID] = cpuset
 		availableCPUs = availableCPUs.Difference(cpuset)
 	}
+	general.Infof("[DEBUG]generateBlockCPUSet finaly availableCPUs: %v", availableCPUs)
 
 	return blockCPUSet, nil
 }
@@ -594,12 +614,17 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 	newEntries := make(state.PodEntries)
 	dedicatedCPUSet := machine.NewCPUSet()
 	pooledUnionDedicatedCPUSet := machine.NewCPUSet()
-
 	// calculate NUMAs without actual numa_binding reclaimed pods
 	nonReclaimActualBindingNUMAs := p.state.GetMachineState().GetFilteredNUMASet(state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckReclaimedActualNUMABinding))
 
+	general.Infof("[DEBUG]applyBlocks newst curEntries %v", curEntries)
+
 	// deal with blocks of dedicated_cores and pools
 	for entryName, entry := range resp.Entries {
+		if entryName == commonstate.PoolNameInterrupt {
+			continue
+		}
+
 		for subEntryName, calculationInfo := range entry.Entries {
 			if calculationInfo == nil {
 				general.Warningf("got nil calculationInfo entry: %s, subEntry: %s", entryName, subEntryName)
@@ -613,7 +638,6 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 			if err != nil {
 				return err
 			}
-
 			// transform cpuset into topologyAwareAssignments
 			topologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, entryCPUSet)
 			if err != nil {
@@ -681,12 +705,16 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 		}
 	}
 
+	general.Infof("[DEBUG]applyBlocks reviseReclaimPool before newEntries %v", newEntries)
+
 	// revise reclaim pool size to avoid reclaimed_cores and numa_binding dedicated_cores containers
 	// in NUMAs without cpuset actual binding
 	err := p.reviseReclaimPool(newEntries, nonReclaimActualBindingNUMAs, pooledUnionDedicatedCPUSet)
 	if err != nil {
 		return err
 	}
+
+	general.Infof("[DEBUG]applyBlocks reviseReclaimPool after newEntries %v", newEntries)
 
 	// calculate rampUpCPUs
 	sharedBindingNUMAs, err := resp.GetSharedBindingNUMAs()
@@ -699,7 +727,6 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 		Difference(p.reservedCPUs).
 		Difference(dedicatedCPUSet).
 		Difference(sharedBindingNUMACPUs)
-
 	rampUpCPUsTopologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, rampUpCPUs)
 	if err != nil {
 		return fmt.Errorf("unable to calculate topologyAwareAssignments for rampUpCPUs, result cpuset: %s, error: %v",
@@ -809,11 +836,21 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 		}
 	}
 
+	// TODO: ensure logic
+	// deal with interrupt pools
+	if subEntry, ok := curEntries[commonstate.PoolNameInterrupt]; ok {
+		newEntries[commonstate.PoolNameInterrupt] = make(state.ContainerEntries)
+		if ai, ok := subEntry[commonstate.FakedContainerName]; ok && ai != nil {
+			newEntries[commonstate.PoolNameInterrupt][commonstate.FakedContainerName] = ai.Clone()
+		}
+	}
+
 	// use pod entries generated above to generate machine state info, and store in local state
 	newMachineState, err := generateMachineStateFromPodEntries(p.machineInfo.CPUTopology, newEntries)
 	if err != nil {
 		return fmt.Errorf("calculate machineState by newPodEntries failed with error: %v", err)
 	}
+	general.Infof("[DEBUG]applyBlocks set podEntries:%v", newEntries)
 	p.state.SetPodEntries(newEntries, false)
 	p.state.SetMachineState(newMachineState, false)
 	if err := p.state.StoreState(); err != nil {
@@ -871,10 +908,18 @@ func (p *DynamicPolicy) applyNUMAHeadroom(resp *advisorapi.ListAndWatchResponse)
 }
 
 func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclaimActualBindingNUMAs, pooledUnionDedicatedCPUSet machine.CPUSet) error {
+	// TODO(KFX): ensure
+	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, p.state.GetPodEntries())
+	if err != nil {
+		return fmt.Errorf("GetUnitedPoolsCPUs for prohibited pools failed with error: %v", err)
+	}
+	general.Infof("[DEBUG]reviseReclaimPool get prohibitedCPUs: %v", prohibitedCPUs)
+
 	// if there is no block for state.PoolNameReclaim pool,
 	// we must make it existing here even if cause overlap
 	if newEntries.CheckPoolEmpty(commonstate.PoolNameReclaim) {
-		reclaimPoolCPUSet := p.machineInfo.CPUDetails.CPUs().Difference(p.reservedCPUs).Difference(pooledUnionDedicatedCPUSet)
+		reclaimPoolCPUSet := p.machineInfo.CPUDetails.CPUs().Difference(p.reservedCPUs).Difference(pooledUnionDedicatedCPUSet).Difference(prohibitedCPUs)
+		general.Infof("[DEBUG]reviseReclaimPool empty reclaim generate new pool: %v", reclaimPoolCPUSet)
 		if reclaimPoolCPUSet.IsEmpty() {
 			reclaimPoolCPUSet = p.reservedReclaimedCPUSet.Clone()
 			general.Infof("fallback takeByNUMABalance for reclaimPoolCPUSet: %s", reclaimPoolCPUSet.String())
@@ -910,6 +955,7 @@ func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclai
 	}
 
 	reclaimPool := newEntries[commonstate.PoolNameReclaim][commonstate.FakedContainerName]
+	general.Infof("[DEBUG]reviseReclaimPool generate avaliable reclaim pool: %v", reclaimPool)
 
 	// revise reclaim pool for RNB NUMAs
 	for _, numaID := range p.machineInfo.CPUDetails.NUMANodes().ToSliceInt() {
@@ -942,6 +988,7 @@ func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclai
 		}
 	}
 
+	general.Infof("[DEBUG]reviseReclaimPool finaly reclaim pool: %v", reclaimPool)
 	general.Infof("revised reclaim allocationResult: %s, reclaim topologyAwareAssignments: %v",
 		reclaimPool.AllocationResult.String(), reclaimPool.TopologyAwareAssignments)
 	return nil

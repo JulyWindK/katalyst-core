@@ -105,6 +105,7 @@ func (cs *cpuServer) GetAdvice(ctx context.Context, request *cpuadvisor.GetAdvic
 	registerCPUAdvisorHealthCheckOnce.Do(func() {
 		cpu.RegisterCPUAdvisorHealthCheck()
 	})
+	general.Infof("[DEBUG]GetAdvice start ...")
 
 	startTime := time.Now()
 	_ = cs.emitter.StoreInt64(cs.genMetricsName(metricServerGetAdviceCalled), 1, metrics.MetricTypeNameCount)
@@ -115,6 +116,7 @@ func (cs *cpuServer) GetAdvice(ctx context.Context, request *cpuadvisor.GetAdvic
 		return nil, fmt.Errorf("update meta cache failed: %w", err)
 	}
 
+	general.Infof("[DEBUG]GetAdvice updated meta cache input ...")
 	general.InfoS("updated meta cache input", "duration", time.Since(startTime))
 
 	result, err := cs.updateAdvisor()
@@ -127,6 +129,8 @@ func (cs *cpuServer) GetAdvice(ctx context.Context, request *cpuadvisor.GetAdvic
 		AllowSharedCoresOverlapReclaimedCores: result.AllowSharedCoresOverlapReclaimedCores,
 		ExtraEntries:                          result.ExtraEntries,
 	}
+	general.Infof("[DEBUG]get advice result: %v", general.ToString(result))
+	general.Infof("[DEBUG]get advice response: %v", general.ToString(resp))
 	general.Infof("get advice response: %v", general.ToString(resp))
 	general.InfoS("get advice", "duration", time.Since(startTime))
 	return resp, nil
@@ -269,7 +273,7 @@ func (cs *cpuServer) updateAdvisor() (*cpuInternalResult, error) {
 		_ = cs.emitter.StoreInt64(cs.genMetricsName(metricServerAdvisorUpdateFailed), int64(cs.period.Seconds()), metrics.MetricTypeNameCount)
 		return nil, fmt.Errorf("get advice failed: invalid type: %T", advisorRespRaw)
 	}
-
+	klog.Infof("[DEBUG][qosaware-server-cpu] get advisor update: %+v", general.ToString(advisorResp))
 	klog.Infof("[qosaware-server-cpu] get advisor update: %+v", general.ToString(advisorResp))
 
 	return cs.assembleResponse(advisorResp), nil
@@ -290,6 +294,7 @@ func (cs *cpuServer) assembleResponse(advisorResp *types.InternalCPUCalculationR
 	blockID2Blocks := NewBlockSet()
 
 	cs.assemblePoolEntries(advisorResp, calculationEntriesMap, blockID2Blocks)
+	general.Infof("[DEBUG]assembleResponse assemblePoolEntries calculationEntriesMap: %v", general.ToString(calculationEntriesMap))
 
 	// Assemble pod entries
 	f := func(podUID string, containerName string, ci *types.ContainerInfo) bool {
@@ -299,6 +304,7 @@ func (cs *cpuServer) assembleResponse(advisorResp *types.InternalCPUCalculationR
 		return true
 	}
 	cs.metaCache.RangeContainer(f)
+	general.Infof("[DEBUG]assembleResponse assemblePodEntries calculationEntriesMap: %v", general.ToString(calculationEntriesMap))
 
 	// Send result
 	resp := &cpuInternalResult{
@@ -306,6 +312,7 @@ func (cs *cpuServer) assembleResponse(advisorResp *types.InternalCPUCalculationR
 		ExtraEntries:                          make([]*advisorsvc.CalculationInfo, 0),
 		AllowSharedCoresOverlapReclaimedCores: advisorResp.AllowSharedCoresOverlapReclaimedCores,
 	}
+	general.Infof("[DEBUG]assembleResponse response: %v", general.ToString(resp))
 
 	extraNumaHeadRoom := cs.assembleHeadroom()
 	if extraNumaHeadRoom != nil {
@@ -687,6 +694,17 @@ func (cs *cpuServer) assemblePoolEntries(advisorResp *types.InternalCPUCalculati
 		}
 		calculationEntriesMap[commonstate.PoolNameReclaim] = poolEntry
 	}
+
+	// Since the interrupt pool does not require advisor calculation, it is still necessary to fill the pool to
+	// ensure that the original data of the interrupt pool is not overwritten.
+	if poolInfo, ok := cs.metaCache.GetPoolInfo(commonstate.PoolNameInterrupt); ok && poolInfo != nil {
+		poolEntry := NewPoolCalculationEntries(commonstate.PoolNameInterrupt)
+		general.Infof("[DEBUG]assemblePoolEntries cpu server meta cache get interrupt pool: %v", poolEntry)
+		calculationEntriesMap[commonstate.PoolNameInterrupt] = poolEntry
+	} else {
+		general.Infof("[DEBUG]assemblePoolEntries cpu server meta cache does not exist interrupt pool")
+	}
+	general.Infof("[DEBUG]assemblePoolEntries calculationEntriesMap:%v", general.ToString(calculationEntriesMap))
 }
 
 // assemblePoolEntries fills up calculationEntriesMap and blockSet based on types.ContainerInfo
