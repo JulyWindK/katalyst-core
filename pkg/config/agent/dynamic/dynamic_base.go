@@ -19,11 +19,11 @@ package dynamic
 import (
 	"sync"
 
-	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/tmo"
-
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/adminqos"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/auth"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/crd"
+	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/irqtuning"
+	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/tmo"
 )
 
 type DynamicAgentConfiguration struct {
@@ -55,6 +55,7 @@ type Configuration struct {
 	*adminqos.AdminQoSConfiguration
 	*auth.AuthConfiguration
 	*tmo.TransparentMemoryOffloadingConfiguration
+	*irqtuning.IRQTuningConfiguration
 }
 
 func NewConfiguration() *Configuration {
@@ -62,6 +63,7 @@ func NewConfiguration() *Configuration {
 		AdminQoSConfiguration:                    adminqos.NewAdminQoSConfiguration(),
 		AuthConfiguration:                        auth.NewAuthConfiguration(),
 		TransparentMemoryOffloadingConfiguration: tmo.NewTransparentMemoryOffloadingConfiguration(),
+		IRQTuningConfiguration:                   irqtuning.NewIRQTuningConfiguration(),
 	}
 }
 
@@ -69,4 +71,5 @@ func (c *Configuration) ApplyConfiguration(conf *crd.DynamicConfigCRD) {
 	c.AdminQoSConfiguration.ApplyConfiguration(conf)
 	c.AuthConfiguration.ApplyConfiguration(conf)
 	c.TransparentMemoryOffloadingConfiguration.ApplyConfiguration(conf)
+	c.IRQTuningConfiguration.ApplyConfiguration(conf)
 }

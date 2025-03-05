@@ -35,6 +35,8 @@ type DynamicConfigCRD struct {
 	AdminQoSConfiguration                    *v1alpha1.AdminQoSConfiguration
 	AuthConfiguration                        *v1alpha1.AuthConfiguration
 	TransparentMemoryOffloadingConfiguration *v1alpha1.TransparentMemoryOffloadingConfiguration
+	// TODO(KFX): irq
+	IRQTuningConfiguration *v1alpha1.IRQTuningConfiguration
 }
 
 var (
@@ -44,4 +46,8 @@ var (
 	AuthConfigurationGVR = metav1.GroupVersionResource(v1alpha1.SchemeGroupVersion.WithResource(v1alpha1.ResourceNameAuthConfigurations))
 	// TransparentMemoryOffloadingConfigurationGVR is the group version resource for TransparentMemoryOffloadingConfiguration
 	TransparentMemoryOffloadingConfigurationGVR = metav1.GroupVersionResource(v1alpha1.SchemeGroupVersion.WithResource(v1alpha1.ResourceNameTMOConfigurations))
+
+	// IRQTuningConfigurationGVR is the group version resource for IRQTuningConfiguration
+	// TODO(KFX): irq
+	IRQTuningConfigurationGVR = metav1.GroupVersionResource(v1alpha1.SchemeGroupVersion.WithResource(v1alpha1.ResourceNameIRQTuningConfigurations))
 )
