@@ -23,6 +23,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irq/tuner"
+
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irq/adapter"
+
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irq"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	v1 "k8s.io/api/core/v1"
@@ -102,6 +108,10 @@ type DynamicPolicy struct {
 	cpuPressureEviction       agent.Component
 	cpuPressureEvictionCancel context.CancelFunc
 
+	// TMP(KFX)
+	irqTuner       irq.Tuner
+	enableIrqTuner bool
+
 	// those are parsed from configurations
 	// todo if we want to use dynamic configuration, we'd better not use self-defined conf
 	enableCPUAdvisor                          bool
@@ -164,6 +174,9 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		}
 	}
 
+	// TMP(KFX)
+	irqStateAdapter := adapter.NewIrqStateAdapter(agentCtx, conf, stateImpl)
+
 	// since the reservedCPUs won't influence stateImpl directly.
 	// so we don't modify stateImpl with reservedCPUs here.
 	// for those pods have already been allocated reservedCPUs,
@@ -182,6 +195,9 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		advisorValidator: validator.NewCPUAdvisorValidator(stateImpl, agentCtx.KatalystMachineInfo),
 
 		cpuPressureEviction: cpuPressureEviction,
+
+		// TMP(KFX)
+		irqTuner: tuner.NewIrqTunerStub(irqStateAdapter),
 
 		qosConfig:                     conf.QoSConfiguration,
 		dynamicConfig:                 conf.DynamicAgentConfiguration,
@@ -204,6 +220,13 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		podLabelKeptKeys:          conf.PodLabelKeptKeys,
 		transitionPeriod:          30 * time.Second,
 		reservedReclaimedCPUsSize: general.Max(reservedReclaimedCPUsSize, agentCtx.KatalystMachineInfo.NumNUMANodes),
+	}
+
+	// TMP(KFX)
+	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
+		if dc.IrqAffinityConfiguration != nil && dc.IrqAffinityConfiguration.DefaultConfigurations != nil {
+			policyImplement.enableIrqTuner = dc.IrqAffinityConfiguration.DefaultConfigurations.DefaultEnableIrqAffinity
+		}
 	}
 
 	// register allocation behaviors for pods with different QoS level
@@ -345,6 +368,11 @@ func (p *DynamicPolicy) Start() (err error) {
 		return
 	}
 	go p.advisorMonitor.Run(p.stopCh)
+
+	// TMP(KFX)
+	if p.enableIrqTuner {
+		go p.irqTuner.Run(p.stopCh)
+	}
 
 	go wait.BackoffUntil(func() { p.serveForAdvisor(p.stopCh) }, wait.NewExponentialBackoffManager(
 		800*time.Millisecond, 30*time.Second, 2*time.Minute, 2.0, 0, &clock.RealClock{}), true, p.stopCh)

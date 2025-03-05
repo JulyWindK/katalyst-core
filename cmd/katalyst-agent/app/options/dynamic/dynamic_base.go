@@ -28,23 +28,27 @@ import (
 type DynamicOptions struct {
 	*adminqos.AdminQoSOptions
 	*tmo.TransparentMemoryOffloadingOptions
+	// TODO(KFX): irq
 }
 
 func NewDynamicOptions() *DynamicOptions {
 	return &DynamicOptions{
 		AdminQoSOptions:                    adminqos.NewAdminQoSOptions(),
 		TransparentMemoryOffloadingOptions: tmo.NewTransparentMemoryOffloadingOptions(),
+		// TODO(KFX): irq
 	}
 }
 
 func (o *DynamicOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	o.AdminQoSOptions.AddFlags(fss)
 	o.TransparentMemoryOffloadingOptions.AddFlags(fss)
+	// TODO(KFX): irq
 }
 
 func (o *DynamicOptions) ApplyTo(c *dynamic.Configuration) error {
 	var errList []error
 	errList = append(errList, o.AdminQoSOptions.ApplyTo(c.AdminQoSConfiguration))
 	errList = append(errList, o.TransparentMemoryOffloadingOptions.ApplyTo(c.TransparentMemoryOffloadingConfiguration))
+	// TODO(KFX): irq
 	return errors.NewAggregate(errList)
 }
