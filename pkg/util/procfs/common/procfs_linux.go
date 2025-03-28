@@ -1,12 +1,13 @@
 package common
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/kubewharf/katalyst-core/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/util/eventbus"
-	"github.com/opencontainers/runc/libcontainer/cgroups"
 )
 
 // InstrumentedWriteFileIfChange wraps WriteFileIfChange with audit logic
@@ -14,15 +15,15 @@ func InstrumentedWriteFileIfChange(dir, file, data string) (err error, applied b
 	startTime := time.Now()
 	defer func() {
 		if applied {
-			_ = eventbus.GetDefaultEventBus().Publish(consts.TopicNameApplyProcFS, eventbus.RawCGroupEvent{
+			_ = eventbus.GetDefaultEventBus().Publish(consts.TopicNameApplyProcFS, eventbus.RawProcfsEvent{
 				BaseEventImpl: eventbus.BaseEventImpl{
 					Time: startTime,
 				},
-				Cost:       time.Now().Sub(startTime),
-				CGroupPath: dir,
-				CGroupFile: file,
-				Data:       data,
-				OldData:    oldData,
+				Cost:     time.Now().Sub(startTime),
+				ProcPath: dir,
+				ProcFile: file,
+				Data:     data,
+				OldData:  oldData,
 			})
 		}
 	}()
@@ -31,20 +32,22 @@ func InstrumentedWriteFileIfChange(dir, file, data string) (err error, applied b
 	return
 }
 
-// writeFileIfChange writes data to the cgroup joined by dir and
+// writeFileIfChange writes data to the procfs joined by dir and
 // file if new data is not equal to the old data and return the old data.
 func writeFileIfChange(dir, file, data string) (error, bool, string) {
-	oldData, err := cgroups.ReadFile(dir, file)
+	path := filepath.Join(dir, file)
+	oldData, err := os.ReadFile(path)
 	if err != nil {
 		return err, false, ""
 	}
+	oldDataStr := string(oldData)
 
-	if strings.TrimSpace(data) != strings.TrimSpace(oldData) {
-		if err := cgroups.WriteFile(dir, file, data); err != nil {
-			return err, false, oldData
+	if strings.TrimSpace(data) != strings.TrimSpace(oldDataStr) {
+		if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+			return err, false, oldDataStr
 		} else {
-			return nil, true, oldData
+			return nil, true, oldDataStr
 		}
 	}
-	return nil, false, oldData
+	return nil, false, oldDataStr
 }
