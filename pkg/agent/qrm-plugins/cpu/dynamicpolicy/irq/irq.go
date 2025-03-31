@@ -17,22 +17,23 @@ limitations under the License.
 package irq
 
 import (
-	"time"
-
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/commonstate"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type ContainerInfo struct {
 	*commonstate.AllocationMeta
 
-	ContainerID  string
-	CgroupPath   string                 // relative cgroup path, like /kubepods/burstable/pod<uuid>/<container id>
-	ActualCPUSet map[int]machine.CPUSet // numa id as map key, real-time data
+	ContainerID string
+	// relative cgroup path, like /kubepods/burstable/pod<uuid>/<container id>
+	CgroupPath string
 	// pod spec runtime class
 	RuntimeClassName string
+	// numa id as map key, real-time data
+	ActualCPUSet map[int]machine.CPUSet
 
-	StartedAt time.Time
+	StartedAt v1.Time
 }
 
 type StateAdapter interface {

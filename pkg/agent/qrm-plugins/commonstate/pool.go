@@ -34,6 +34,8 @@ const (
 	PoolNameReserve         = "reserve"
 	PoolNamePrefixIsolation = "isolation"
 	PoolNamePrefixSystem    = "system"
+	// TODO: KFX(tmp)
+	PoolNameIRQ = "irq"
 
 	EmptyOwnerPoolName = ""
 
@@ -59,6 +61,8 @@ func IsSystemPool(poolName string) bool {
 	return strings.HasPrefix(poolName, PoolNamePrefixSystem)
 }
 
+// TODO:KFX(tmp) adaptation pool.go
+
 func GetPoolType(poolName string) string {
 	if IsIsolationPool(poolName) {
 		return PoolNamePrefixIsolation
@@ -66,7 +70,7 @@ func GetPoolType(poolName string) string {
 		return PoolNamePrefixSystem
 	}
 	switch poolName {
-	case PoolNameReclaim, PoolNameDedicated, PoolNameReserve, PoolNameFallback:
+	case PoolNameReclaim, PoolNameDedicated, PoolNameReserve, PoolNameIRQ, PoolNameFallback:
 		return poolName
 	default:
 		return PoolNameShare
