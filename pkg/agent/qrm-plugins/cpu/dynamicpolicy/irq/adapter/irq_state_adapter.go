@@ -45,8 +45,6 @@ type irqStateAdapterImpl struct {
 	machineInfo *machine.KatalystMachineInfo
 
 	reservedCPUs machine.CPUSet
-
-	// ...
 }
 
 func NewIrqStateAdapter(agentCtx *agent.GenericContext, conf *config.Configuration, state state.State) (irq.StateAdapter, error) {
@@ -63,19 +61,16 @@ func NewIrqStateAdapter(agentCtx *agent.GenericContext, conf *config.Configurati
 		reservedCPUs: reservedCPUs,
 	}
 
-	// ...
-	// ...
-
 	return isa, nil
 }
 
+// ListContainers retrieves information about all containers managed by the irq state adapter.
 func (c *irqStateAdapterImpl) ListContainers() ([]irq.ContainerInfo, error) {
 	var cis []irq.ContainerInfo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	// TODO: get container infos
 	// 1. get container info from pod entries
 	for podUID, entry := range c.state.GetPodEntries() {
 		if entry.IsPoolEntry() {
@@ -143,6 +138,7 @@ func (c *irqStateAdapterImpl) ListContainers() ([]irq.ContainerInfo, error) {
 	return cis, nil
 }
 
+// GetIrqForbiddenCores retrieves the cpu set of cores that are forbidden for irq binding.
 func (c *irqStateAdapterImpl) GetIrqForbiddenCores() (machine.CPUSet, error) {
 	forbiddenCores := machine.NewCPUSet()
 
@@ -151,12 +147,14 @@ func (c *irqStateAdapterImpl) GetIrqForbiddenCores() (machine.CPUSet, error) {
 	// 1.1 get reserved pool
 	forbiddenCores.Union(c.reservedCPUs)
 
+	// TODO: add katabm cores
 	// 1.2 get katabm cores
 
 	return forbiddenCores, nil
 }
 
-func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(cpuSet machine.CPUSet) error {
+// SetExclusiveIrqCPUSet sets the exclusive cpu set for Interrupt.
+func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) error {
 	// 1. exception validation
 	forbidden, err := c.GetIrqForbiddenCores()
 	if err != nil {
@@ -165,22 +163,22 @@ func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(cpuSet machine.CPUSet) error
 	}
 	// 1.1 check cpuSet nums（max）
 	// TODO(KFX): opt max cpuSet num
-	irqCPUSetSize := cpuSet.Size()
+	irqCPUSetSize := irqCPUSet.Size()
 	if irqCPUSetSize > c.state.GetMachineState().GetAvailableCPUSet(forbidden).Size() {
 		general.Errorf("")
 		return fmt.Errorf("")
 	}
 	// 1.2 check cpuSet is intersection of irq forbidden cores
-	if cpuSet.Intersection(forbidden).Size() != 0 {
-		general.Errorf("the cpuset[%v] passed in contains a core that is forbidden[%v] to bind", cpuSet, forbidden)
-		return fmt.Errorf("the cpuset[%v] passed in contains a core that is forbidden[%v] to bind", cpuSet, forbidden)
+	if irqCPUSet.Intersection(forbidden).Size() != 0 {
+		general.Errorf("the cpuset[%v] passed in contains a core that is forbidden[%v] to bind", irqCPUSet, forbidden)
+		return fmt.Errorf("the cpuset[%v] passed in contains a core that is forbidden[%v] to bind", irqCPUSet, forbidden)
 	}
 
 	// 2. measuring the rate at which the irq-affinity core pool expands and scales
 	var currentIrqCPUSet machine.CPUSet
 	podEntries := c.state.GetPodEntries()
 	if containerEntry, ok := podEntries[commonstate.PoolNameIRQ]; ok {
-		if allocateInfo, ok := containerEntry[""]; ok && allocateInfo != nil {
+		if allocateInfo, ok := containerEntry[commonstate.FakedContainerName]; ok && allocateInfo != nil {
 			currentIrqCPUSet = allocateInfo.AllocationResult
 		}
 	}
@@ -202,9 +200,23 @@ func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(cpuSet machine.CPUSet) error
 
 	// 3. update cpu plugin checkpoint
 	// TODO(KFX): supplement allocation info detail
-	ai := &state.AllocationInfo{
-		AllocationResult: cpuSet,
+	topologyAwareAssignments, err := machine.GetNumaAwareAssignments(c.machineInfo.CPUTopology, irqCPUSet)
+	if err != nil {
+		return fmt.Errorf("unable to calculate topologyAwareAssignments for entry: %s, entry cpuset: %s, error: %v",
+			commonstate.PoolNameIRQ, irqCPUSet.String(), err)
 	}
+
+	ai := &state.AllocationInfo{
+		AllocationMeta: commonstate.AllocationMeta{
+			PodUid:        commonstate.PoolNameIRQ,
+			OwnerPoolName: commonstate.PoolNameIRQ,
+		},
+		AllocationResult:                 irqCPUSet.Clone(),
+		OriginalAllocationResult:         irqCPUSet.Clone(),
+		TopologyAwareAssignments:         topologyAwareAssignments,
+		OriginalTopologyAwareAssignments: machine.DeepcopyCPUAssignment(topologyAwareAssignments),
+	}
+
 	newPodEntries := c.state.GetPodEntries()
 	// TODO(KFX): modify PoolNameIRQ
 	if _, ok := newPodEntries[commonstate.PoolNameIRQ]; !ok {
@@ -213,7 +225,7 @@ func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(cpuSet machine.CPUSet) error
 	if _, ok := newPodEntries[commonstate.PoolNameIRQ][""]; !ok {
 		newPodEntries[commonstate.PoolNameIRQ][""] = &state.AllocationInfo{}
 	}
-	newPodEntries[commonstate.PoolNameIRQ][""] = ai
+	newPodEntries[commonstate.PoolNameIRQ][commonstate.FakedContainerName] = ai
 
 	machineState, err := state.GenerateMachineStateFromPodEntries(c.machineInfo.CPUTopology, newPodEntries)
 	if err != nil {

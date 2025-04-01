@@ -43,6 +43,13 @@ var (
 	ResidentPools = sets.NewString(
 		commonstate.PoolNameReclaim,
 	).Union(StaticPools)
+
+	// ForbiddenPools are forbidden to be used in dynamic policy,
+	// and they are usually used to ensure stability.
+	// TODO(KFX): to use
+	ForbiddenPools = sets.NewString(
+		commonstate.PoolNameIRQ,
+	)
 )
 
 // WrapAllocationMetaFilter takes a filter function that operates on
