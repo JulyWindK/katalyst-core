@@ -19,12 +19,14 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
+	cpuutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/util"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/apis/core/v1/helper/qos"
 
 	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/agent"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/commonstate"
@@ -42,20 +44,29 @@ type irqStateAdapterImpl struct {
 	metaServer  *metaserver.MetaServer
 	machineInfo *machine.KatalystMachineInfo
 
+	reservedCPUs machine.CPUSet
+
 	// ...
 }
 
-func NewIrqStateAdapter(agentCtx *agent.GenericContext, conf *config.Configuration, state state.State) irq.StateAdapter {
+func NewIrqStateAdapter(agentCtx *agent.GenericContext, conf *config.Configuration, state state.State) (irq.StateAdapter, error) {
+	reservedCPUs, reserveErr := cpuutil.GetCoresReservedForSystem(conf, agentCtx.MetaServer, agentCtx.KatalystMachineInfo, agentCtx.CPUDetails.CPUs().Clone())
+	if reserveErr != nil {
+		return nil, fmt.Errorf("GetCoresReservedForSystem for reservedCPUsNum: %d failed with error: %v",
+			conf.ReservedCPUCores, reserveErr)
+	}
+
 	isa := &irqStateAdapterImpl{
-		state:       state,
-		metaServer:  agentCtx.MetaServer,
-		machineInfo: agentCtx.KatalystMachineInfo,
+		state:        state,
+		metaServer:   agentCtx.MetaServer,
+		machineInfo:  agentCtx.KatalystMachineInfo,
+		reservedCPUs: reservedCPUs,
 	}
 
 	// ...
 	// ...
 
-	return isa
+	return isa, nil
 }
 
 func (c *irqStateAdapterImpl) ListContainers() ([]irq.ContainerInfo, error) {
@@ -76,14 +87,15 @@ func (c *irqStateAdapterImpl) ListContainers() ([]irq.ContainerInfo, error) {
 		if err != nil || pod == nil {
 			return nil, err
 		}
+		// TODO(KFX): Whether it is necessary to filter out running pods
+
 		// get runtime class
 		runtime := pod.Spec.RuntimeClassName
 		if runtime == nil {
 			return nil, fmt.Errorf("get pod runtime class err")
 		}
-
 		// get pod qos
-		qosClass := qos.GetPodQOS(pod)
+		qosClass := pod.Status.QOSClass
 
 		// get container status
 		var containerStatus map[string]v1.ContainerStatus
@@ -96,6 +108,7 @@ func (c *irqStateAdapterImpl) ListContainers() ([]irq.ContainerInfo, error) {
 				general.Warningf("container %s allocation info is nil, skip it", containerName)
 				continue
 			}
+			// TODO(KFX): Whether it is necessary to filter terminating and waiting containers
 
 			// get container ID
 			containerID, err := c.metaServer.PodFetcher.GetContainerID(podUID, containerName)
@@ -111,8 +124,9 @@ func (c *irqStateAdapterImpl) ListContainers() ([]irq.ContainerInfo, error) {
 			if cs, exist := containerStatus[containerName]; exist && cs.State.Running != nil {
 				startedAt = cs.State.Running.StartedAt
 			} else {
-				general.Warningf("container %s not running, skip it", containerName)
-				continue
+				general.Warningf("container %s not running", containerName)
+				// TODO(KFX): confirm the non-running container processing logic
+				// continue
 			}
 
 			cis = append(cis, irq.ContainerInfo{
@@ -135,40 +149,64 @@ func (c *irqStateAdapterImpl) GetIrqForbiddenCores() (machine.CPUSet, error) {
 	// TODO: get irq forbidden cores
 	// 1. get irq forbidden cores from cpu plugin checkpoint
 	// 1.1 get reserved pool
+	forbiddenCores.Union(c.reservedCPUs)
+
 	// 1.2 get katabm cores
 
 	return forbiddenCores, nil
 }
 
-func (c *irqStateAdapterImpl) SetExclusiveIrqCpuset(cpuset machine.CPUSet) error {
+func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(cpuSet machine.CPUSet) error {
 	// 1. exception validation
 	forbidden, err := c.GetIrqForbiddenCores()
 	if err != nil {
 		general.Errorf("get irq forbidden cores failed, err:%v", err)
 		return err
 	}
-	// 1.1 check cpuset nums（max）
-	// TODO: opt max cpuset num
-	if cpuset.Size() > c.state.GetMachineState().GetAvailableCPUSet(forbidden).Size() {
+	// 1.1 check cpuSet nums（max）
+	// TODO(KFX): opt max cpuSet num
+	irqCPUSetSize := cpuSet.Size()
+	if irqCPUSetSize > c.state.GetMachineState().GetAvailableCPUSet(forbidden).Size() {
 		general.Errorf("")
 		return fmt.Errorf("")
 	}
-	// 1.2 check cpuset is intersection of irq forbidden cores
-
-	if cpuset.Intersection(forbidden).Size() != 0 {
-		general.Errorf("the cpuset[%v] passed in contains a core that is forbidden[%v] to bind", cpuset, forbidden)
-		return fmt.Errorf("the cpuset[%v] passed in contains a core that is forbidden[%v] to bind", cpuset, forbidden)
+	// 1.2 check cpuSet is intersection of irq forbidden cores
+	if cpuSet.Intersection(forbidden).Size() != 0 {
+		general.Errorf("the cpuset[%v] passed in contains a core that is forbidden[%v] to bind", cpuSet, forbidden)
+		return fmt.Errorf("the cpuset[%v] passed in contains a core that is forbidden[%v] to bind", cpuSet, forbidden)
 	}
 
 	// 2. measuring the rate at which the irq-affinity core pool expands and scales
+	var currentIrqCPUSet machine.CPUSet
+	podEntries := c.state.GetPodEntries()
+	if containerEntry, ok := podEntries[commonstate.PoolNameIRQ]; ok {
+		if allocateInfo, ok := containerEntry[""]; ok && allocateInfo != nil {
+			currentIrqCPUSet = allocateInfo.AllocationResult
+		}
+	}
+
+	var expandRate, shrinkRate float64
+	currentIrqCPUSetSize := currentIrqCPUSet.Size()
+	stepRate := math.Abs(float64(irqCPUSetSize-currentIrqCPUSetSize)) / float64(currentIrqCPUSetSize) * 100
+	if irqCPUSetSize > currentIrqCPUSetSize {
+		expandRate = stepRate
+	} else {
+		shrinkRate = stepRate
+	}
+	DefaultMaxExpandRate := 0.05
+	DefaultMaxShrinkRate := 0.10
+	if expandRate > DefaultMaxExpandRate || shrinkRate > DefaultMaxShrinkRate {
+		general.Errorf("outof change rate")
+		return fmt.Errorf("outof change rate")
+	}
 
 	// 3. update cpu plugin checkpoint
-	// TODO: supplement allocation info detail
+	// TODO(KFX): supplement allocation info detail
 	ai := &state.AllocationInfo{
-		AllocationResult: cpuset,
+		AllocationResult: cpuSet,
 	}
 	newPodEntries := c.state.GetPodEntries()
-	// TODO: fix systemd_cores -> irq_cores
+	// TODO(KFX): modify PoolNameIRQ
 	if _, ok := newPodEntries[commonstate.PoolNameIRQ]; !ok {
 		newPodEntries[commonstate.PoolNameIRQ] = state.ContainerEntries{}
 	}

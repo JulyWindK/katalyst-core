@@ -175,7 +175,10 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	}
 
 	// TMP(KFX)
-	irqStateAdapter := adapter.NewIrqStateAdapter(agentCtx, conf, stateImpl)
+	irqStateAdapter, err := adapter.NewIrqStateAdapter(agentCtx, conf, stateImpl)
+	if err != nil {
+		return false, agent.ComponentStub{}, fmt.Errorf("NewIrqStateAdapter failed with error: %v", err)
+	}
 
 	// since the reservedCPUs won't influence stateImpl directly.
 	// so we don't modify stateImpl with reservedCPUs here.

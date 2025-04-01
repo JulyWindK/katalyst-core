@@ -44,9 +44,9 @@ type StateAdapter interface {
 	// GetIrqForbiddenCores get irq forbidden cores from qrm state manager.
 	GetIrqForbiddenCores() (machine.CPUSet, error)
 
-	// SetExclusiveIrqCpuset irq tuning controller only set exclusive irq cores to qrm-state manager, irq affinity tuning operation performed by irq-tuning
+	// SetExclusiveIrqCPUSet irq tuning controller only set exclusive irq cores to qrm-state manager, irq affinity tuning operation performed by irq-tuning
 	// controller is transparent to qrm-stat manager.
-	SetExclusiveIrqCpuset(cpuset machine.CPUSet) error
+	SetExclusiveIrqCPUSet(cpuSet machine.CPUSet) error
 }
 
 type Tuner interface {
