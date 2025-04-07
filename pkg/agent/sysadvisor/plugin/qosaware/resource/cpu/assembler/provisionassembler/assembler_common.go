@@ -80,6 +80,10 @@ func (pa *ProvisionAssemblerCommon) AssembleProvision() (types.InternalCPUCalcul
 	reservePoolSize, _ := pa.metaReader.GetPoolSize(commonstate.PoolNameReserve)
 	calculationResult.SetPoolEntry(commonstate.PoolNameReserve, commonstate.FakedNUMAID, reservePoolSize)
 
+	// TODO(KFX): ensure logic
+	irqPoolSize, _ := pa.metaReader.GetPoolSize(commonstate.PoolNameIRQ)
+	calculationResult.SetPoolEntry(commonstate.PoolNameIRQ, commonstate.FakedNUMAID, irqPoolSize)
+
 	isolationUppers := 0
 
 	sharePoolRequirements := make(map[string]int)
@@ -108,6 +112,9 @@ func (pa *ProvisionAssemblerCommon) AssembleProvision() (types.InternalCPUCalcul
 				if *pa.allowSharedCoresOverlapReclaimedCores {
 					available += getNUMAsResource(*pa.reservedForReclaim, r.GetBindingNumas())
 				}
+
+				// TODO(KFX): ensure logic
+				available -= irqPoolSize
 
 				// calc isolation pool size
 				isolationRegions := regionHelper.GetRegions(regionNuma, configapi.QoSRegionTypeIsolation)
@@ -185,6 +192,9 @@ func (pa *ProvisionAssemblerCommon) AssembleProvision() (types.InternalCPUCalcul
 							}
 							isolationSizes += int(ck[configapi.ControlKnobNonReclaimedCPURequirementUpper].Value)
 						}
+						// TODO(KFX): ensure logic
+						available -= isolationSizes
+
 						reclaimedCoresSize := general.Max(available-isolationSizes, 0) + reservedForReclaim
 						calculationResult.SetPoolEntry(commonstate.PoolNameReclaim, regionNuma, reclaimedCoresSize)
 					}

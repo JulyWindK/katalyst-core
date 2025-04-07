@@ -595,6 +595,9 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 	dedicatedCPUSet := machine.NewCPUSet()
 	pooledUnionDedicatedCPUSet := machine.NewCPUSet()
 
+	// TODO(KFX): ensure logic
+	//irqCPUSet, _ := p.state.GetPodEntries().GetCPUSetForPool(commonstate.PoolNameIRQ)
+
 	// calculate NUMAs without actual numa_binding reclaimed pods
 	nonReclaimActualBindingNUMAs := p.state.GetMachineState().GetFilteredNUMASet(state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckReclaimedActualNUMABinding))
 
@@ -613,6 +616,9 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 			if err != nil {
 				return err
 			}
+
+			// TODO(KFX): ensure logic
+			// entryCPUSet = entryCPUSet.Difference(irqCPUSet)
 
 			// transform cpuset into topologyAwareAssignments
 			topologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, entryCPUSet)
@@ -700,6 +706,9 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 		Difference(dedicatedCPUSet).
 		Difference(sharedBindingNUMACPUs)
 
+	// TODO(KFX): ensure logic
+	// rampUpCPUs = rampUpCPUs.Difference(irqCPUSet)
+
 	rampUpCPUsTopologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, rampUpCPUs)
 	if err != nil {
 		return fmt.Errorf("unable to calculate topologyAwareAssignments for rampUpCPUs, result cpuset: %s, error: %v",
@@ -718,6 +727,9 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 				general.Errorf("pod: %s, container: %s has nil allocationInfo", podUID, containerName)
 				continue
 			}
+			// TODO(KFX): ensure logic
+			//allocationInfo.AllocationResult = allocationInfo.AllocationResult.Difference(irqCPUSet)
+			//allocationInfo.OriginalAllocationResult = allocationInfo.AllocationResult.Difference(irqCPUSet)
 
 			if newEntries[podUID][containerName] != nil {
 				continue

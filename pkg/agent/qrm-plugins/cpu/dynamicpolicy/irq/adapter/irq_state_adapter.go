@@ -152,6 +152,18 @@ func (c *irqStateAdapterImpl) GetIrqForbiddenCores() (machine.CPUSet, error) {
 	return forbiddenCores, nil
 }
 
+func (c *irqStateAdapterImpl) GetExclusiveCores() (machine.CPUSet, error) {
+	currentIrqCPUSet := machine.NewCPUSet()
+	podEntries := c.state.GetPodEntries()
+	if containerEntry, ok := podEntries[commonstate.PoolNameIRQ]; ok {
+		if allocateInfo, ok := containerEntry[commonstate.FakedContainerName]; ok && allocateInfo != nil {
+			currentIrqCPUSet = allocateInfo.AllocationResult
+		}
+	}
+
+	return currentIrqCPUSet, nil
+}
+
 // SetExclusiveIrqCPUSet sets the exclusive cpu set for Interrupt.
 func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) error {
 	// 1. exception validation

@@ -26,7 +26,7 @@ type ContainerInfo struct {
 	*commonstate.AllocationMeta
 
 	ContainerID string
-	// relative cgroup path, like /kubepods/burstable/pod<uuid>/<container id>
+	// relative cgroup path, e.g. /kubepods/burstable/pod<uuid>/<container id>
 	CgroupPath string
 	// pod spec runtime class
 	RuntimeClassName string
@@ -43,6 +43,9 @@ type StateAdapter interface {
 
 	// GetIrqForbiddenCores get irq forbidden cores from qrm state manager.
 	GetIrqForbiddenCores() (machine.CPUSet, error)
+
+	// GetExclusiveCores get exclusive cores from qrm state manager.
+	GetExclusiveCores() (machine.CPUSet, error)
 
 	// SetExclusiveIrqCPUSet irq tuning controller only set exclusive irq cores to qrm-state manager, irq affinity tuning operation performed by irq-tuning
 	// controller is transparent to qrm-stat manager.

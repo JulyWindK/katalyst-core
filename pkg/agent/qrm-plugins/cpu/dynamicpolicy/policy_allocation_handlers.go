@@ -985,9 +985,15 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 	// calculate NUMAs without actual numa_binding reclaimed pods
 	nonReclaimActualBindingNUMAs := p.state.GetMachineState().GetFilteredNUMASet(state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckReclaimedActualNUMABinding))
 
+	// TODO(KFX): ensure logic
+	irqCPUSet := poolsCPUSet[commonstate.PoolNameIRQ].Clone()
+
 	// 1. construct entries for isolated containers (probably be dedicated_cores not numa_binding )
 	for podUID, containerEntries := range isolatedCPUSet {
 		for containerName, isolatedCPUs := range containerEntries {
+			// TODO(KFX): ensure logic
+			isolatedCPUs = isolatedCPUs.Difference(irqCPUSet)
+
 			allocationInfo := curEntries[podUID][containerName]
 			if allocationInfo == nil {
 				general.Errorf("isolated pod: %s, container: %s without entry in current checkpoint", podUID, containerName)
@@ -1038,6 +1044,9 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 	for poolName, cset := range poolsCPUSet {
 		general.Infof("try to apply pool %s: %s", poolName, cset.String())
 
+		// TODO(KFX): ensure logic
+		cset = cset.Difference(irqCPUSet)
+
 		topologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, cset)
 		if err != nil {
 			return fmt.Errorf("unable to calculate topologyAwareAssignments for pool: %s, result cpuset: %s, error: %v",
@@ -1081,6 +1090,8 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckDedicatedNUMABinding)).
 		Difference(unionDedicatedIsolatedCPUSet).
 		Difference(sharedBindingNUMACPUs)
+	// TODO(KFX): ensure logic
+	rampUpCPUs = rampUpCPUs.Difference(irqCPUSet)
 
 	rampUpCPUsTopologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, rampUpCPUs)
 	if err != nil {
