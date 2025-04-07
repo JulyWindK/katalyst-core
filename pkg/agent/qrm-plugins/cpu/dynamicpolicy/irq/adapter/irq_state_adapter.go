@@ -152,7 +152,7 @@ func (c *irqStateAdapterImpl) GetIrqForbiddenCores() (machine.CPUSet, error) {
 	return forbiddenCores, nil
 }
 
-func (c *irqStateAdapterImpl) GetExclusiveCores() (machine.CPUSet, error) {
+func (c *irqStateAdapterImpl) GetExclusiveCPUSet() (machine.CPUSet, error) {
 	currentIrqCPUSet := machine.NewCPUSet()
 	podEntries := c.state.GetPodEntries()
 	if containerEntry, ok := podEntries[commonstate.PoolNameIRQ]; ok {
