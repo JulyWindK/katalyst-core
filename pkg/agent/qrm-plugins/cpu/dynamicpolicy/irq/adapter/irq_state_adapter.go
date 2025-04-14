@@ -148,21 +148,24 @@ func (c *irqStateAdapterImpl) GetIrqForbiddenCores() (machine.CPUSet, error) {
 	return forbiddenCores, nil
 }
 
-// GetExclusiveCPUSet retrieves the cpu set of cores that are exclusive for irq binding.
-func (c *irqStateAdapterImpl) GetExclusiveCPUSet() (machine.CPUSet, error) {
+// GetExclusiveIrqCPUSet retrieves the cpu set of cores that are exclusive for irq binding.
+func (c *irqStateAdapterImpl) GetExclusiveIrqCPUSet() (machine.CPUSet, error) {
 	currentIrqCPUSet := machine.NewCPUSet()
 	podEntries := c.state.GetPodEntries()
-	if containerEntry, ok := podEntries[commonstate.PoolNameIRQ]; ok {
+	if containerEntry, ok := podEntries[commonstate.PoolNameInterrupt]; ok {
 		if allocateInfo, ok := containerEntry[commonstate.FakedContainerName]; ok && allocateInfo != nil {
 			currentIrqCPUSet = allocateInfo.AllocationResult
 		}
 	}
 
+	general.Infof("get the current irq exclusive cpu set: %v", currentIrqCPUSet)
 	return currentIrqCPUSet, nil
 }
 
 // SetExclusiveIrqCPUSet sets the exclusive cpu set for Interrupt.
 func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) error {
+	general.Infof("set the current irq exclusive cpu set: %v", irqCPUSet)
+
 	// 1. exception validation
 	forbidden, err := c.GetIrqForbiddenCores()
 	if err != nil {
@@ -184,7 +187,7 @@ func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) er
 	// 2. measuring the rate at which the irq-affinity core pool expansion and shrink
 	var currentIrqCPUSet machine.CPUSet
 	podEntries := c.state.GetPodEntries()
-	if containerEntry, ok := podEntries[commonstate.PoolNameIRQ]; ok {
+	if containerEntry, ok := podEntries[commonstate.PoolNameInterrupt]; ok {
 		if allocateInfo, ok := containerEntry[commonstate.FakedContainerName]; ok && allocateInfo != nil {
 			currentIrqCPUSet = allocateInfo.AllocationResult
 		}
@@ -208,13 +211,13 @@ func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) er
 	topologyAwareAssignments, err := machine.GetNumaAwareAssignments(c.machineInfo.CPUTopology, irqCPUSet)
 	if err != nil {
 		return fmt.Errorf("unable to calculate topologyAwareAssignments for entry: %s, entry cpuset: %s, error: %v",
-			commonstate.PoolNameIRQ, irqCPUSet.String(), err)
+			commonstate.PoolNameInterrupt, irqCPUSet.String(), err)
 	}
 
 	ai := &state.AllocationInfo{
 		AllocationMeta: commonstate.AllocationMeta{
-			PodUid:        commonstate.PoolNameIRQ,
-			OwnerPoolName: commonstate.PoolNameIRQ,
+			PodUid:        commonstate.PoolNameInterrupt,
+			OwnerPoolName: commonstate.PoolNameInterrupt,
 		},
 		AllocationResult:                 irqCPUSet.Clone(),
 		OriginalAllocationResult:         irqCPUSet.Clone(),
@@ -223,13 +226,13 @@ func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) er
 	}
 
 	newPodEntries := c.state.GetPodEntries()
-	if _, ok := newPodEntries[commonstate.PoolNameIRQ]; !ok {
-		newPodEntries[commonstate.PoolNameIRQ] = state.ContainerEntries{}
+	if _, ok := newPodEntries[commonstate.PoolNameInterrupt]; !ok {
+		newPodEntries[commonstate.PoolNameInterrupt] = state.ContainerEntries{}
 	}
-	if _, ok := newPodEntries[commonstate.PoolNameIRQ][commonstate.FakedContainerName]; !ok {
-		newPodEntries[commonstate.PoolNameIRQ][commonstate.FakedContainerName] = &state.AllocationInfo{}
+	if _, ok := newPodEntries[commonstate.PoolNameInterrupt][commonstate.FakedContainerName]; !ok {
+		newPodEntries[commonstate.PoolNameInterrupt][commonstate.FakedContainerName] = &state.AllocationInfo{}
 	}
-	newPodEntries[commonstate.PoolNameIRQ][commonstate.FakedContainerName] = ai
+	newPodEntries[commonstate.PoolNameInterrupt][commonstate.FakedContainerName] = ai
 
 	machineState, err := state.GenerateMachineStateFromPodEntries(c.machineInfo.CPUTopology, newPodEntries)
 	if err != nil {
@@ -237,6 +240,8 @@ func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) er
 	}
 	c.state.SetPodEntries(newPodEntries)
 	c.state.SetMachineState(machineState)
+
+	general.Infof("persistent irq exclusive cpu set %v successful", irqCPUSet.String())
 
 	return nil
 }

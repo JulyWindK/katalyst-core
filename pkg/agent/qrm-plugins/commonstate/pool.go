@@ -34,8 +34,7 @@ const (
 	PoolNameReserve         = "reserve"
 	PoolNamePrefixIsolation = "isolation"
 	PoolNamePrefixSystem    = "system"
-	// TODO: KFX(tmp)
-	PoolNameIRQ = "irq"
+	PoolNameInterrupt       = "interrupt"
 
 	EmptyOwnerPoolName = ""
 

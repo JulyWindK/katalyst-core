@@ -108,7 +108,6 @@ type DynamicPolicy struct {
 	cpuPressureEviction       agent.Component
 	cpuPressureEvictionCancel context.CancelFunc
 
-	// TMP(KFX)
 	irqTuner       irq.Tuner
 	enableIrqTuner bool
 
@@ -174,7 +173,6 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		}
 	}
 
-	// TMP(KFX)
 	irqStateAdapter, err := adapter.NewIrqStateAdapter(agentCtx, conf, stateImpl)
 	if err != nil {
 		return false, agent.ComponentStub{}, fmt.Errorf("NewIrqStateAdapter failed with error: %v", err)
@@ -199,7 +197,6 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 
 		cpuPressureEviction: cpuPressureEviction,
 
-		// TMP(KFX)
 		irqTuner: tuner.NewIrqTunerStub(irqStateAdapter),
 
 		qosConfig:                     conf.QoSConfiguration,
@@ -372,7 +369,6 @@ func (p *DynamicPolicy) Start() (err error) {
 	}
 	go p.advisorMonitor.Run(p.stopCh)
 
-	// TMP(KFX)
 	if p.enableIrqTuner {
 		go p.irqTuner.Run(p.stopCh)
 	}
