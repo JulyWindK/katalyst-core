@@ -173,7 +173,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		}
 	}
 
-	irqStateAdapter, err := adapter.NewIrqStateAdapter(agentCtx, conf, stateImpl)
+	irqStateAdapter, err := adapter.NewIrqStateAdapter(agentCtx, conf, stateImpl, wrappedEmitter)
 	if err != nil {
 		return false, agent.ComponentStub{}, fmt.Errorf("NewIrqStateAdapter failed with error: %v", err)
 	}

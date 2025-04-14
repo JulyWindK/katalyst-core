@@ -69,7 +69,7 @@ func GetPoolType(poolName string) string {
 		return PoolNamePrefixSystem
 	}
 	switch poolName {
-	case PoolNameReclaim, PoolNameDedicated, PoolNameReserve, PoolNameIRQ, PoolNameFallback:
+	case PoolNameReclaim, PoolNameDedicated, PoolNameReserve, PoolNameInterrupt, PoolNameFallback:
 		return poolName
 	default:
 		return PoolNameShare

@@ -20,3 +20,11 @@ const (
 	DefaultMaxExpansionRate = 0.05
 	DefaultMaxShrinkRate    = 0.2
 )
+
+// ScaleType indicates whether the current state is expansion or shrink.
+type ScaleType string
+
+const (
+	ScaleTypeExpand ScaleType = "expand"
+	ScaleTypeShrink ScaleType = "shrink"
+)

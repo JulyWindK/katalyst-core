@@ -23,6 +23,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
+	"github.com/kubewharf/katalyst-core/pkg/metrics"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -41,13 +44,14 @@ import (
 type irqStateAdapterImpl struct {
 	sync.RWMutex
 	state       state.State
+	emitter     metrics.MetricEmitter
 	metaServer  *metaserver.MetaServer
 	machineInfo *machine.KatalystMachineInfo
 
 	reservedCPUs machine.CPUSet
 }
 
-func NewIrqStateAdapter(agentCtx *agent.GenericContext, conf *config.Configuration, state state.State) (irq.StateAdapter, error) {
+func NewIrqStateAdapter(agentCtx *agent.GenericContext, conf *config.Configuration, state state.State, emitter metrics.MetricEmitter) (irq.StateAdapter, error) {
 	reservedCPUs, reserveErr := cpuutil.GetCoresReservedForSystem(conf, agentCtx.MetaServer, agentCtx.KatalystMachineInfo, agentCtx.CPUDetails.CPUs().Clone())
 	if reserveErr != nil {
 		return nil, fmt.Errorf("GetCoresReservedForSystem for reservedCPUsNum: %d failed with error: %v",
@@ -56,6 +60,7 @@ func NewIrqStateAdapter(agentCtx *agent.GenericContext, conf *config.Configurati
 
 	isa := &irqStateAdapterImpl{
 		state:        state,
+		emitter:      emitter,
 		metaServer:   agentCtx.MetaServer,
 		machineInfo:  agentCtx.KatalystMachineInfo,
 		reservedCPUs: reservedCPUs,
@@ -194,18 +199,23 @@ func (c *irqStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) er
 	}
 
 	var expandRate, shrinkRate float64
+	var scaleType utils.ScaleType
 	currentIrqCPUSetSize := currentIrqCPUSet.Size()
 	stepRate := math.Abs(float64(irqCPUSetSize-currentIrqCPUSetSize)) / float64(currentIrqCPUSetSize) * 100
 	if irqCPUSetSize > currentIrqCPUSetSize {
 		expandRate = stepRate
+		scaleType = utils.ScaleTypeExpand
 	} else {
 		shrinkRate = stepRate
+		scaleType = utils.ScaleTypeShrink
 	}
 
 	if expandRate > utils.DefaultMaxExpansionRate || shrinkRate > utils.DefaultMaxShrinkRate {
 		general.Errorf("the expansion or shrinkage rate exceeds the threshold, expandRate: %f, shrinkRate: %f", expandRate, shrinkRate)
 		return fmt.Errorf("the expansion or shrinkage rate exceeds the threshold, expandRate: %f, shrinkRate: %f", expandRate, shrinkRate)
 	}
+	_ = c.emitter.StoreFloat64(util.MetricNameSetExclusiveIrqCPURate, stepRate, metrics.MetricTypeNameRaw,
+		metrics.MetricTag{Key: "scale_type", Val: string(scaleType)})
 
 	// 3. update cpu plugin checkpoint
 	topologyAwareAssignments, err := machine.GetNumaAwareAssignments(c.machineInfo.CPUTopology, irqCPUSet)
