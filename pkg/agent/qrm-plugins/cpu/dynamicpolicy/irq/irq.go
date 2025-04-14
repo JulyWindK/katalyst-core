@@ -26,11 +26,11 @@ type ContainerInfo struct {
 	*commonstate.AllocationMeta
 
 	ContainerID string
-	// relative cgroup path, e.g. /kubepods/burstable/pod<uuid>/<container id>
+	// CgroupPath is the relative cgroup path, e.g. /kubepods/burstable/pod<uuid>/<container id>.
 	CgroupPath string
-	// pod spec runtime class
+	// RuntimeClassName refers to pod spec runtime class.
 	RuntimeClassName string
-	// numa id as map key, real-time data
+	// ActualCPUSet represents the actual cpuset, which is real-time data, with the numa id as the map key.
 	ActualCPUSet map[int]machine.CPUSet
 
 	StartedAt v1.Time

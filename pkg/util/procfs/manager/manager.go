@@ -52,7 +52,7 @@ type ProcFSManager interface {
 	ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) error
 }
 
-// GetProcFSManager
+// GetProcFSManager returns the singleton ProcFSManager.
 func GetProcFSManager() ProcFSManager {
 	initManagerOnce.Do(func() {
 		procFSManager = NewProcFSManager()

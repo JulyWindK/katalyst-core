@@ -15,3 +15,8 @@ limitations under the License.
 */
 
 package utils
+
+const (
+	DefaultMaxExpansionRate = 0.05
+	DefaultMaxShrinkRate    = 0.2
+)

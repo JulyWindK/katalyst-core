@@ -27,9 +27,9 @@ import (
 	"strings"
 
 	"github.com/prometheus/procfs"
-	"k8s.io/klog/v2"
 
 	"github.com/kubewharf/katalyst-core/pkg/util/bitmask"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"github.com/kubewharf/katalyst-core/pkg/util/procfs/common"
 )
@@ -45,134 +45,152 @@ func NewProcFSManager() *manager {
 	return &manager{fs}
 }
 
+// GetCPUInfo returns the CPUInfo of the host.
 func (m *manager) GetCPUInfo() ([]procfs.CPUInfo, error) {
 	return m.procfs.CPUInfo()
 }
 
+// GetProcStat returns the Stat of the host.
 func (m *manager) GetProcStat() (procfs.Stat, error) {
 	return m.procfs.Stat()
 }
 
+// GetPidComm returns the comm of the given pid.
 func (m *manager) GetPidComm(pid int) (string, error) {
 	proc, err := m.procfs.Proc(pid)
 	if err != nil {
-		klog.Errorf("[Porcfs] get pid %d proc failed, err: %v", pid, err)
+		general.Errorf("[Porcfs] get pid %d proc failed, err: %v", pid, err)
 		return "", err
 	}
 	comm, err := proc.Comm()
 	if err != nil {
-		klog.Errorf("[Porcfs] get pid %d comm failed, err: %v", pid, err)
+		general.Errorf("[Porcfs] get pid %d comm failed, err: %v", pid, err)
 		return "", err
 	}
 
 	return comm, nil
 }
 
+// GetPidCmdline returns the cmdline of the given pid.
 func (m *manager) GetPidCmdline(pid int) ([]string, error) {
 	proc, err := m.procfs.Proc(pid)
 	if err != nil {
-		klog.Errorf("[Porcfs] get pid %d proc failed, err: %v", pid, err)
+		general.Errorf("[Porcfs] get pid %d proc failed, err: %v", pid, err)
 		return nil, err
 	}
 
 	data, err := proc.CmdLine()
 	if err != nil {
-		klog.Errorf("[Porcfs] get pid %d cmdline failed, err: %v", pid, err)
+		general.Errorf("[Porcfs] get pid %d cmdline failed, err: %v", pid, err)
 		return nil, err
 	}
 
 	return data, nil
 }
 
+// GetPidCgroups returns the cgroups of the given pid.
 func (m *manager) GetPidCgroups(pid int) ([]procfs.Cgroup, error) {
 	proc, err := m.procfs.Proc(pid)
 	if err != nil {
-		klog.Errorf("[Porcfs] get pid %d proc failed, err: %v", pid, err)
+		general.Errorf("[Porcfs] get pid %d proc failed, err: %v", pid, err)
 		return nil, err
 	}
 
 	cgroups, err := proc.Cgroups()
 	if err != nil {
-		klog.Errorf("[Porcfs] get pid %d cgroup failed, err: %v", pid, err)
+		general.Errorf("[Porcfs] get pid %d cgroup failed, err: %v", pid, err)
 		return nil, err
 	}
 
 	return cgroups, nil
 }
 
+// GetMounts returns the mounts of the host.
 func (m *manager) GetMounts() ([]*procfs.MountInfo, error) {
 	return procfs.GetMounts()
 }
 
+// GetProcMounts returns the mounts of the given pid.
 func (m *manager) GetProcMounts(pid int) ([]*procfs.MountInfo, error) {
 	return procfs.GetProcMounts(pid)
 }
 
+// GetIPVSStats returns the ipvs stats of the host.
 func (m *manager) GetIPVSStats() (procfs.IPVSStats, error) {
 	return m.procfs.IPVSStats()
 }
 
+// GetNetDev returns the net dev stats of the host.
 func (m *manager) GetNetDev() (map[string]procfs.NetDevLine, error) {
 	return m.procfs.NetDev()
 }
 
+// GetNetStat returns the net stat stats of the host.
 func (m *manager) GetNetStat() ([]procfs.NetStat, error) {
 	return m.procfs.NetStat()
 }
 
+// GetNetTCP returns the net tcp stats of the host.
 func (m *manager) GetNetTCP() (procfs.NetTCP, error) {
 	return m.procfs.NetTCP()
 }
 
+// GetNetTCP6 returns the net tcp6 stats of the host.
 func (m *manager) GetNetTCP6() (procfs.NetTCP, error) {
 	return m.procfs.NetTCP6()
 }
 
+// GetNetUDP returns the net udp stats of the host.
 func (m *manager) GetNetUDP() (procfs.NetUDP, error) {
 	return m.procfs.NetUDP()
 }
 
+// GetNetUDP6 returns the net udp6 stats of the host.
 func (m *manager) GetNetUDP6() (procfs.NetUDP, error) {
 	return m.procfs.NetUDP6()
 }
 
+// GetSoftirqs returns the softirqs stats of the host.
 func (m *manager) GetSoftirqs() (procfs.Softirqs, error) {
 	return m.procfs.Softirqs()
 }
 
+// GetProcInterrupts returns the proc interrupts stats of the host.
 func (m *manager) GetProcInterrupts() (procfs.Interrupts, error) {
 	data, err := ReadFileNoStat("/proc/interrupts")
 	if err != nil {
-		klog.Errorf("[Porcfs] get /proc/interrupts failed, err: %v", err)
+		general.Errorf("[Porcfs] get /proc/interrupts failed, err: %v", err)
 		return nil, err
 	}
 	return parseInterrupts(bytes.NewReader(data))
 }
 
+// GetPSIStatsForResource returns the psi stats of the given resource.
 func (m *manager) GetPSIStatsForResource(resourceName string) (procfs.PSIStats, error) {
 	return m.procfs.PSIStatsForResource(resourceName)
 }
 
+// GetSchedStat returns the sched stat stats of the host.
 func (m *manager) GetSchedStat() (*procfs.Schedstat, error) {
 	return m.procfs.Schedstat()
 }
 
+// ApplyProcInterrupts apply the proc interrupts for the given irq number and cpuset.
 func (m *manager) ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) error {
-	// TODO: modify get max irq number
-	if irqNumber < 0 || irqNumber > 10 {
-		return fmt.Errorf("invalid IRQ number %d", irqNumber)
+	if irqNumber < 0 {
+		return fmt.Errorf("invalid IRQ number: %d ", irqNumber)
 	}
+
 	cpus := cpuset.ToSliceInt()
-	// TODO: modify get max cpu number
 	for cpu := range cpus {
-		if cpu < 0 || cpu > 10 {
-			return fmt.Errorf("invalid CPU number: %d", cpu)
+		if cpu < 0 {
+			return fmt.Errorf("invalid cpu number: %d", cpu)
 		}
 	}
 
 	mask, err := bitmask.NewBitMask(cpus...)
 	if err != nil {
-		klog.Errorf("[Procfs] invalid cpuset: %v", err)
+		general.Errorf("[Procfs] invalid cpuset: %v", err)
 		return err
 	}
 	data := mask.String()
@@ -180,7 +198,7 @@ func (m *manager) ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) erro
 	if err, applied, oldData := common.InstrumentedWriteFileIfChange("/proc/irq", "smp_affinity", data); err != nil {
 		return err
 	} else if applied {
-		klog.Infof("[Procfs] apply proc interrupts successfully, irq number: %v, data: %v, old data: %v\n", irqNumber, data, oldData)
+		general.Infof("[Procfs] apply proc interrupts successfully, irq number: %v, data: %v, old data: %v\n", irqNumber, data, oldData)
 	}
 
 	return nil
