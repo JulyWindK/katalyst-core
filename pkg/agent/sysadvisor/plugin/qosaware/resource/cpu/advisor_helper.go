@@ -19,6 +19,8 @@ package cpu
 import (
 	"fmt"
 
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/state"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
@@ -154,6 +156,18 @@ func (cra *cpuResourceAdvisor) updateNumasAvailableResource() {
 	reservePoolInfo, _ := cra.metaCache.GetPoolInfo(commonstate.PoolNameReserve)
 	cpusPerNuma := cra.metaServer.CPUsPerNuma()
 
+	// TODO(KFX): ensure logic
+	prohibitedCPUsMap := make(map[int]int)
+	for _, poolName := range state.ProhibitedPools.List() {
+		poolInfo, _ := cra.metaCache.GetPoolInfo(poolName)
+		if poolInfo == nil {
+			continue
+		}
+		for numaID, cpuset := range poolInfo.TopologyAwareAssignments {
+			prohibitedCPUsMap[numaID] += cpuset.Size()
+		}
+	}
+
 	cra.updateReservedForReclaim()
 
 	for id := 0; id < cra.metaServer.NumNUMANodes; id++ {
@@ -165,7 +179,13 @@ func (cra *cpuResourceAdvisor) updateNumasAvailableResource() {
 		if v, ok := cra.reservedForReclaim[id]; ok {
 			reservedForReclaimNuma = v
 		}
-		cra.numaAvailable[id] = cpusPerNuma - reservePoolNuma - reservedForReclaimNuma
+		// TODO(KFX): ensure logic
+		prohibitedPoolNuma := 0
+		if v, ok := prohibitedCPUsMap[id]; ok {
+			prohibitedPoolNuma = v
+		}
+		cra.numaAvailable[id] = cpusPerNuma - reservePoolNuma - prohibitedPoolNuma - reservedForReclaimNuma
+		//cra.numaAvailable[id] = cpusPerNuma - reservePoolNuma - reservedForReclaimNuma
 	}
 }
 

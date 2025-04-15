@@ -51,6 +51,20 @@ var (
 	)
 )
 
+// GetUnitedPoolsCPUs returns the union of the specified pools' cpus.
+func GetUnitedPoolsCPUs(poolsName sets.String, entries PodEntries) (machine.CPUSet, error) {
+	unitedPoolsCPUs := machine.NewCPUSet()
+	for _, poolName := range poolsName.List() {
+		cpus, err := entries.GetCPUSetForPool(poolName)
+		if err != nil {
+			return unitedPoolsCPUs, err
+		}
+
+		unitedPoolsCPUs = unitedPoolsCPUs.Union(cpus)
+	}
+	return unitedPoolsCPUs, nil
+}
+
 // WrapAllocationMetaFilter takes a filter function that operates on
 // AllocationMeta and returns a wrapper function that applies the same filter
 // to an AllocationInfo by extracting its AllocationMeta.
