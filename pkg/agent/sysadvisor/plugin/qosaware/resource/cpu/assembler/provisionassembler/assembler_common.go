@@ -184,9 +184,6 @@ func (pa *ProvisionAssemblerCommon) AssembleProvision() (types.InternalCPUCalcul
 							}
 							isolationSizes += int(ck[configapi.ControlKnobNonReclaimedCPURequirementUpper].Value)
 						}
-						// TODO(KFX): ensure logic
-						available -= isolationSizes
-
 						reclaimedCoresSize := general.Max(available-isolationSizes, 0) + reservedForReclaim
 						calculationResult.SetPoolEntry(commonstate.PoolNameReclaim, regionNuma, reclaimedCoresSize)
 					}
