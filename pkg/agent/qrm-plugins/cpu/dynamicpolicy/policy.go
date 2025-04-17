@@ -870,6 +870,10 @@ func (p *DynamicPolicy) Allocate(ctx context.Context,
 				"containerName", req.ContainerName,
 			)
 		}
+		_ = p.emitter.StoreInt64(util.MetricNameAllocateFailed, 1, metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "error_message", Val: "debug test"},
+			metrics.MetricTag{Key: util.MetricTagNameInplaceUpdateResizing, Val: strconv.FormatBool(util.PodInplaceUpdateResizing(req))},
+			metrics.MetricTag{Key: "reallocated", Val: strconv.FormatBool(isReallocated)})
 		general.InfoS("finished",
 			"duration", time.Since(startTime).String(),
 			"podNamespace", req.PodNamespace,
