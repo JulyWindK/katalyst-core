@@ -43,7 +43,6 @@ import (
 	advisorapi "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpuadvisor"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpueviction"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
-	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/adapter"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/tuner"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/state"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/validator"
@@ -105,9 +104,8 @@ type DynamicPolicy struct {
 	cpuPressureEviction       agent.Component
 	cpuPressureEvictionCancel context.CancelFunc
 
-	IRQStateAdapter irqtuner.StateAdapter
-	IRQTuner        irqtuner.Tuner
-	enableIrqTuner  bool
+	irqTuner       irqtuner.Tuner
+	enableIrqTuner bool
 
 	// those are parsed from configurations
 	// todo if we want to use dynamic configuration, we'd better not use self-defined conf
@@ -172,12 +170,6 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 			return false, agent.ComponentStub{}, err
 		}
 	}
-
-	irqStateAdapter, err := adapter.NewIRQStateAdapter(agentCtx, conf, stateImpl, wrappedEmitter)
-	if err != nil {
-		return false, agent.ComponentStub{}, fmt.Errorf("NewIRQStateAdapter failed with error: %v", err)
-	}
-
 	// since the reservedCPUs won't influence stateImpl directly.
 	// so we don't modify stateImpl with reservedCPUs here.
 	// for those pods have already been allocated reservedCPUs,
@@ -195,11 +187,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 
 		advisorValidator: validator.NewCPUAdvisorValidator(stateImpl, agentCtx.KatalystMachineInfo),
 
-		cpuPressureEviction: cpuPressureEviction,
-
-		IRQStateAdapter: irqStateAdapter,
-		IRQTuner:        tuner.NewIrqTunerStub(irqStateAdapter),
-
+		cpuPressureEviction:           cpuPressureEviction,
 		qosConfig:                     conf.QoSConfiguration,
 		dynamicConfig:                 conf.DynamicAgentConfiguration,
 		cpuAdvisorSocketAbsPath:       conf.CPUAdvisorSocketAbsPath,
@@ -226,6 +214,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	}
 
 	// TODO(KFX): ensure
+	policyImplement.irqTuner = tuner.NewIrqTunerStub(policyImplement)
 	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
 		if dc.IRQTuningConfiguration != nil {
 			policyImplement.enableIrqTuner = dc.IRQTuningConfiguration.EnableIRQTuner
@@ -374,7 +363,7 @@ func (p *DynamicPolicy) Start() (err error) {
 	go p.advisorMonitor.Run(p.stopCh)
 
 	if p.enableIrqTuner {
-		go p.IRQTuner.Run(p.stopCh)
+		go p.irqTuner.Run(p.stopCh)
 	}
 
 	go wait.BackoffUntil(func() { p.serveForAdvisor(p.stopCh) }, wait.NewExponentialBackoffManager(
