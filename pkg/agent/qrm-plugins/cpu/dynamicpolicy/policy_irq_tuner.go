@@ -19,6 +19,10 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 )
 
+func (p *DynamicPolicy) SetIRQTuner(irqTuner irqtuner.Tuner) {
+	p.irqTuner = irqTuner
+}
+
 // ListContainers retrieves the container info of all running containers.
 func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 	var cis []irqtuner.ContainerInfo
