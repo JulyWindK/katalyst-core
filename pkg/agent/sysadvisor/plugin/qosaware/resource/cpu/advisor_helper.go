@@ -154,7 +154,7 @@ func (cra *cpuResourceAdvisor) initializeHeadroomAssembler() error {
 }
 
 // updateNumasAvailableResource updates available resource of all numa nodes.
-// available = total - reserved pool - reserved for reclaim
+// available = total - reserved pool - prohibited pool - reserved for reclaim
 func (cra *cpuResourceAdvisor) updateNumasAvailableResource() {
 	cra.numaAvailable = make(map[int]int)
 	reservePoolInfo, _ := cra.metaCache.GetPoolInfo(commonstate.PoolNameReserve)

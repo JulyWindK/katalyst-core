@@ -102,8 +102,8 @@ func (pa *ProvisionAssemblerCommon) AssembleProvision() (types.InternalCPUCalcul
 				reservedForReclaim := pa.getNumasReservedForReclaim(r.GetBindingNumas())
 
 				nonReclaimRequirement := int(controlKnob[configapi.ControlKnobNonReclaimedCPURequirement].Value)
-				// available = NUMA Size - Reserved - ReservedForReclaimed when allowSharedCoresOverlapReclaimedCores == false
-				// available = NUMA Size - Reserved when allowSharedCoresOverlapReclaimedCores == true
+				// available = NUMA Size - Prohibited - Reserved - ReservedForReclaimed when allowSharedCoresOverlapReclaimedCores == false
+				// available = NUMA Size - Prohibited - Reserved when allowSharedCoresOverlapReclaimedCores == true
 				available := getNUMAsResource(*pa.numaAvailable, r.GetBindingNumas())
 				if *pa.allowSharedCoresOverlapReclaimedCores {
 					available += getNUMAsResource(*pa.reservedForReclaim, r.GetBindingNumas())

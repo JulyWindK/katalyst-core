@@ -255,6 +255,9 @@ func (adapter *IRQStateAdapterImpl) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUS
 	adapter.state.SetPodEntries(newPodEntries, false)
 	adapter.state.SetMachineState(machineState, false)
 
+	// TODO(KFX): Whether the container currently bound to the candidate interrupt core needs to be readjusted
+	//p.adjustAllocationEntries(persistCheckpoint)
+
 	general.Infof("persistent irq exclusive cpu set %v successful", irqCPUSet.String())
 
 	return nil
