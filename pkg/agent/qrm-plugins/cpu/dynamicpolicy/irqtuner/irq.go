@@ -42,15 +42,15 @@ type StateAdapter interface {
 	// and usually doesn't fail.
 	ListContainers() ([]ContainerInfo, error)
 
-	// GetIrqForbiddenCores get irq forbidden cores from qrm state manager.
-	GetIrqForbiddenCores() (machine.CPUSet, error)
+	// GetIRQForbiddenCores get irq forbidden cores from qrm state manager.
+	GetIRQForbiddenCores() (machine.CPUSet, error)
 
-	// GetExclusiveIrqCPUSet get exclusive cores from qrm state manager.
-	GetExclusiveIrqCPUSet() (machine.CPUSet, error)
+	// GetExclusiveIRQCPUSet get exclusive cores from qrm state manager.
+	GetExclusiveIRQCPUSet() (machine.CPUSet, error)
 
-	// SetExclusiveIrqCPUSet irq tuning controller only set exclusive irq cores to qrm-state manager, irq affinity tuning operation performed by irq-tuning
+	// SetExclusiveIRQCPUSet irq tuning controller only set exclusive irq cores to qrm-state manager, irq affinity tuning operation performed by irq-tuning
 	// controller is transparent to qrm-stat manager.
-	SetExclusiveIrqCPUSet(cpuSet machine.CPUSet) error
+	SetExclusiveIRQCPUSet(cpuSet machine.CPUSet) error
 }
 
 type Tuner interface {

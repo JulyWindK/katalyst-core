@@ -104,8 +104,8 @@ type DynamicPolicy struct {
 	cpuPressureEviction       agent.Component
 	cpuPressureEvictionCancel context.CancelFunc
 
-	irqTuner       irqtuner.Tuner
-	enableIrqTuner bool
+	IRQTuner       irqtuner.Tuner
+	enableIRQTuner bool
 
 	// those are parsed from configurations
 	// todo if we want to use dynamic configuration, we'd better not use self-defined conf
@@ -214,10 +214,10 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	}
 
 	// TODO(KFX): ensure
-	policyImplement.irqTuner = tuner.NewIrqTunerStub(policyImplement)
+	policyImplement.IRQTuner = tuner.NewIRQTunerStub(policyImplement)
 	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
 		if dc.IRQTuningConfiguration != nil {
-			policyImplement.enableIrqTuner = dc.IRQTuningConfiguration.EnableIRQTuner
+			policyImplement.enableIRQTuner = dc.IRQTuningConfiguration.EnableIRQTuner
 		}
 	}
 
@@ -362,8 +362,8 @@ func (p *DynamicPolicy) Start() (err error) {
 	}
 	go p.advisorMonitor.Run(p.stopCh)
 
-	if p.enableIrqTuner {
-		go p.irqTuner.Run(p.stopCh)
+	if p.enableIRQTuner {
+		go p.IRQTuner.Run(p.stopCh)
 	}
 
 	go wait.BackoffUntil(func() { p.serveForAdvisor(p.stopCh) }, wait.NewExponentialBackoffManager(

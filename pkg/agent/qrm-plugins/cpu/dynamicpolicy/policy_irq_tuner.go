@@ -92,8 +92,8 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 	return cis, nil
 }
 
-// GetIrqForbiddenCores retrieves the cpu set of cores that are forbidden for irq binding.
-func (p *DynamicPolicy) GetIrqForbiddenCores() (machine.CPUSet, error) {
+// GetIRQForbiddenCores retrieves the cpu set of cores that are forbidden for irq binding.
+func (p *DynamicPolicy) GetIRQForbiddenCores() (machine.CPUSet, error) {
 	forbiddenCores := machine.NewCPUSet()
 
 	// get irq forbidden cores from cpu plugin checkpoint
@@ -103,8 +103,8 @@ func (p *DynamicPolicy) GetIrqForbiddenCores() (machine.CPUSet, error) {
 	return forbiddenCores, nil
 }
 
-// GetExclusiveIrqCPUSet retrieves the cpu set of cores that are exclusive for irq binding.
-func (p *DynamicPolicy) GetExclusiveIrqCPUSet() (machine.CPUSet, error) {
+// GetExclusiveIRQCPUSet retrieves the cpu set of cores that are exclusive for irq binding.
+func (p *DynamicPolicy) GetExclusiveIRQCPUSet() (machine.CPUSet, error) {
 	currentIrqCPUSet := machine.NewCPUSet()
 	podEntries := p.state.GetPodEntries()
 	if containerEntry, ok := podEntries[commonstate.PoolNameInterrupt]; ok {
@@ -117,12 +117,12 @@ func (p *DynamicPolicy) GetExclusiveIrqCPUSet() (machine.CPUSet, error) {
 	return currentIrqCPUSet, nil
 }
 
-// SetExclusiveIrqCPUSet sets the exclusive cpu set for Interrupt.
-func (p *DynamicPolicy) SetExclusiveIrqCPUSet(irqCPUSet machine.CPUSet) error {
+// SetExclusiveIRQCPUSet sets the exclusive cpu set for Interrupt.
+func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	general.Infof("set the current irq exclusive cpu set: %v", irqCPUSet)
 
 	// 1. exception validation
-	forbidden, err := p.GetIrqForbiddenCores()
+	forbidden, err := p.GetIRQForbiddenCores()
 	if err != nil {
 		general.Errorf("get irq forbidden cores failed, err:%v", err)
 		return err

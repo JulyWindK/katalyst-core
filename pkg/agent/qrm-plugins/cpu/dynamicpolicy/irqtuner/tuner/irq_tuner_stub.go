@@ -24,18 +24,18 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 )
 
-type IrqTunerStub struct {
+type IRQTunerStub struct {
 	irqtuner.StateAdapter
 }
 
-func NewIrqTunerStub(sa irqtuner.StateAdapter) irqtuner.Tuner {
-	return &IrqTunerStub{sa}
+func NewIRQTunerStub(sa irqtuner.StateAdapter) irqtuner.Tuner {
+	return &IRQTunerStub{sa}
 }
 
-func (*IrqTunerStub) Run(stopCh <-chan struct{}) {
+func (*IRQTunerStub) Run(stopCh <-chan struct{}) {
 	general.RegisterHeartbeatCheck(cpuconsts.IRQTuning, 2*time.Minute, general.HealthzCheckStateNotReady, 2*time.Minute)
 }
 
-func (*IrqTunerStub) Stop() {
+func (*IRQTunerStub) Stop() {
 
 }
