@@ -163,6 +163,7 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 		shrinkRate = stepRate
 		scaleType = utils.ScaleTypeShrink
 	}
+	general.Infof("[DEBUG]KFX irqCPUSetSize:%v, currentIrqCPUSetSize:%v availableTotalCPUSetSize:%v", irqCPUSetSize, currentIrqCPUSetSize, availableTotalCPUSetSize)
 
 	if expandRate > utils.DefaultMaxExpansionRate || shrinkRate > utils.DefaultMaxShrinkRate {
 		general.Errorf("the expansion or shrinkage rate exceeds the threshold, expandRate: %f, shrinkRate: %f", expandRate, shrinkRate)

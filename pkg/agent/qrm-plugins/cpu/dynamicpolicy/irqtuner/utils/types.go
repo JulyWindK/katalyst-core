@@ -17,8 +17,11 @@ limitations under the License.
 package utils
 
 const (
-	DefaultMaxExpansionRate = 0.05
-	DefaultMaxShrinkRate    = 0.2
+	//DefaultMaxExpansionRate = 0.05
+	//DefaultMaxShrinkRate    = 0.2
+	// TODO: for debug test
+	DefaultMaxExpansionRate = 20
+	DefaultMaxShrinkRate    = 20
 )
 
 // ScaleType indicates whether the current state is expansion or shrink.

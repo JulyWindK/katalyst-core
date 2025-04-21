@@ -19,6 +19,8 @@ package tuner
 import (
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/wait"
+
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 
 	cpuconsts "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/consts"
@@ -38,24 +40,28 @@ func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 	general.RegisterHeartbeatCheck(cpuconsts.IRQTuning, 2*time.Minute, general.HealthzCheckStateNotReady, 2*time.Minute)
 
 	// list container info
-	cs, err := t.ListContainers()
-	if err != nil {
-		general.Errorf("listing containers info failed: %v", err)
-	} else {
-		general.Infof("get containers info: %v", cs)
-	}
+	go wait.Poll(10*time.Second, 60*time.Second, func() (bool, error) {
+		cs, err := t.ListContainers()
+		if err != nil {
+			general.Errorf("listing containers info failed: %v", err)
+		} else {
+			general.Infof("get containers info: %v", cs)
+		}
 
-	// get forbidden cores
-	irqForbiddenCPUs, err := t.GetIRQForbiddenCores()
-	if err != nil {
-		general.Errorf("get irq forbidden CPUs: %v", err)
-	} else {
-		general.Infof("get irq forbidden CPUs: %v", irqForbiddenCPUs)
-	}
+		// get forbidden cores
+		irqForbiddenCPUs, err := t.GetIRQForbiddenCores()
+		if err != nil {
+			general.Errorf("get irq forbidden CPUs: %v", err)
+		} else {
+			general.Infof("get irq forbidden CPUs: %v", irqForbiddenCPUs)
+		}
+
+		return false, nil
+	})
 
 	// set irq exclusive cpu set
 	cpuSet := []int{22, 23}
-	err = t.SetExclusiveIRQCPUSet(machine.NewCPUSet(cpuSet...))
+	err := t.SetExclusiveIRQCPUSet(machine.NewCPUSet(cpuSet...))
 	if err != nil {
 		general.Errorf("set exclusive IRQ CPUSet failed with error: %v", err)
 	}
