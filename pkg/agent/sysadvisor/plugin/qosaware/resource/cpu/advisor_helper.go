@@ -163,8 +163,8 @@ func (cra *cpuResourceAdvisor) updateNumasAvailableResource() {
 	// TODO(KFX): ensure logic
 	prohibitedCPUsMap := make(map[int]int)
 	for _, poolName := range state.ProhibitedPools.List() {
-		poolInfo, _ := cra.metaCache.GetPoolInfo(poolName)
-		if poolInfo == nil {
+		poolInfo, ok := cra.metaCache.GetPoolInfo(poolName)
+		if poolInfo == nil || !ok {
 			continue
 		}
 		for numaID, cpuset := range poolInfo.TopologyAwareAssignments {

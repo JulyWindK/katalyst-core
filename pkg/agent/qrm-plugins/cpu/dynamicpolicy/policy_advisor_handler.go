@@ -515,7 +515,8 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 
 		blocks, ok := resp.GeEntryNUMABlocks(poolName, commonstate.FakedContainerName, commonstate.FakedNUMAID)
 		if !ok {
-			return nil, fmt.Errorf("blocks of pool: %s is invalid", poolName)
+			general.Warningf("the pool %v does not exist at the moment", poolName)
+			continue
 		}
 
 		for _, block := range blocks {
