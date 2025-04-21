@@ -45,9 +45,7 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 
 		// get the runtime class from pod spec
 		runtime := pod.Spec.RuntimeClassName
-		if runtime == nil {
-			return nil, fmt.Errorf("get pod runtime class err")
-		}
+
 		// get the pod qos
 		qosClass := pod.Status.QOSClass
 
