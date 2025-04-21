@@ -104,6 +104,7 @@ func (p *DynamicPolicy) GetIRQForbiddenCores() (machine.CPUSet, error) {
 	forbiddenCores.Union(p.reservedCPUs)
 	// TODO: add katabm cores
 
+	general.Infof("get the irq forbidden cores %v", forbiddenCores)
 	return forbiddenCores, nil
 }
 
