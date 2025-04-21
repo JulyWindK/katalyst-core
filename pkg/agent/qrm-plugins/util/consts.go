@@ -36,7 +36,7 @@ const (
 	MetricNameOrphanContainer             = "orphan_container"
 	MetricNameGetMemBWPreferenceFailed    = "get_mem_bw_preference_failed"
 	MetricNameGetNUMAAllocatedMemBWFailed = "get_numa_allocated_mem_bw_failed"
-	MetricNameSetExclusiveIrqCPURate      = "set_exclusive_irq_cpu_rate"
+	MetricNameSetExclusiveIRQCPUSize      = "set_exclusive_irq_cpu_size"
 
 	// metrics for memory plugin
 	MetricNameMemSetInvalid                           = "memset_invalid"

@@ -11,7 +11,7 @@ import (
 
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/commonstate"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
-	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/utils"
+	irqutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/utils"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/state"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
@@ -106,6 +106,13 @@ func (p *DynamicPolicy) GetIRQForbiddenCores() (machine.CPUSet, error) {
 	return forbiddenCores, nil
 }
 
+func (p *DynamicPolicy) GetMaxStepExpandableCPUs() int {
+	availableTotalCPUSetSize := p.state.GetMachineState().GetAvailableCPUSet(p.reservedCPUs).Size()
+	res := int(math.Ceil(irqutil.DefaultIRQExclusiveMaxStepExpansionRate * float64(availableTotalCPUSetSize)))
+
+	return res
+}
+
 // GetExclusiveIRQCPUSet retrieves the cpu set of cores that are exclusive for irq binding.
 func (p *DynamicPolicy) GetExclusiveIRQCPUSet() (machine.CPUSet, error) {
 	currentIrqCPUSet := machine.NewCPUSet()
@@ -124,25 +131,21 @@ func (p *DynamicPolicy) GetExclusiveIRQCPUSet() (machine.CPUSet, error) {
 func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	general.Infof("set the current irq exclusive cpu set: %v", irqCPUSet)
 
-	// 1. exception validation
 	forbidden, err := p.GetIRQForbiddenCores()
 	if err != nil {
 		general.Errorf("get irq forbidden cores failed, err:%v", err)
 		return err
 	}
-	// 1.1 check cpuSet nums（max）
+	// 1. check cpuSet nums（max）
 	irqCPUSetSize := irqCPUSet.Size()
-	if irqCPUSetSize >= p.state.GetMachineState().GetAvailableCPUSet(forbidden).Size() {
-		general.Errorf("the specified number of cpusets %d exceeds the available amount", irqCPUSetSize)
-		return fmt.Errorf("the specified number of cpusets %d exceeds the available amount", irqCPUSetSize)
-	}
-	// 1.2 check cpuSet is intersection of irq forbidden cores
-	if irqCPUSet.Intersection(forbidden).Size() != 0 {
-		general.Errorf("the cpuset[%v] passed in contains the cpu that is forbidden[%v] to bind", irqCPUSet, forbidden)
-		return fmt.Errorf("the cpuset[%v] passed in contains the cpu that is forbidden[%v] to bind", irqCPUSet, forbidden)
+	availableTotalCPUSetSize := p.state.GetMachineState().GetAvailableCPUSet(p.reservedCPUs).Size()
+	maxExpandableSize := int(math.Ceil(float64(availableTotalCPUSetSize) * irqutil.DefaultIRQExclusiveMaxExpansionRate))
+	if irqCPUSetSize >= maxExpandableSize {
+		general.Errorf("the specified number of cpusets %v exceeds the max amount %v", irqCPUSetSize, maxExpandableSize)
+		return fmt.Errorf(irqutil.ExceededMaxExpandableCapacityErrMsg)
 	}
 
-	// 2. measuring the rate at which the irq-affinity core pool expansion and shrink
+	// 2. measuring the rate at which the irq exclusive core expansion
 	var currentIrqCPUSet machine.CPUSet
 	podEntries := p.state.GetPodEntries()
 	if containerEntry, ok := podEntries[commonstate.PoolNameInterrupt]; ok {
@@ -151,28 +154,24 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 		}
 	}
 
-	var expandRate, shrinkRate float64
-	var scaleType utils.ScaleType
 	currentIrqCPUSetSize := currentIrqCPUSet.Size()
-	availableTotalCPUSetSize := p.state.GetMachineState().GetAvailableCPUSet(p.reservedCPUs).Size()
-	stepRate := math.Abs(float64(irqCPUSetSize-currentIrqCPUSetSize)) / float64(availableTotalCPUSetSize) * 100
-	if irqCPUSetSize > currentIrqCPUSetSize {
-		expandRate = stepRate
-		scaleType = utils.ScaleTypeExpand
-	} else {
-		shrinkRate = stepRate
-		scaleType = utils.ScaleTypeShrink
+	expandSize := irqCPUSetSize - currentIrqCPUSetSize
+	maxStepExpandableSize := p.GetMaxStepExpandableCPUs()
+	// If the number of CPUs that interrupt exclusive cores is increased exceeds the maximum number
+	// of CPUs that can be adjusted at a time, an error will be returned.
+	if expandSize > 0 && expandSize > maxStepExpandableSize {
+		general.Errorf("the specified number of cpusets %v exceeds the max amount %v", irqCPUSetSize, maxStepExpandableSize)
+		return fmt.Errorf(irqutil.ExceededMaxStepExpandableCapacityErrMsg)
 	}
-	general.Infof("[DEBUG]KFX irqCPUSetSize:%v, currentIrqCPUSetSize:%v availableTotalCPUSetSize:%v", irqCPUSetSize, currentIrqCPUSetSize, availableTotalCPUSetSize)
+	general.Infof("[DEBUG]KFX irqCPUSetSize:%v, currentIrqCPUSetSize:%v maxStepExpandableSize:%v", irqCPUSetSize, currentIrqCPUSetSize, maxStepExpandableSize)
 
-	if expandRate > utils.DefaultMaxExpansionRate || shrinkRate > utils.DefaultMaxShrinkRate {
-		general.Errorf("the expansion or shrinkage rate exceeds the threshold, expandRate: %f, shrinkRate: %f", expandRate, shrinkRate)
-		return fmt.Errorf("the expansion or shrinkage rate exceeds the threshold, expandRate: %f, shrinkRate: %f", expandRate, shrinkRate)
+	// 3. check cpuSet is intersection of irq forbidden cores
+	if irqCPUSet.Intersection(forbidden).Size() != 0 {
+		general.Errorf("the cpuset[%v] passed in contains the cpu that is forbidden[%v] to bind", irqCPUSet, forbidden)
+		return fmt.Errorf(irqutil.ContainForbiddenCPUErrMsg)
 	}
-	_ = p.emitter.StoreFloat64(util.MetricNameSetExclusiveIrqCPURate, stepRate, metrics.MetricTypeNameRaw,
-		metrics.MetricTag{Key: "scale_type", Val: string(scaleType)})
 
-	// 3. update cpu plugin checkpoint
+	// 4. update cpu plugin checkpoint
 	topologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, irqCPUSet)
 	if err != nil {
 		return fmt.Errorf("unable to calculate topologyAwareAssignments for entry: %s, entry cpuset: %s, error: %v",
@@ -211,6 +210,7 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	//	return fmt.Errorf("adjustAllocationEntries failed with error: %v", err)
 	//}
 
+	_ = p.emitter.StoreInt64(util.MetricNameSetExclusiveIRQCPUSize, int64(irqCPUSetSize), metrics.MetricTypeNameRaw)
 	general.Infof("persistent irq exclusive cpu set %v successful", irqCPUSet.String())
 
 	return nil

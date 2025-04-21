@@ -45,6 +45,9 @@ type StateAdapter interface {
 	// GetIRQForbiddenCores get irq forbidden cores from qrm state manager.
 	GetIRQForbiddenCores() (machine.CPUSet, error)
 
+	// GetMaxStepExpandableCPUs indicates the maximum number of CPUs that can be expanded for the interrupt exclusive core in a single step.
+	GetMaxStepExpandableCPUs() int
+
 	// GetExclusiveIRQCPUSet get exclusive cores from qrm state manager.
 	GetExclusiveIRQCPUSet() (machine.CPUSet, error)
 

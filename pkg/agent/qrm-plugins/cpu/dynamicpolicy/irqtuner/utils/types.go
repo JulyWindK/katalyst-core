@@ -16,18 +16,16 @@ limitations under the License.
 
 package utils
 
+// TODO: for debug test
 const (
-	//DefaultMaxExpansionRate = 0.05
-	//DefaultMaxShrinkRate    = 0.2
-	// TODO: for debug test
-	DefaultMaxExpansionRate = 20
-	DefaultMaxShrinkRate    = 20
+	// DefaultIRQExclusiveMaxExpansionRate identifies the maximum expansion ratio of the default irq exclusive.
+	DefaultIRQExclusiveMaxExpansionRate = 0.3
+	// DefaultIRQExclusiveMaxStepExpansionRate identifies the default irq exclusive maximum single-step expansion ratio.
+	DefaultIRQExclusiveMaxStepExpansionRate = 0.05
 )
 
-// ScaleType indicates whether the current state is expansion or shrink.
-type ScaleType string
-
 const (
-	ScaleTypeExpand ScaleType = "expand"
-	ScaleTypeShrink ScaleType = "shrink"
+	ExceededMaxExpandableCapacityErrMsg     = "exceeded the maximum expandable capacity"
+	ExceededMaxStepExpandableCapacityErrMsg = "exceeds the maximum number of expansions in a single step"
+	ContainForbiddenCPUErrMsg               = "contains forbidden cpu"
 )
