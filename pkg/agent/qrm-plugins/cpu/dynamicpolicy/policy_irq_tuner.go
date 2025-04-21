@@ -207,9 +207,9 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	p.state.SetMachineState(machineState, false)
 
 	// TODO(KFX): Whether the container currently bound to the candidate interrupt core needs to be readjusted
-	if err = p.adjustAllocationEntries(false); err != nil {
-		return fmt.Errorf("adjustAllocationEntries failed with error: %v", err)
-	}
+	//if err = p.adjustAllocationEntries(false); err != nil {
+	//	return fmt.Errorf("adjustAllocationEntries failed with error: %v", err)
+	//}
 
 	general.Infof("persistent irq exclusive cpu set %v successful", irqCPUSet.String())
 
