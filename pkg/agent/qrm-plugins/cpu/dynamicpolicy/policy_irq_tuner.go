@@ -156,7 +156,8 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	var expandRate, shrinkRate float64
 	var scaleType utils.ScaleType
 	currentIrqCPUSetSize := currentIrqCPUSet.Size()
-	stepRate := math.Abs(float64(irqCPUSetSize-currentIrqCPUSetSize)) / float64(currentIrqCPUSetSize) * 100
+	availableTotalCPUSetSize := p.state.GetMachineState().GetAvailableCPUSet(p.reservedCPUs).Size()
+	stepRate := math.Abs(float64(irqCPUSetSize-currentIrqCPUSetSize)) / float64(availableTotalCPUSetSize) * 100
 	if irqCPUSetSize > currentIrqCPUSetSize {
 		expandRate = stepRate
 		scaleType = utils.ScaleTypeExpand
