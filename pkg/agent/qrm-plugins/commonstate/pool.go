@@ -52,6 +52,10 @@ const (
 	NUMAPoolInfix      = "-NUMA"
 )
 
+const (
+	PoolNotFoundErrMsg = "pool not found"
+)
+
 func IsIsolationPool(poolName string) bool {
 	return strings.HasPrefix(poolName, PoolNamePrefixIsolation)
 }

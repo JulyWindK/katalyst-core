@@ -19,6 +19,7 @@ package state
 import (
 	"fmt"
 	"math"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
@@ -56,8 +57,10 @@ func GetUnitedPoolsCPUs(poolsName sets.String, entries PodEntries) (machine.CPUS
 	unitedPoolsCPUs := machine.NewCPUSet()
 	for _, poolName := range poolsName.List() {
 		cpus, err := entries.GetCPUSetForPool(poolName)
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), commonstate.PoolNotFoundErrMsg) {
 			return unitedPoolsCPUs, err
+		} else {
+			general.Warningf("the current pool %s does not exist", poolName)
 		}
 
 		unitedPoolsCPUs = unitedPoolsCPUs.Union(cpus)

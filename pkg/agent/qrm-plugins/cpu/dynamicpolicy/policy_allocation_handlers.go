@@ -79,6 +79,7 @@ func (p *DynamicPolicy) sharedCoresWithoutNUMABindingAllocationHandler(_ context
 	if err != nil {
 		return nil, fmt.Errorf("getProhibitedCPUs failed with error: %v", err)
 	}
+
 	pooledCPUs.Difference(prohibitedCPUs)
 
 	if pooledCPUs.IsEmpty() {

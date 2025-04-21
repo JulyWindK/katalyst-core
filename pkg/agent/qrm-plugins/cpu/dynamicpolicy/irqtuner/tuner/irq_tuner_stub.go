@@ -19,6 +19,8 @@ package tuner
 import (
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/util/machine"
+
 	cpuconsts "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/consts"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
@@ -32,10 +34,41 @@ func NewIRQTunerStub(sa irqtuner.StateAdapter) irqtuner.Tuner {
 	return &IRQTunerStub{sa}
 }
 
-func (*IRQTunerStub) Run(stopCh <-chan struct{}) {
+func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 	general.RegisterHeartbeatCheck(cpuconsts.IRQTuning, 2*time.Minute, general.HealthzCheckStateNotReady, 2*time.Minute)
+
+	// list container info
+	cs, err := t.ListContainers()
+	if err != nil {
+		general.Errorf("listing containers info failed: %v", err)
+	} else {
+		general.Infof("get containers info: %v", cs)
+	}
+
+	// get forbidden cores
+	irqForbiddenCPUs, err := t.GetIRQForbiddenCores()
+	if err != nil {
+		general.Errorf("get irq forbidden CPUs: %v", err)
+	} else {
+		general.Infof("get irq forbidden CPUs: %v", irqForbiddenCPUs)
+	}
+
+	// set irq exclusive cpu set
+	cpuSet := []int{22, 23}
+	err = t.SetExclusiveIRQCPUSet(machine.NewCPUSet(cpuSet...))
+	if err != nil {
+		general.Errorf("set exclusive IRQ CPUSet failed with error: %v", err)
+	}
+
+	// get exclusive IRQ CPUSet
+	irqExclusiveCPUs, err := t.GetExclusiveIRQCPUSet()
+	if err != nil {
+		general.Errorf("get exclusive IRQ CPUSet failed with error: %v", err)
+	} else {
+		general.Infof("get exclusive IRQ CPUSet: %v", irqExclusiveCPUs)
+	}
 }
 
-func (*IRQTunerStub) Stop() {
+func (t *IRQTunerStub) Stop() {
 
 }
