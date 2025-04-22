@@ -58,28 +58,28 @@ func (t *IRQTunerStub) Stop() {
 
 func (t *IRQTunerStub) tunerStateGet() {
 	for {
-		//cs, err := t.ListContainers()
-		//if err != nil {
-		//	general.Errorf("listing containers info failed: %v", err)
-		//} else {
-		//	general.Infof("get containers info: %v", cs)
-		//}
-		//
-		//// get forbidden cores
-		//irqForbiddenCPUs, err := t.GetIRQForbiddenCores()
-		//if err != nil {
-		//	general.Errorf("get irq forbidden CPUs: %v", err)
-		//} else {
-		//	general.Infof("get irq forbidden CPUs: %v", irqForbiddenCPUs)
-		//}
-		//
-		//// get exclusive IRQ CPUSet
-		//irqExclusiveCPUs, err := t.GetExclusiveIRQCPUSet()
-		//if err != nil {
-		//	general.Errorf("get exclusive IRQ CPUSet failed with error: %v", err)
-		//} else {
-		//	general.Infof("get exclusive IRQ CPUSet: %v", irqExclusiveCPUs)
-		//}
+		cs, err := t.ListContainers()
+		if err != nil {
+			general.Errorf("listing containers info failed: %v", err)
+		} else {
+			general.Infof("get containers info: %v", cs)
+		}
+
+		// get forbidden cores
+		irqForbiddenCPUs, err := t.GetIRQForbiddenCores()
+		if err != nil {
+			general.Errorf("get irq forbidden CPUs: %v", err)
+		} else {
+			general.Infof("get irq forbidden CPUs: %v", irqForbiddenCPUs)
+		}
+
+		// get exclusive IRQ CPUSet
+		irqExclusiveCPUs, err := t.GetExclusiveIRQCPUSet()
+		if err != nil {
+			general.Errorf("get exclusive IRQ CPUSet failed with error: %v", err)
+		} else {
+			general.Infof("get exclusive IRQ CPUSet: %v", irqExclusiveCPUs)
+		}
 		general.Infof("[DEBUG] irq tuner stub get sleep...")
 
 		time.Sleep(5 * time.Second)
