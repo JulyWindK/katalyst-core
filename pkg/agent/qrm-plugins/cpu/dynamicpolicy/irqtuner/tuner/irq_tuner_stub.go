@@ -78,12 +78,12 @@ func (t *IRQTunerStub) tunerStateGet() {
 		general.Infof("get step max: %v", stepMax)
 
 		// get exclusive IRQ CPUSet
-		//irqExclusiveCPUs, err := t.GetExclusiveIRQCPUSet()
-		//if err != nil {
-		//	general.Errorf("get exclusive IRQ CPUSet failed with error: %v", err)
-		//} else {
-		//	general.Infof("get exclusive IRQ CPUSet: %v", irqExclusiveCPUs)
-		//}
+		irqExclusiveCPUs, err := t.GetExclusiveIRQCPUSet()
+		if err != nil {
+			general.Errorf("get exclusive IRQ CPUSet failed with error: %v", err)
+		} else {
+			general.Infof("get exclusive IRQ CPUSet: %v", irqExclusiveCPUs)
+		}
 
 		general.Infof("[DEBUG] irq tuner stub get sleep...")
 		time.Sleep(5 * time.Second)

@@ -118,16 +118,16 @@ func (p *DynamicPolicy) GetStepExpandableCPUsMax() int {
 
 // GetExclusiveIRQCPUSet retrieves the cpu set of cores that are exclusive for irq binding.
 func (p *DynamicPolicy) GetExclusiveIRQCPUSet() (machine.CPUSet, error) {
-	currentIrqCPUSet := machine.NewCPUSet()
+	currentIRQCPUSet := machine.NewCPUSet()
 	podEntries := p.state.GetPodEntries()
 	if containerEntry, ok := podEntries[commonstate.PoolNameInterrupt]; ok {
 		if allocateInfo, ok := containerEntry[commonstate.FakedContainerName]; ok && allocateInfo != nil {
-			currentIrqCPUSet = allocateInfo.AllocationResult
+			currentIRQCPUSet = allocateInfo.AllocationResult.Clone()
 		}
 	}
 
-	general.Infof("get the current irq exclusive cpu set: %v", currentIrqCPUSet)
-	return currentIrqCPUSet, nil
+	general.Infof("get the current irq exclusive cpu set: %v", currentIRQCPUSet)
+	return currentIRQCPUSet, nil
 }
 
 // SetExclusiveIRQCPUSet sets the exclusive cpu set for Interrupt.
