@@ -35,6 +35,7 @@ func NewIRQTunerStub(sa irqtuner.StateAdapter) irqtuner.Tuner {
 
 func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 	//general.RegisterHeartbeatCheck(cpuconsts.IRQTuning, 2*time.Minute, general.HealthzCheckStateNotReady, 2*time.Minute)
+	general.Infof("[DEBUG] irq tuner stub runing ...")
 
 	// set irq exclusive cpu set
 	cpuSet := []int{22, 23}
@@ -45,8 +46,10 @@ func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 
 	for {
 		t.tunerStateGet()
+		general.Infof("[DEBUG] irq tuner stub get sleep ...")
 		time.Sleep(5 * time.Second)
 	}
+	//t.tunerStateGet()
 }
 
 func (t *IRQTunerStub) Stop() {

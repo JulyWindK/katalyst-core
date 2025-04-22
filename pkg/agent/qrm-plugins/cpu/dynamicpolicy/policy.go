@@ -262,6 +262,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	if err != nil {
 		return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy new plugin wrapper failed with error: %v", err)
 	}
+	general.Infof("[DEBUG] New DynamicPolicy return ...")
 
 	return true, &agent.PluginWrapper{GenericPlugin: pluginWrapper}, nil
 }
@@ -407,6 +408,8 @@ func (p *DynamicPolicy) Start() (err error) {
 
 	go wait.BackoffUntil(communicateWithCPUAdvisorServer, wait.NewExponentialBackoffManager(800*time.Millisecond,
 		30*time.Second, 2*time.Minute, 2.0, 0, &clock.RealClock{}), true, p.stopCh)
+
+	general.Infof("[DEBUG] DynamicPolicy start ...")
 
 	return nil
 }

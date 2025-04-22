@@ -21,6 +21,7 @@ import (
 
 func (p *DynamicPolicy) SetIRQTuner(irqTuner irqtuner.Tuner) {
 	p.irqTuner = irqTuner
+	general.Infof("[DEBUG] SetIRQTuner end ...")
 }
 
 // ListContainers retrieves the container info of all running containers.
@@ -131,6 +132,7 @@ func (p *DynamicPolicy) GetExclusiveIRQCPUSet() (machine.CPUSet, error) {
 
 // SetExclusiveIRQCPUSet sets the exclusive cpu set for Interrupt.
 func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
+	general.Infof("[DEBUG] SetExclusiveIRQCPUSet start ...")
 	general.Infof("set the current irq exclusive cpu set: %v", irqCPUSet)
 
 	forbidden, err := p.GetIRQForbiddenCores()
@@ -215,5 +217,6 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	_ = p.emitter.StoreInt64(util.MetricNameSetExclusiveIRQCPUSize, int64(irqCPUSetSize), metrics.MetricTypeNameRaw)
 	general.Infof("persistent irq exclusive cpu set %v successful", irqCPUSet.String())
 
+	general.Infof("[DEBUG] SetExclusiveIRQCPUSet end ...")
 	return nil
 }
