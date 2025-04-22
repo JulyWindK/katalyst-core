@@ -1105,6 +1105,7 @@ func (p *DynamicPolicy) cleanPools() error {
 	if poolsToDelete.Len() > 0 {
 		general.Infof("pools to delete: %v", poolsToDelete.UnsortedList())
 		for _, poolName := range poolsToDelete.UnsortedList() {
+			general.Infof("[DEBUG]clean pools %s", poolName)
 			delete(podEntries, poolName)
 		}
 

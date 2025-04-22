@@ -1266,6 +1266,7 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 	if err != nil {
 		return fmt.Errorf("calculate machineState by newPodEntries failed with error: %v", err)
 	}
+	general.Infof("[DEBUG]applyPoolsAndIsolatedInfo set podEntries:%v", newPodEntries)
 	p.state.SetPodEntries(newPodEntries, false)
 	p.state.SetMachineState(machineState, false)
 	if persistCheckpoint {
