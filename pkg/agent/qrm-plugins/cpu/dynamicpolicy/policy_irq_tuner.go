@@ -26,6 +26,7 @@ func (p *DynamicPolicy) SetIRQTuner(irqTuner irqtuner.Tuner) {
 
 // ListContainers retrieves the container info of all running containers.
 func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
+	general.Infof("[DEBUG] ListContainers begin ...")
 	var cis []irqtuner.ContainerInfo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -33,6 +34,8 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 
 	// 1. get container info from pod entries
 	for podUID, entry := range p.state.GetPodEntries() {
+		general.Infof("[DEBUG] GetPodEntries podUID %v", podUID)
+
 		if entry.IsPoolEntry() {
 			continue
 		}
@@ -57,8 +60,11 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 			containerStatus[cs.Name] = cs
 		}
 
+		general.Infof("[DEBUG] GetPodEntries start get pod %v container info", podUID)
 		// get the container info from the current persistent entry of the node
 		for containerName, allocationInfo := range entry {
+			general.Infof("[DEBUG] GetPodEntries get container info %v", containerName)
+
 			if allocationInfo == nil {
 				general.Warningf("container %s allocation info is nil, skip it", containerName)
 				continue
@@ -94,6 +100,7 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 		}
 	}
 
+	general.Infof("[DEBUG] ListContainers ends ...")
 	return cis, nil
 }
 
