@@ -1521,6 +1521,18 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		poolsCPUSet[commonstate.PoolNameReclaim] = p.reservedReclaimedCPUSet.Clone()
 	}
 
+	// TODO: whether if deal with prohibited pools
+	// deal with prohibited pools
+	currentPodEntries := p.state.GetPodEntries()
+	for _, poolName := range state.ProhibitedPools.List() {
+		cset, err := currentPodEntries.GetCPUSetForPool(poolName)
+		if err != nil {
+			general.Infof("can't get CPUSet for pool %s: %v", poolName, err)
+			continue
+		}
+		poolsCPUSet[poolName] = cset.Clone()
+	}
+
 	return
 }
 

@@ -251,6 +251,13 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initReclaimPool failed with error: %v", err)
 	}
 
+	// TODO: ensure
+	if policyImplement.enableIRQTuner {
+		if err := policyImplement.initInterruptPool(); err != nil {
+			return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initInterruptPool failed with error: %v", err)
+		}
+	}
+
 	err = agentCtx.MetaServer.ConfigurationManager.AddConfigWatcher(crd.AdminQoSConfigurationGVR)
 	if err != nil {
 		return false, nil, err
@@ -1220,6 +1227,15 @@ func (p *DynamicPolicy) initReclaimPool() error {
 	} else {
 		general.Infof("exist initial %s: %s", commonstate.PoolNameReclaim, reclaimedAllocationInfo.AllocationResult.String())
 	}
+
+	return nil
+}
+
+func (p *DynamicPolicy) initInterruptPool() error {
+	allocationInfo := &state.AllocationInfo{
+		AllocationMeta: commonstate.GenerateGenericPoolAllocationMeta(commonstate.FakedContainerName),
+	}
+	p.state.SetAllocationInfo(commonstate.PoolNameInterrupt, commonstate.FakedContainerName, allocationInfo, true)
 
 	return nil
 }

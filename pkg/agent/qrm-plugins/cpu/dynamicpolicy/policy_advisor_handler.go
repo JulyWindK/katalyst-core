@@ -218,6 +218,7 @@ func (p *DynamicPolicy) pushCPUAdvisor() error {
 
 func (p *DynamicPolicy) createGetAdviceRequest() (*advisorapi.GetAdviceRequest, error) {
 	stateEntries := p.state.GetPodEntries()
+	general.Infof("[DEBUG]createGetAdviceRequest current stateEntries: %v", stateEntries)
 	chkEntries := make(map[string]*advisorapi.ContainerAllocationInfoEntries)
 	for uid, containerEntries := range stateEntries {
 		if chkEntries[uid] == nil {
@@ -639,6 +640,10 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 	// calculate NUMAs without actual numa_binding reclaimed pods
 	nonReclaimActualBindingNUMAs := p.state.GetMachineState().GetFilteredNUMASet(state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckReclaimedActualNUMABinding))
 
+	general.Infof("[DEBUG]applyBlocks newst curEntries %v", curEntries)
+	// deal with interrupt pools
+	ll
+
 	// deal with blocks of dedicated_cores and pools
 	for entryName, entry := range resp.Entries {
 		for subEntryName, calculationInfo := range entry.Entries {
@@ -727,6 +732,8 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 	if err != nil {
 		return err
 	}
+
+	general.Infof("[DEBUG]applyBlocks reviseReclaimPool after newEntries %v", newEntries)
 
 	// calculate rampUpCPUs
 	sharedBindingNUMAs, err := resp.GetSharedBindingNUMAs()
