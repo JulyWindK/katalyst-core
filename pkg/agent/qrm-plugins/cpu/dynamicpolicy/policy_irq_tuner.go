@@ -201,16 +201,23 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 		newPodEntries[commonstate.PoolNameInterrupt][commonstate.FakedContainerName] = &state.AllocationInfo{}
 	}
 	newPodEntries[commonstate.PoolNameInterrupt][commonstate.FakedContainerName] = ai
+	general.Infof("[DEBUG]SetExclusiveIRQCPUSet get new podEntries:%v", newPodEntries)
 
 	machineState, err := state.GenerateMachineStateFromPodEntries(p.machineInfo.CPUTopology, newPodEntries)
 	if err != nil {
 		return fmt.Errorf("calculate machineState by newPodEntries failed with error: %v", err)
 	}
+	general.Infof("[DEBUG]SetExclusiveIRQCPUSet get new machineState:%v", machineState)
 	//p.state.SetPodEntries(newPodEntries, false)
 	//p.state.SetMachineState(machineState, false)
 	// TODO: will remove
 	p.state.SetPodEntries(newPodEntries, true)
 	p.state.SetMachineState(machineState, true)
+
+	testPodEntries := p.state.GetPodEntries()
+	testMachineState := p.state.GetMachineState()
+	general.Infof("[DEBUG]SetExclusiveIRQCPUSet get test PodEntries:%v", testPodEntries)
+	general.Infof("[DEBUG]SetExclusiveIRQCPUSet get test machineState:%v", testMachineState)
 
 	// TODO(KFX): Whether the container currently bound to the candidate interrupt core needs to be readjusted
 	//if err = p.adjustAllocationEntries(false); err != nil {
