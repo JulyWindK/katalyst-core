@@ -43,7 +43,7 @@ var (
 	// and they are usually used to ensure stability.
 	ResidentPools = sets.NewString(
 		commonstate.PoolNameReclaim,
-	).Union(StaticPools)
+	).Union(StaticPools).Union(ProhibitedPools)
 
 	// ProhibitedPools prohibited from being allocated to user containers and
 	// is mainly used to perform specific tasks

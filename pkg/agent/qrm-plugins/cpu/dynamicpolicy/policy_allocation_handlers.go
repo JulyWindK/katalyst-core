@@ -719,9 +719,9 @@ func (p *DynamicPolicy) putAllocationsAndAdjustAllocationEntriesResizeAware(orig
 		!cpuutil.AdvisorDegradation(p.advisorMonitor.GetHealthy(), p.dynamicConfig.GetDynamicConfiguration().EnableReclaim) {
 		// if sys advisor is enabled, we believe the pools' ratio that sys advisor indicates
 		// TODO(KFX): ensure whether need to ignore interrupt pool
-		//csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools)
+		csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools)
 		//csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(sets.NewString(commonstate.PoolNameInterrupt)))
-		csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(state.ProhibitedPools))
+		//csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(state.ProhibitedPools))
 		if err != nil {
 			return fmt.Errorf("GetFilteredPoolsCPUSetMap failed with error: %v", err)
 		}
@@ -886,9 +886,9 @@ func (p *DynamicPolicy) adjustAllocationEntries(persistCheckpoint bool) error {
 	if p.enableCPUAdvisor &&
 		!cpuutil.AdvisorDegradation(p.advisorMonitor.GetHealthy(), p.dynamicConfig.GetDynamicConfiguration().EnableReclaim) {
 		// TODO(KFX): ensure whether need to ignore interrupt pool
-		//poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools)
+		poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools)
 		//poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(sets.NewString(commonstate.PoolNameInterrupt)))
-		poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(state.ProhibitedPools))
+		//poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(state.ProhibitedPools))
 		if err != nil {
 			return fmt.Errorf("GetFilteredPoolsCPUSetMap failed with error: %v", err)
 		}
