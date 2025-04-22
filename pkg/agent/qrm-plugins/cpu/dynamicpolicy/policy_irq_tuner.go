@@ -39,7 +39,8 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 		// get the pod from meta server
 		pod, err := p.metaServer.PodFetcher.GetPod(ctx, podUID)
 		if err != nil || pod == nil {
-			return nil, err
+			general.Warningf("pod fetcher cannot get pod %s, err:%v", podUID, err)
+			continue
 		}
 		// TODO(KFX): Whether it is necessary to filter out running pods
 
@@ -65,7 +66,8 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 			// get the container ID
 			containerID, err := p.metaServer.PodFetcher.GetContainerID(podUID, containerName)
 			if err != nil {
-				return nil, err
+				general.Warningf("unable to get container id from pod %s/%s: %v", podUID, containerName, err)
+				continue
 			}
 
 			// get the cgroup path
@@ -106,7 +108,7 @@ func (p *DynamicPolicy) GetIRQForbiddenCores() (machine.CPUSet, error) {
 	return forbiddenCores, nil
 }
 
-func (p *DynamicPolicy) GetMaxStepExpandableCPUs() int {
+func (p *DynamicPolicy) GetStepExpandableCPUsMax() int {
 	availableTotalCPUSetSize := p.state.GetMachineState().GetAvailableCPUSet(p.reservedCPUs).Size()
 	res := int(math.Ceil(irqutil.DefaultIRQExclusiveMaxStepExpansionRate * float64(availableTotalCPUSetSize)))
 
@@ -142,7 +144,7 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	maxExpandableSize := int(math.Ceil(float64(availableTotalCPUSetSize) * irqutil.DefaultIRQExclusiveMaxExpansionRate))
 	if irqCPUSetSize >= maxExpandableSize {
 		general.Errorf("the specified number of cpusets %v exceeds the max amount %v", irqCPUSetSize, maxExpandableSize)
-		return fmt.Errorf(irqutil.ExceededMaxExpandableCapacityErrMsg)
+		return irqutil.ExceededMaxExpandableCapacityErr
 	}
 
 	// 2. measuring the rate at which the irq exclusive core expansion
@@ -156,19 +158,19 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 
 	currentIrqCPUSetSize := currentIrqCPUSet.Size()
 	expandSize := irqCPUSetSize - currentIrqCPUSetSize
-	maxStepExpandableSize := p.GetMaxStepExpandableCPUs()
+	maxStepExpandableSize := p.GetStepExpandableCPUsMax()
 	// If the number of CPUs that interrupt exclusive cores is increased exceeds the maximum number
 	// of CPUs that can be adjusted at a time, an error will be returned.
 	if expandSize > 0 && expandSize > maxStepExpandableSize {
 		general.Errorf("the specified number of cpusets %v exceeds the max amount %v", irqCPUSetSize, maxStepExpandableSize)
-		return fmt.Errorf(irqutil.ExceededMaxStepExpandableCapacityErrMsg)
+		return irqutil.ExceededMaxStepExpandableCapacityErr
 	}
 	general.Infof("[DEBUG]KFX irqCPUSetSize:%v, currentIrqCPUSetSize:%v maxStepExpandableSize:%v", irqCPUSetSize, currentIrqCPUSetSize, maxStepExpandableSize)
 
 	// 3. check cpuSet is intersection of irq forbidden cores
 	if irqCPUSet.Intersection(forbidden).Size() != 0 {
 		general.Errorf("the cpuset[%v] passed in contains the cpu that is forbidden[%v] to bind", irqCPUSet, forbidden)
-		return fmt.Errorf(irqutil.ContainForbiddenCPUErrMsg)
+		return irqutil.ContainForbiddenCPUErr
 	}
 
 	// 4. update cpu plugin checkpoint

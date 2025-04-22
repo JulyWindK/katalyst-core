@@ -16,6 +16,8 @@ limitations under the License.
 
 package utils
 
+import "github.com/pkg/errors"
+
 // TODO: for debug test
 const (
 	// DefaultIRQExclusiveMaxExpansionRate identifies the maximum expansion ratio of the default irq exclusive.
@@ -24,8 +26,8 @@ const (
 	DefaultIRQExclusiveMaxStepExpansionRate = 0.05
 )
 
-const (
-	ExceededMaxExpandableCapacityErrMsg     = "exceeded the maximum expandable capacity"
-	ExceededMaxStepExpandableCapacityErrMsg = "exceeds the maximum number of expansions in a single step"
-	ContainForbiddenCPUErrMsg               = "contains forbidden cpu"
+var (
+	ExceededMaxExpandableCapacityErr     = errors.New("exceeded the maximum expandable capacity")
+	ExceededMaxStepExpandableCapacityErr = errors.New("exceeds the maximum number of expansions in a single step")
+	ContainForbiddenCPUErr               = errors.New("contains forbidden cpu")
 )
