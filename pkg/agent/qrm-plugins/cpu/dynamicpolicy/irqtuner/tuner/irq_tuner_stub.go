@@ -17,8 +17,6 @@ limitations under the License.
 package tuner
 
 import (
-	"time"
-
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
@@ -38,16 +36,17 @@ func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 
 	// set irq exclusive cpu set
 	cpuSet := []int{22, 23}
+	general.Infof("[DEBUG] irq tuner stub start call SetExclusiveIRQCPUSet...")
 	err := t.SetExclusiveIRQCPUSet(machine.NewCPUSet(cpuSet...))
 	if err != nil {
 		general.Errorf("set exclusive IRQ CPUSet failed with error: %v", err)
 	}
 
-	for {
-		t.tunerStateGet()
-		general.Infof("[DEBUG] irq tuner stub get sleep ...")
-		time.Sleep(5 * time.Second)
-	}
+	//for {
+	//	t.tunerStateGet()
+	//	general.Infof("[DEBUG] irq tuner stub get sleep ...")
+	//	time.Sleep(5 * time.Second)
+	//}
 }
 
 func (t *IRQTunerStub) Stop() {

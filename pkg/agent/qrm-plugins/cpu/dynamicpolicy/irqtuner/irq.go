@@ -53,7 +53,7 @@ type StateAdapter interface {
 
 	// SetExclusiveIRQCPUSet irq tuning controller only set exclusive irq cores to qrm-state manager, irq affinity tuning operation performed by irq-tuning
 	// controller is transparent to qrm-stat manager.
-	SetExclusiveIRQCPUSet(cpuSet machine.CPUSet) error
+	SetExclusiveIRQCPUSet(machine.CPUSet) error
 }
 
 type Tuner interface {
