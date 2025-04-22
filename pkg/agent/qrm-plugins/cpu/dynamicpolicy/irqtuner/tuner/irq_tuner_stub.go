@@ -17,6 +17,8 @@ limitations under the License.
 package tuner
 
 import (
+	"time"
+
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
@@ -47,6 +49,7 @@ func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 	//	general.Infof("[DEBUG] irq tuner stub get sleep ...")
 	//	time.Sleep(5 * time.Second)
 	//}
+	go t.tunerStateGet()
 }
 
 func (t *IRQTunerStub) Stop() {
@@ -54,26 +57,30 @@ func (t *IRQTunerStub) Stop() {
 }
 
 func (t *IRQTunerStub) tunerStateGet() {
-	cs, err := t.ListContainers()
-	if err != nil {
-		general.Errorf("listing containers info failed: %v", err)
-	} else {
-		general.Infof("get containers info: %v", cs)
-	}
+	for {
+		cs, err := t.ListContainers()
+		if err != nil {
+			general.Errorf("listing containers info failed: %v", err)
+		} else {
+			general.Infof("get containers info: %v", cs)
+		}
 
-	// get forbidden cores
-	irqForbiddenCPUs, err := t.GetIRQForbiddenCores()
-	if err != nil {
-		general.Errorf("get irq forbidden CPUs: %v", err)
-	} else {
-		general.Infof("get irq forbidden CPUs: %v", irqForbiddenCPUs)
-	}
+		// get forbidden cores
+		irqForbiddenCPUs, err := t.GetIRQForbiddenCores()
+		if err != nil {
+			general.Errorf("get irq forbidden CPUs: %v", err)
+		} else {
+			general.Infof("get irq forbidden CPUs: %v", irqForbiddenCPUs)
+		}
 
-	// get exclusive IRQ CPUSet
-	irqExclusiveCPUs, err := t.GetExclusiveIRQCPUSet()
-	if err != nil {
-		general.Errorf("get exclusive IRQ CPUSet failed with error: %v", err)
-	} else {
-		general.Infof("get exclusive IRQ CPUSet: %v", irqExclusiveCPUs)
+		// get exclusive IRQ CPUSet
+		irqExclusiveCPUs, err := t.GetExclusiveIRQCPUSet()
+		if err != nil {
+			general.Errorf("get exclusive IRQ CPUSet failed with error: %v", err)
+		} else {
+			general.Infof("get exclusive IRQ CPUSet: %v", irqExclusiveCPUs)
+		}
+
+		time.Sleep(5 * time.Second)
 	}
 }

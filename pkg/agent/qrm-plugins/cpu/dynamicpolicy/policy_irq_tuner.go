@@ -206,8 +206,11 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	if err != nil {
 		return fmt.Errorf("calculate machineState by newPodEntries failed with error: %v", err)
 	}
-	p.state.SetPodEntries(newPodEntries, false)
-	p.state.SetMachineState(machineState, false)
+	//p.state.SetPodEntries(newPodEntries, false)
+	//p.state.SetMachineState(machineState, false)
+	// TODO: will remove
+	p.state.SetPodEntries(newPodEntries, true)
+	p.state.SetMachineState(machineState, true)
 
 	// TODO(KFX): Whether the container currently bound to the candidate interrupt core needs to be readjusted
 	//if err = p.adjustAllocationEntries(false); err != nil {
