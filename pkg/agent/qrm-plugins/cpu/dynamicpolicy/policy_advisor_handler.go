@@ -641,11 +641,13 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 	nonReclaimActualBindingNUMAs := p.state.GetMachineState().GetFilteredNUMASet(state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckReclaimedActualNUMABinding))
 
 	general.Infof("[DEBUG]applyBlocks newst curEntries %v", curEntries)
-	// deal with interrupt pools
-	ll
 
 	// deal with blocks of dedicated_cores and pools
 	for entryName, entry := range resp.Entries {
+		if entryName == commonstate.PoolNameInterrupt {
+			continue
+		}
+
 		for subEntryName, calculationInfo := range entry.Entries {
 			if calculationInfo == nil {
 				general.Warningf("got nil calculationInfo entry: %s, subEntry: %s", entryName, subEntryName)
@@ -852,6 +854,15 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 					allocationInfo.QoSLevel, allocationInfo.PodNamespace,
 					allocationInfo.PodName, allocationInfo.ContainerName)
 			}
+		}
+	}
+
+	// TODO: ensure logic
+	// deal with interrupt pools
+	if subEntry, ok := curEntries[commonstate.PoolNameInterrupt]; ok {
+		newEntries[commonstate.PoolNameInterrupt] = make(state.ContainerEntries)
+		if ai, ok := subEntry[commonstate.FakedContainerName]; ok && ai != nil {
+			newEntries[commonstate.PoolNameInterrupt][commonstate.FakedContainerName] = ai.Clone()
 		}
 	}
 
