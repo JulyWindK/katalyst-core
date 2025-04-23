@@ -924,6 +924,9 @@ func (p *DynamicPolicy) adjustPoolsAndIsolatedEntries(
 ) error {
 	availableCPUs := machineState.GetFilteredAvailableCPUSet(p.reservedCPUs, nil,
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckDedicatedNUMABinding))
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries init availableCPUs: %v", availableCPUs)
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries init entries: %v", entries)
+
 	// TODO(KFX): ensure logic
 	// deduct the cpus that is prohibited from being used by user containers.
 	prohibitedPoolCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, entries)
@@ -931,6 +934,7 @@ func (p *DynamicPolicy) adjustPoolsAndIsolatedEntries(
 		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
 	}
 	availableCPUs.Difference(prohibitedPoolCPUs)
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries prohibitedPoolCPUs: %v", prohibitedPoolCPUs)
 
 	reclaimOverlapShareRatio, err := p.getReclaimOverlapShareRatio(entries)
 	if err != nil {
@@ -943,6 +947,9 @@ func (p *DynamicPolicy) adjustPoolsAndIsolatedEntries(
 	if err != nil {
 		return fmt.Errorf("generatePoolsAndIsolation failed with error: %v", err)
 	}
+
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries poolsCPUSet: %v", poolsCPUSet)
+	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries isolatedCPUSet: %v", isolatedCPUSet)
 
 	err = p.reclaimOverlapNUMABinding(poolsCPUSet, entries)
 	if err != nil {
@@ -1119,6 +1126,7 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 	if err != nil {
 		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
 	}
+	general.Infof("[DEBUG]applyPoolsAndIsolatedInfo get rampUpCPUs:%v", rampUpCPUs)
 	rampUpCPUs = rampUpCPUs.Difference(prohibitedPoolsCPUs)
 
 	rampUpCPUsTopologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, rampUpCPUs)
@@ -1135,6 +1143,7 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 
 	containerLoop:
 		for containerName, allocationInfo := range containerEntries {
+			general.Infof("[DEBUG]applyPoolsAndIsolatedInfo construct pod:%v container:%v allocationInfo:%v", podUID, containerName, allocationInfo)
 			if allocationInfo == nil {
 				general.Errorf("pod: %s, container: %s has nil allocationInfo", podUID, containerName)
 				continue
@@ -1344,6 +1353,8 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 	reclaimOverlapShareRatio map[string]float64) (poolsCPUSet map[string]machine.CPUSet,
 	isolatedCPUSet map[string]map[string]machine.CPUSet, err error,
 ) {
+	general.Infof("[DEBUG]generatePoolsAndIsolation init availableCPUs:%v", availableCPUs)
+
 	poolsBindingNUMAs := sets.NewInt()
 	poolsToSkip := make([]string, 0, len(poolsQuantityMap))
 	nonBindingPoolsQuantityMap := make(map[string]int)
@@ -1394,6 +1405,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		err = fmt.Errorf("generateNUMABindingPoolsCPUSetInPlace failed with error: %v", nbpErr)
 		return
 	}
+	general.Infof("[DEBUG]generatePoolsAndIsolation generateNUMABindingPoolsCPUSetInPlace availableCPUs:%v poolsCPUSet:%v", availableCPUs, poolsCPUSet)
 
 	nonBindingAvailableCPUs := machine.NewCPUSet()
 	for _, numaID := range p.machineInfo.CPUDetails.NUMANodes().ToSliceNoSortInt() {
@@ -1404,6 +1416,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		nonBindingAvailableCPUs = nonBindingAvailableCPUs.Union(p.machineInfo.CPUDetails.CPUsInNUMANodes(numaID).Intersection(availableCPUs))
 	}
 	availableCPUs = availableCPUs.Difference(nonBindingAvailableCPUs)
+	general.Infof("[DEBUG]generatePoolsAndIsolation diff nonbindingcpu availableCPUs:%v nonBindingAvailableCPUs:%v", availableCPUs, nonBindingAvailableCPUs)
 
 	nonBindingAvailableSize := nonBindingAvailableCPUs.Size()
 	nonBindingPoolsTotalQuantity := general.SumUpMapValues(nonBindingPoolsQuantityMap)
@@ -1469,6 +1482,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 	}
 
 	availableCPUs = availableCPUs.Union(nonBindingAvailableCPUs)
+	general.Infof("[DEBUG]generatePoolsAndIsolation union nonbinding availableCPUs:%v", availableCPUs)
 
 	// deal with reserve pool
 	if poolsCPUSet[commonstate.PoolNameReserve].IsEmpty() {
@@ -1533,7 +1547,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		}
 		poolsCPUSet[poolName] = cset.Clone()
 	}
-	general.Infof("[DEBUG]generatePoolsAndIsolation finished, poolsCPUSet: %+v", poolsCPUSet)
+	general.Infof("[DEBUG]generatePoolsAndIsolation finished, poolsCPUSet: %+v isolatedCPUSet:%v", poolsCPUSet, isolatedCPUSet)
 
 	return
 }
