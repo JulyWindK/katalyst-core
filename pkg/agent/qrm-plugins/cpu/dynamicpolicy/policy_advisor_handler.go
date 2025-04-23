@@ -516,38 +516,9 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 		if allocationInfo == nil {
 			continue
 		}
+		general.Infof("[DEBUG]generateBlockCPUSet prohibited pool %v, AllocationResult: %v", poolName, allocationInfo.AllocationResult)
 
-		blocks, ok := resp.GeEntryNUMABlocks(poolName, commonstate.FakedContainerName, commonstate.FakedNUMAID)
-		if !ok {
-			general.Warningf("the pool %v does not exist at the moment", poolName)
-			continue
-		}
-
-		for _, block := range blocks {
-			if block == nil {
-				general.Warningf("got nil block")
-				continue
-			}
-
-			blockID := block.BlockId
-
-			if _, found := blockCPUSet[blockID]; found {
-				general.Warningf("block: %v already allocated", blockID)
-				continue
-			}
-
-			blockResult, err := general.CovertUInt64ToInt(block.Result)
-			if err != nil {
-				return nil, fmt.Errorf("parse block: %s result failed with error: %v",
-					blockID, err)
-			}
-
-			cpuset := machine.NewCPUSet()
-			cpuset.Add(blockResult)
-
-			blockCPUSet[blockID] = cpuset
-			availableCPUs = availableCPUs.Difference(blockCPUSet[blockID])
-		}
+		availableCPUs = availableCPUs.Difference(allocationInfo.AllocationResult.Clone())
 	}
 	general.Infof("[DEBUG]generateBlockCPUSet diff prohibited pool, availableCPUs: %v", availableCPUs)
 
