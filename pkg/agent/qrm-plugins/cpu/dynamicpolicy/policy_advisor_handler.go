@@ -486,6 +486,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 	machineInfo := p.machineInfo
 	topology := machineInfo.CPUTopology
 	availableCPUs := topology.CPUDetails.CPUs()
+	general.Infof("[DEBUG]generateBlockCPUSet init availableCPUs: %v", availableCPUs)
 
 	// walk through static pools to construct blockCPUSet (for static pool),
 	// and calculate availableCPUs after deducting static pools
@@ -505,6 +506,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 		blockCPUSet[blockID] = allocationInfo.AllocationResult.Clone()
 		availableCPUs = availableCPUs.Difference(blockCPUSet[blockID])
 	}
+	general.Infof("[DEBUG]generateBlockCPUSet diff staic pool, availableCPUs: %v", availableCPUs)
 
 	// walk through prohibited pools to construct blockCPUSet (for prohibited pool),
 	// and calculate availableCPUs after deducting prohibited pools
@@ -547,6 +549,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 			availableCPUs = availableCPUs.Difference(blockCPUSet[blockID])
 		}
 	}
+	general.Infof("[DEBUG]generateBlockCPUSet diff prohibited pool, availableCPUs: %v", availableCPUs)
 
 	// walk through all blocks with specified NUMA ids
 	// for each block, add them into blockCPUSet (if not exist) and renew availableCPUs
@@ -586,6 +589,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 			availableCPUs = availableCPUs.Difference(cpuset)
 		}
 	}
+	general.Infof("[DEBUG]generateBlockCPUSet diff special numaID, availableCPUs: %v", availableCPUs)
 
 	// walk through all blocks without specified NUMA id
 	// for each block, add them into blockCPUSet (if not exist) and renew availableCPUs
@@ -620,6 +624,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 		blockCPUSet[blockID] = cpuset
 		availableCPUs = availableCPUs.Difference(cpuset)
 	}
+	general.Infof("[DEBUG]generateBlockCPUSet finaly availableCPUs: %v", availableCPUs)
 
 	return blockCPUSet, nil
 }
@@ -728,6 +733,8 @@ func (p *DynamicPolicy) applyBlocks(blockCPUSet advisorapi.BlockCPUSet, resp *ad
 			}
 		}
 	}
+
+	general.Infof("[DEBUG]applyBlocks reviseReclaimPool before newEntries %v", newEntries)
 
 	// revise reclaim pool size to avoid reclaimed_cores and numa_binding dedicated_cores containers
 	// in NUMAs without cpuset actual binding
@@ -935,11 +942,13 @@ func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclai
 	if err != nil {
 		return fmt.Errorf("GetUnitedPoolsCPUs for prohibited pools failed with error: %v", err)
 	}
+	general.Infof("[DEBUG]reviseReclaimPool get prohibitedCPUs: %v", prohibitedCPUs)
 
 	// if there is no block for state.PoolNameReclaim pool,
 	// we must make it existing here even if cause overlap
 	if newEntries.CheckPoolEmpty(commonstate.PoolNameReclaim) {
 		reclaimPoolCPUSet := p.machineInfo.CPUDetails.CPUs().Difference(p.reservedCPUs).Difference(pooledUnionDedicatedCPUSet).Difference(prohibitedCPUs)
+		general.Infof("[DEBUG]reviseReclaimPool empty reclaim generate new pool: %v", reclaimPoolCPUSet)
 		if reclaimPoolCPUSet.IsEmpty() {
 			reclaimPoolCPUSet = p.reservedReclaimedCPUSet.Clone()
 			general.Infof("fallback takeByNUMABalance for reclaimPoolCPUSet: %s", reclaimPoolCPUSet.String())
@@ -975,6 +984,7 @@ func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclai
 	}
 
 	reclaimPool := newEntries[commonstate.PoolNameReclaim][commonstate.FakedContainerName]
+	general.Infof("[DEBUG]reviseReclaimPool generate avaliable reclaim pool: %v", reclaimPool)
 
 	// revise reclaim pool for RNB NUMAs
 	for _, numaID := range p.machineInfo.CPUDetails.NUMANodes().ToSliceInt() {
@@ -1007,6 +1017,7 @@ func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclai
 		}
 	}
 
+	general.Infof("[DEBUG]reviseReclaimPool finaly reclaim pool: %v", reclaimPool)
 	general.Infof("revised reclaim allocationResult: %s, reclaim topologyAwareAssignments: %v",
 		reclaimPool.AllocationResult.String(), reclaimPool.TopologyAwareAssignments)
 	return nil
