@@ -933,7 +933,7 @@ func (p *DynamicPolicy) adjustPoolsAndIsolatedEntries(
 	if err != nil {
 		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
 	}
-	availableCPUs.Difference(prohibitedPoolCPUs)
+	availableCPUs = availableCPUs.Difference(prohibitedPoolCPUs)
 	general.Infof("[DEBUG]adjustPoolsAndIsolatedEntries prohibitedPoolCPUs: %v", prohibitedPoolCPUs)
 
 	reclaimOverlapShareRatio, err := p.getReclaimOverlapShareRatio(entries)
