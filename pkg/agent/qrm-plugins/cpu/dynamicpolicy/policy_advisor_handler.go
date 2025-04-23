@@ -311,6 +311,7 @@ func (p *DynamicPolicy) getAdviceFromAdvisor(ctx context.Context) (isImplemented
 	}()
 
 	request, err := p.createGetAdviceRequest()
+	general.Infof("[DEBUG]getAdviceFromAdvisor createGetAdviceRequest request: %v", request)
 	if err != nil {
 		return false, fmt.Errorf("create GetAdviceRequest failed with error: %w", err)
 	}
@@ -929,10 +930,16 @@ func (p *DynamicPolicy) applyNUMAHeadroom(resp *advisorapi.ListAndWatchResponse)
 }
 
 func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclaimActualBindingNUMAs, pooledUnionDedicatedCPUSet machine.CPUSet) error {
+	// TODO(KFX): ensure
+	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, p.state.GetPodEntries())
+	if err != nil {
+		return fmt.Errorf("GetUnitedPoolsCPUs for prohibited pools failed with error: %v", err)
+	}
+
 	// if there is no block for state.PoolNameReclaim pool,
 	// we must make it existing here even if cause overlap
 	if newEntries.CheckPoolEmpty(commonstate.PoolNameReclaim) {
-		reclaimPoolCPUSet := p.machineInfo.CPUDetails.CPUs().Difference(p.reservedCPUs).Difference(pooledUnionDedicatedCPUSet)
+		reclaimPoolCPUSet := p.machineInfo.CPUDetails.CPUs().Difference(p.reservedCPUs).Difference(pooledUnionDedicatedCPUSet).Difference(prohibitedCPUs)
 		if reclaimPoolCPUSet.IsEmpty() {
 			reclaimPoolCPUSet = p.reservedReclaimedCPUSet.Clone()
 			general.Infof("fallback takeByNUMABalance for reclaimPoolCPUSet: %s", reclaimPoolCPUSet.String())
