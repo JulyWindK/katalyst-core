@@ -1114,6 +1114,7 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 		Difference(unionDedicatedIsolatedCPUSet).
 		Difference(sharedBindingNUMACPUs)
 	// TODO(KFX): ensure logic
+	general.Infof("[DEBUG]GetUnitedPoolsCPUs before newPodEntries:%v", newPodEntries)
 	prohibitedPoolsCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, newPodEntries)
 	if err != nil {
 		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
@@ -1532,6 +1533,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		}
 		poolsCPUSet[poolName] = cset.Clone()
 	}
+	general.Infof("[DEBUG]generatePoolsAndIsolation finished, poolsCPUSet: %+v", poolsCPUSet)
 
 	return
 }
