@@ -58,12 +58,12 @@ func (t *IRQTunerStub) Stop() {
 
 func (t *IRQTunerStub) tunerStateGet() {
 	for {
-		//cs, err := t.ListContainers()
-		//if err != nil {
-		//	general.Errorf("listing containers info failed: %v", err)
-		//} else {
-		//	general.Infof("get containers info: %v", cs)
-		//}
+		cs, err := t.ListContainers()
+		if err != nil {
+			general.Errorf("listing containers info failed: %v", err)
+		} else {
+			general.Infof("get containers info: %v", cs)
+		}
 
 		// get forbidden cores
 		irqForbiddenCPUs, err := t.GetIRQForbiddenCores()

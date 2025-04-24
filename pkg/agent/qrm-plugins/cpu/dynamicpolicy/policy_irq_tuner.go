@@ -29,9 +29,6 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 	general.Infof("[DEBUG] ListContainers begin ...")
 	var cis []irqtuner.ContainerInfo
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-
 	// 1. get container info from pod entries
 	for podUID, entry := range p.state.GetPodEntries() {
 		general.Infof("[DEBUG] GetPodEntries podUID %v", podUID)
@@ -40,67 +37,90 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 			continue
 		}
 
-		// get the pod from meta server
-		pod, err := p.metaServer.PodFetcher.GetPod(ctx, podUID)
-		if err != nil || pod == nil {
-			general.Warningf("pod fetcher cannot get pod %s, err:%v", podUID, err)
+		infos, err := p.getPodContainerInfos(podUID, entry)
+		if err != nil {
+			general.Warningf("get pod %v container infos failed: %v", podUID, err)
 			continue
 		}
-		// TODO(KFX): Whether it is necessary to filter out running pods
 
-		// get the runtime class from pod spec
-		runtime := pod.Spec.RuntimeClassName
-
-		// get the pod qos
-		qosClass := pod.Status.QOSClass
-
-		// get the container status
-		var containerStatus map[string]v1.ContainerStatus
-		for _, cs := range append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...) {
-			containerStatus[cs.Name] = cs
-		}
-
+		cis = append(cis, infos...)
 		general.Infof("[DEBUG] GetPodEntries start get pod %v container info", podUID)
-		// get the container info from the current persistent entry of the node
-		for containerName, allocationInfo := range entry {
-			general.Infof("[DEBUG] GetPodEntries get container info %v", containerName)
-
-			if allocationInfo == nil {
-				general.Warningf("container %s allocation info is nil, skip it", containerName)
-				continue
-			}
-
-			// get the container ID
-			containerID, err := p.metaServer.PodFetcher.GetContainerID(podUID, containerName)
-			if err != nil {
-				general.Warningf("unable to get container id from pod %s/%s: %v", podUID, containerName, err)
-				continue
-			}
-
-			// get the cgroup path
-			cp := fmt.Sprintf("/kubepods/%s/pod%s/%s", string(qosClass), podUID, containerID)
-
-			// get the started time
-			var startedAt metav1.Time
-			if cs, exist := containerStatus[containerName]; exist && cs.State.Running != nil {
-				startedAt = cs.State.Running.StartedAt
-			} else {
-				general.Infof("container %s not running, skip it", containerName)
-				continue
-			}
-
-			cis = append(cis, irqtuner.ContainerInfo{
-				AllocationMeta:   allocationInfo.AllocationMeta.Clone(),
-				ContainerID:      containerID,
-				CgroupPath:       cp,
-				RuntimeClassName: *runtime,
-				ActualCPUSet:     allocationInfo.TopologyAwareAssignments,
-				StartedAt:        startedAt,
-			})
-		}
 	}
 
 	general.Infof("[DEBUG] ListContainers ends ...")
+	return cis, nil
+}
+
+func (p *DynamicPolicy) getPodContainerInfos(podUID string, entry state.ContainerEntries) ([]irqtuner.ContainerInfo, error) {
+	cis := make([]irqtuner.ContainerInfo, 0, len(entry))
+
+	if entry.IsPoolEntry() {
+		return cis, fmt.Errorf("this is a pool entry")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	// get the pod from meta server
+	pod, err := p.metaServer.PodFetcher.GetPod(ctx, podUID)
+	if err != nil || pod == nil {
+		return cis, fmt.Errorf("pod fetcher cannot get pod %s, err:%v", podUID, err)
+	}
+
+	// get the runtime class from pod spec
+	runtimeClassName := "runc"
+	if pod.Spec.RuntimeClassName != nil {
+		runtimeClassName = *pod.Spec.RuntimeClassName
+	}
+
+	// get the pod qos
+	qosClass := pod.Status.QOSClass
+
+	// get the container status
+	containerStatus := make(map[string]v1.ContainerStatus)
+	for _, cs := range append(pod.Status.InitContainerStatuses, pod.Status.ContainerStatuses...) {
+		containerStatus[cs.Name] = cs
+	}
+
+	general.Infof("[DEBUG] GetPodEntries start get pod %v container info", podUID)
+	// get the container info from the current persistent entry of the node
+	for containerName, allocationInfo := range entry {
+		general.Infof("[DEBUG] GetPodEntries get container info %v", containerName)
+
+		if allocationInfo == nil {
+			general.Warningf("container %s allocation info is nil, skip it", containerName)
+			continue
+		}
+
+		// get the container ID
+		containerID, err := p.metaServer.PodFetcher.GetContainerID(podUID, containerName)
+		if err != nil {
+			general.Warningf("unable to get container id from pod %s/%s: %v", podUID, containerName, err)
+			continue
+		}
+
+		// get the cgroup path
+		cgroupPath := fmt.Sprintf("/kubepods/%s/pod%s/%s", string(qosClass), podUID, containerID)
+
+		// get the started time
+		var startedAt metav1.Time
+		if cs, exist := containerStatus[containerName]; exist && cs.State.Running != nil {
+			startedAt = cs.State.Running.StartedAt
+		} else {
+			general.Infof("container %s not running, skip it", containerName)
+			continue
+		}
+
+		cis = append(cis, irqtuner.ContainerInfo{
+			AllocationMeta:   allocationInfo.AllocationMeta.Clone(),
+			ContainerID:      containerID,
+			CgroupPath:       cgroupPath,
+			RuntimeClassName: runtimeClassName,
+			ActualCPUSet:     allocationInfo.TopologyAwareAssignments,
+			StartedAt:        startedAt,
+		})
+	}
+
 	return cis, nil
 }
 
