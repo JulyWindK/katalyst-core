@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
+
 	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/agent"
 	phconsts "github.com/kubewharf/katalyst-core/pkg/agent/utilcomponent/periodicalhandler/consts"
 	"github.com/kubewharf/katalyst-core/pkg/config"
@@ -40,6 +42,7 @@ var cpuPolicyInitializers sync.Map
 
 // RegisterCPUPolicyInitializer is used to register user-defined cpu resource plugin init functions
 func RegisterCPUPolicyInitializer(name string, initFunc agent.InitFunc) {
+	general.Infof("[DEBUG]RegisterCPUPolicyInitializer cpu policy initializer: %v", name)
 	cpuPolicyInitializers.Store(name, initFunc)
 }
 
@@ -55,12 +58,15 @@ func getCPUPolicyInitializers() map[string]agent.InitFunc {
 
 func InitQRMCPUPlugins(agentCtx *agent.GenericContext, conf *config.Configuration, extraConf interface{}, agentName string) (bool, agent.Component, error) {
 	initializers := getCPUPolicyInitializers()
+	general.Infof("[DEBUG]InitQRMCPUPluginscpu policy initializers: %+v", initializers)
 	policyName := conf.CPUQRMPluginConfig.PolicyName
+	general.Infof("[DEBUG]InitQRMCPUPluginscpu policy policyName: %v", policyName)
 
 	initFunc, ok := initializers[policyName]
 	if !ok {
 		return false, agent.ComponentStub{}, fmt.Errorf("invalid policy name %v for cpu resource plugin", policyName)
 	}
+	general.Infof("[DEBUG]InitQRMCPUPlugins start init %v func", policyName)
 
 	return initFunc(agentCtx, conf, extraConf, agentName)
 }
