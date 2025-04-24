@@ -52,7 +52,7 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 }
 
 func (p *DynamicPolicy) getPodContainerInfos(podUID string, entry state.ContainerEntries) ([]irqtuner.ContainerInfo, error) {
-	cis := make([]irqtuner.ContainerInfo, 0, len(entry))
+	cis := make([]irqtuner.ContainerInfo, 0)
 
 	if entry.IsPoolEntry() {
 		return cis, fmt.Errorf("this is a pool entry")
