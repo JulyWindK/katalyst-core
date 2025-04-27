@@ -105,7 +105,7 @@ type DynamicPolicy struct {
 	cpuPressureEvictionCancel context.CancelFunc
 
 	irqTuner       irqtuner.Tuner
-	enableIRQTuner bool
+	enableIRQTuner *bool
 
 	// those are parsed from configurations
 	// todo if we want to use dynamic configuration, we'd better not use self-defined conf
@@ -217,11 +217,11 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	policyImplement.irqTuner = tuner.NewIRQTunerStub(policyImplement)
 	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
 		if dc.IRQTuningConfiguration != nil {
-			policyImplement.enableIRQTuner = dc.IRQTuningConfiguration.EnableIRQTuner
+			policyImplement.enableIRQTuner = &dc.IRQTuningConfiguration.EnableIRQTuner
 		}
 	}
 	// TODO: for debug
-	//policyImplement.enableIRQTuner = true
+	// policyImplement.enableIRQTuner = true
 	general.InfoS("[DEBUG]Policy irq tuning dynamic conf:%+v", conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration())
 
 	// register allocation behaviors for pods with different QoS level
@@ -253,7 +253,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	}
 
 	// TODO: ensure
-	if policyImplement.enableIRQTuner {
+	if policyImplement.enableIRQTuner != nil && *policyImplement.enableIRQTuner {
 		if err := policyImplement.initInterruptPool(); err != nil {
 			return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initInterruptPool failed with error: %v", err)
 		}
@@ -373,7 +373,7 @@ func (p *DynamicPolicy) Start() (err error) {
 	}
 	go p.advisorMonitor.Run(p.stopCh)
 
-	if p.enableIRQTuner {
+	if p.enableIRQTuner != nil && *p.enableIRQTuner {
 		go p.irqTuner.Run(p.stopCh)
 	}
 

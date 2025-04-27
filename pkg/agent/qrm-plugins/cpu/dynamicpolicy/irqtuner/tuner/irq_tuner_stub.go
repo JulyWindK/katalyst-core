@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
+	"github.com/kubewharf/katalyst-core/pkg/config"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"github.com/kubewharf/katalyst-core/pkg/util/procfs/manager"
@@ -27,10 +28,11 @@ import (
 
 type IRQTunerStub struct {
 	irqtuner.StateAdapter
+	conf *config.Configuration
 }
 
-func NewIRQTunerStub(sa irqtuner.StateAdapter) irqtuner.Tuner {
-	return &IRQTunerStub{sa}
+func NewIRQTunerStub(conf *config.Configuration, sa irqtuner.StateAdapter) irqtuner.Tuner {
+	return &IRQTunerStub{sa, conf}
 }
 
 func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
@@ -53,11 +55,25 @@ func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 		general.Infof("[DEBUG] ApplyProcInterrupts failed with error: %v", err)
 	}
 
+	go t.getDynamicConf()
 	go t.tunerStateGet()
 }
 
 func (t *IRQTunerStub) Stop() {
 
+}
+
+func (t *IRQTunerStub) getDynamicConf() {
+	for {
+		dc := t.conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration()
+		if dc == nil {
+			general.Errorf("[DEBUG]IRQTunerStub getDynamicConf get nil")
+			continue
+		}
+		general.Infof("[DEBUG]IRQTunerStub getDynamicConf get dc:%+v", *dc)
+
+		time.Sleep(5 * time.Second)
+	}
 }
 
 func (t *IRQTunerStub) tunerStateGet() {

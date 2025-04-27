@@ -162,7 +162,8 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	general.Infof("[DEBUG] SetExclusiveIRQCPUSet start ...")
 	general.Infof("set the current irq exclusive cpu set: %v", irqCPUSet)
 
-	if !p.enableIRQTuner {
+	// TODO: modify to point type or remove
+	if p.enableIRQTuner != nil && !*p.enableIRQTuner {
 		general.Errorf("irq tuning feature is not enabled")
 		return irqutil.NotEnabledIRQTuningFeatureErr
 	}
