@@ -22,6 +22,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
+	"github.com/kubewharf/katalyst-core/pkg/util/procfs/manager"
 )
 
 type IRQTunerStub struct {
@@ -44,11 +45,12 @@ func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 		general.Errorf("set exclusive IRQ CPUSet failed with error: %v", err)
 	}
 
-	//for {
-	//	t.tunerStateGet()
-	//	general.Infof("[DEBUG] irq tuner stub get sleep ...")
-	//	time.Sleep(5 * time.Second)
-	//}
+	// apply irq exclusive cpu set
+	err = manager.ApplyProcInterrupts(38, machine.NewCPUSet(cpuSet...))
+	if err != nil {
+		general.Errorf("ApplyProcInterrupts failed with error: %v", err)
+	}
+
 	go t.tunerStateGet()
 }
 
