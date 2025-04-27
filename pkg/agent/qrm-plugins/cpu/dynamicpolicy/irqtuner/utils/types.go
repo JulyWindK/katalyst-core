@@ -27,6 +27,7 @@ const (
 )
 
 var (
+	NotEnabledIRQTuningFeatureErr        = errors.Errorf("irq tuning feature is not enabled")
 	ExceededMaxExpandableCapacityErr     = errors.New("exceeded the maximum expandable capacity")
 	ExceededMaxStepExpandableCapacityErr = errors.New("exceeds the maximum number of expansions in a single step")
 	ContainForbiddenCPUErr               = errors.New("contains forbidden cpu")

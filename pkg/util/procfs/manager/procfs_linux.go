@@ -198,8 +198,9 @@ func (m *manager) ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) erro
 	data := mask.String()
 	general.Infof("[DEBUG]ApplyProcInterrupts apply data:%v ", data)
 
-	if err, applied, oldData := common.InstrumentedWriteFileIfChange("/proc/irq", "smp_affinity", data); err != nil {
-		general.Infof("[DEBUG]ApplyProcInterrupts InstrumentedWriteFileIfChange dir:%v file:%v, data:%v oldData:%v, err:%v", "/proc/irq", "smp_affinity",
+	dir := fmt.Sprintf("/proc/irq/%d", irqNumber)
+	if err, applied, oldData := common.InstrumentedWriteFileIfChange(dir, "smp_affinity", data); err != nil {
+		general.Infof("[DEBUG]ApplyProcInterrupts InstrumentedWriteFileIfChange dir:%v file:%v, data:%v oldData:%v, err:%v", dir, "smp_affinity",
 			data, oldData, err)
 
 		return err

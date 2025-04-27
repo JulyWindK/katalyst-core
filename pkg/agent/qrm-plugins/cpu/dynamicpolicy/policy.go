@@ -221,7 +221,8 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		}
 	}
 	// TODO: for debug
-	policyImplement.enableIRQTuner = true
+	//policyImplement.enableIRQTuner = true
+	general.InfoS("[DEBUG]Policy irq tuning dynamic conf:%+v", conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration())
 
 	// register allocation behaviors for pods with different QoS level
 	policyImplement.allocationHandlers = map[string]util.AllocationHandler{
