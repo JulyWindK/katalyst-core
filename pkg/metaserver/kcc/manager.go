@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
+
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -354,6 +356,7 @@ func getGVRToGVKMap() map[schema.GroupVersionResource]schema.GroupVersionKind {
 func applyDynamicConfig(config *dynamic.Configuration,
 	dynamicConfigCRD *crd.DynamicConfigCRD,
 ) {
+	general.Infof("[DEBUG]start applyDynamicConfig")
 	config.ApplyConfiguration(dynamicConfigCRD)
 }
 

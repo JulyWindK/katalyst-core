@@ -22,6 +22,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/irqtuning/coresexclusion"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/irqtuning/loadbalance"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/irqtuning/netoverload"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 )
 
 // IRQTuningConfiguration is the configuration for irq tuner.
@@ -51,6 +52,7 @@ func NewIRQTuningConfiguration() *IRQTuningConfiguration {
 }
 
 func (c *IRQTuningConfiguration) ApplyConfiguration(conf *crd.DynamicConfigCRD) {
+	general.Infof("[DEBUG]IRQTuningConfiguration ApplyConfiguration crd conf: %+v", conf)
 	if itc := conf.IRQTuningConfiguration; itc != nil {
 		if itc.Spec.Config.EnableIRQTuner != nil {
 			c.EnableIRQTuner = *itc.Spec.Config.EnableIRQTuner
@@ -69,4 +71,6 @@ func (c *IRQTuningConfiguration) ApplyConfiguration(conf *crd.DynamicConfigCRD) 
 		c.IRQCoresAdjustConf.ApplyConfiguration(conf)
 		c.IRQCoresExclusionConf.ApplyConfiguration(conf)
 	}
+	general.Infof("[DEBUG]IRQTuningConfiguration ApplyConfiguration irq conf: %+v", c)
+
 }
