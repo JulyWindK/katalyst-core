@@ -41,7 +41,8 @@ type IRQTuningOptions struct {
 
 func NewIRQTuningOptions() *IRQTuningOptions {
 	return &IRQTuningOptions{
-		EnableIRQTuner:           false,
+		// TODO: for debug
+		EnableIRQTuner:           true,
 		EnableIRQCoresExclusion:  false,
 		Interval:                 5,
 		IRQCoresExpectedCPUUtil:  50,
@@ -67,6 +68,11 @@ func (o *IRQTuningOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 
 func (o *IRQTuningOptions) ApplyTo(c *irqdynamicconf.IRQTuningConfiguration) error {
 	var errList []error
+	c.EnableIRQTuner = o.EnableIRQTuner
+	c.EnableIRQCoresExclusion = o.EnableIRQCoresExclusion
+	c.Interval = o.Interval
+	c.IRQCoresExpectedCPUUtil = o.IRQCoresExpectedCPUUtil
+
 	errList = append(errList, o.IRQCoreNetOverLoadThresh.ApplyTo(c.IRQCoreNetOverLoadThresh))
 	errList = append(errList, o.IRQLoadBalanceOptions.ApplyTo(c.IRQLoadBalanceConf))
 	errList = append(errList, o.IRQCoresAdjustOptions.ApplyTo(c.IRQCoresAdjustConf))
