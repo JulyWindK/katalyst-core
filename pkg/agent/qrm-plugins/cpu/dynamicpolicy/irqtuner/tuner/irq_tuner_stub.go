@@ -47,8 +47,10 @@ func (t *IRQTunerStub) Run(stopCh <-chan struct{}) {
 
 	// apply irq exclusive cpu set
 	err = manager.ApplyProcInterrupts(38, machine.NewCPUSet(cpuSet...))
+	general.Errorf("[DEBUG]start ApplyProcInterrupts 38 to %v", machine.NewCPUSet(cpuSet...))
 	if err != nil {
 		general.Errorf("ApplyProcInterrupts failed with error: %v", err)
+		general.Infof("[DEBUG] ApplyProcInterrupts failed with error: %v", err)
 	}
 
 	go t.tunerStateGet()

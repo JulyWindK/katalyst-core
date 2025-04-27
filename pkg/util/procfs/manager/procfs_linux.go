@@ -177,6 +177,8 @@ func (m *manager) GetSchedStat() (*procfs.Schedstat, error) {
 
 // ApplyProcInterrupts apply the proc interrupts for the given irq number and cpuset.
 func (m *manager) ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) error {
+	general.Infof("[DEBUG]ApplyProcInterrupts start apply %v to %v", irqNumber, cpuset)
+
 	if irqNumber < 0 {
 		return fmt.Errorf("invalid IRQ number: %d ", irqNumber)
 	}
@@ -194,10 +196,16 @@ func (m *manager) ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) erro
 		return err
 	}
 	data := mask.String()
+	general.Infof("[DEBUG]ApplyProcInterrupts apply data:%v ", data)
 
 	if err, applied, oldData := common.InstrumentedWriteFileIfChange("/proc/irq", "smp_affinity", data); err != nil {
+		general.Infof("[DEBUG]ApplyProcInterrupts InstrumentedWriteFileIfChange dir:%v file:%v, data:%v oldData:%v, err:%v", "/proc/irq", "smp_affinity",
+			data, oldData, err)
+
 		return err
 	} else if applied {
+		general.Infof("[DEBUG] apply proc interrupts successfully, irq number: %v, data: %v, old data: %v\n", irqNumber, data, oldData)
+
 		general.Infof("[Procfs] apply proc interrupts successfully, irq number: %v, data: %v, old data: %v\n", irqNumber, data, oldData)
 	}
 

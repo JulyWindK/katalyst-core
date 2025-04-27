@@ -17,6 +17,7 @@ limitations under the License.
 package manager
 
 import (
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/prometheus/procfs"
 
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
@@ -114,5 +115,6 @@ func GetSchedStat() (*procfs.Schedstat, error) {
 
 // ApplyProcInterrupts applies the given cpuset to the given irq number.
 func ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) error {
+	general.Infof("[DEBUG]ApplyProcInterrupts irq %v to %v", irqNumber, cpuset)
 	return GetProcFSManager().ApplyProcInterrupts(irqNumber, cpuset)
 }
