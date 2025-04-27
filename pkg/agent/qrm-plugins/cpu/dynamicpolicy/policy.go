@@ -214,7 +214,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	}
 
 	// TODO(KFX): ensure
-	policyImplement.irqTuner = tuner.NewIRQTunerStub(policyImplement)
+	policyImplement.irqTuner = tuner.NewIRQTunerStub(conf, policyImplement)
 	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
 		if dc.IRQTuningConfiguration != nil {
 			policyImplement.enableIRQTuner = &dc.IRQTuningConfiguration.EnableIRQTuner
