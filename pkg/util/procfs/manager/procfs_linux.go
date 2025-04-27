@@ -28,7 +28,6 @@ import (
 
 	"github.com/prometheus/procfs"
 
-	"github.com/kubewharf/katalyst-core/pkg/util/bitmask"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"github.com/kubewharf/katalyst-core/pkg/util/procfs/common"
@@ -190,16 +189,11 @@ func (m *manager) ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) erro
 		}
 	}
 
-	mask, err := bitmask.NewBitMask(cpus...)
-	if err != nil {
-		general.Errorf("[Procfs] invalid cpuset: %v", err)
-		return err
-	}
-	data := mask.String()
+	data := cpuset.String()
 	general.Infof("[DEBUG]ApplyProcInterrupts apply data:%v ", data)
 
 	dir := fmt.Sprintf("/proc/irq/%d", irqNumber)
-	if err, applied, oldData := common.InstrumentedWriteFileIfChange(dir, "smp_affinity", data); err != nil {
+	if err, applied, oldData := common.InstrumentedWriteFileIfChange(dir, "smp_affinity_list", data); err != nil {
 		general.Infof("[DEBUG]ApplyProcInterrupts InstrumentedWriteFileIfChange dir:%v file:%v, data:%v oldData:%v, err:%v", dir, "smp_affinity",
 			data, oldData, err)
 
