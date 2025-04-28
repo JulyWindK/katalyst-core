@@ -264,6 +264,11 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		return false, nil, err
 	}
 
+	err = agentCtx.MetaServer.ConfigurationManager.AddConfigWatcher(crd.IRQTuningConfigurationGVR)
+	if err != nil {
+		return false, nil, err
+	}
+
 	pluginWrapper, err := skeleton.NewRegistrationPluginWrapper(policyImplement, conf.QRMPluginSocketDirs, func(key string, value int64) {
 		_ = wrappedEmitter.StoreInt64(key, value, metrics.MetricTypeNameRaw)
 	})
