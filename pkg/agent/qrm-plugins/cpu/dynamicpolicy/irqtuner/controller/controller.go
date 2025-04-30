@@ -10,13 +10,13 @@ import (
 	"time"
 
 	"github.com/klauspost/cpuid/v2"
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/config"
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/util"
+	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
-
-	"code.byted.org/zhanghaoyu.zhy/go-examples/pkg/irq-tuning/config"
-	"code.byted.org/zhanghaoyu.zhy/go-examples/pkg/irq-tuning/qrmstateclient"
-	"code.byted.org/zhanghaoyu.zhy/go-examples/pkg/util"
 )
 
 const (
@@ -355,16 +355,17 @@ type IrqAffinityChange struct {
 // shared-cores(inlcue snb) and reclaimed-cores sriov container's irqs should be counted when calculating each core's irq count,
 // which is used to select target cpu for balance-fair irq affinity.
 type ContainerInfoWrapper struct {
-	*qrmstateclient.ContainerInfo
+	*irqtuner.ContainerInfo
 	IsSriovContainer bool
 	Nics             []*NicInfo // nics of sriov container
 }
 
 type IrqTuningController struct {
+	dynamicConfHolder    *dynconfig.DynamicAgentConfiguration
 	conf                 *config.IrqTuningConfig
 	CPUInfo              *util.CPUInfo
 	Ksoftirqds           map[int64]int // cpuid as map key, ksoftirqd pid as value
-	IrqStateAdapter      qrmstateclient.IrqStateAdapter
+	IrqStateAdapter      irqtuner.StateAdapter
 	Containers           map[string]*ContainerInfoWrapper // container id as map key
 	IrqAffForbiddenCores []int64
 	// MetricClient, used to report some metrics
@@ -394,10 +395,12 @@ func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *util.NicBasicInfo
 	}, nil
 }
 
-func NewIrqTuningController(conf *config.IrqTuningConfig, irqStateAdapter qrmstateclient.IrqStateAdapter) (*IrqTuningController, error) {
+func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter) (*IrqTuningController, error) {
 	if isIrqBalanceNGServiceRuning() {
 		return nil, fmt.Errorf("irqbalance-ng service is running")
 	}
+
+	conf := config.ConvertDynamicConfigToIrqTuningConfig(dynamicConfHolder.GetDynamicConfiguration())
 
 	cpuInfo, err := util.GetCPUInfoWithTopo()
 	if err != nil {
@@ -443,6 +446,7 @@ func NewIrqTuningController(conf *config.IrqTuningConfig, irqStateAdapter qrmsta
 	}
 
 	controller := &IrqTuningController{
+		dynamicConfHolder:  dynamicConfHolder,
 		conf:               conf,
 		CPUInfo:            cpuInfo,
 		Ksoftirqds:         ksoftirqds,
@@ -2183,7 +2187,7 @@ func (ic *IrqTuningController) separateNicsOverlappedIrqCores() {
 
 // return value
 // bool: if is sriov container
-func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *qrmstateclient.ContainerInfo) (bool, []*NicInfo) {
+func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerInfo) (bool, []*NicInfo) {
 	// container maybe exited
 	pids, err := util.GetCgroupPids(cnt.CgroupPath)
 	if err != nil {
@@ -2283,7 +2287,7 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *qrmstateclient.Conta
 	return true, nics
 }
 
-func (ic *IrqTuningController) getNewContainers(containers []qrmstateclient.ContainerInfo) ([]*ContainerInfoWrapper, error) {
+func (ic *IrqTuningController) getNewContainers(containers []irqtuner.ContainerInfo) ([]*ContainerInfoWrapper, error) {
 	var newContainers []*ContainerInfoWrapper
 	for _, cnt := range containers {
 		if _, ok := ic.Containers[cnt.ContainerID]; ok {
@@ -2315,7 +2319,7 @@ retry:
 		return fmt.Errorf("failed to ListContainers, err %v", err)
 	}
 
-	containersMap := make(map[string]*qrmstateclient.ContainerInfo)
+	containersMap := make(map[string]*irqtuner.ContainerInfo)
 	for _, cnt := range containers {
 		containersMap[cnt.ContainerID] = &cnt
 	}
@@ -3540,7 +3544,7 @@ func (ic *IrqTuningController) calcaulateIncExclusiveIrqCoresSteps(newIrqCores [
 		return nil, err
 	}
 
-	stepExpandableCPUMax := ic.IrqStateAdapter.GetStepExpandableCPUMax()
+	stepExpandableCPUMax := ic.IrqStateAdapter.GetStepExpandableCPUsMax()
 
 	var steps [][]int64
 	var stepIncIrqCores []int64
@@ -4409,7 +4413,16 @@ func (ic *IrqTuningController) disableIrqTuning() {
 	}
 }
 
+func (ic *IrqTuningController) syncDynamicConfig() {
+	dynConf := ic.dynamicConfHolder.GetDynamicConfiguration()
+	if dynConf != nil {
+		ic.conf = config.ConvertDynamicConfigToIrqTuningConfig(dynConf)
+	}
+}
+
 func (ic *IrqTuningController) periodicTuning() {
+	ic.syncDynamicConfig()
+
 	if !ic.conf.EnableIrqTuning {
 		ic.disableIrqTuning()
 		return
@@ -4427,8 +4440,12 @@ func (ic *IrqTuningController) periodicTuning() {
 	}
 }
 
-func (ic *IrqTuningController) Run(stopCh chan struct{}) {
+func (ic *IrqTuningController) Run(stopCh <-chan struct{}) {
 	klog.Infof("Irq tuning controller run")
 
 	go wait.Until(ic.periodicTuning, time.Second*time.Duration(ic.conf.Interval), stopCh)
+}
+
+func (ic *IrqTuningController) Stop() {
+	klog.Infof("Irq tuning controller stop")
 }

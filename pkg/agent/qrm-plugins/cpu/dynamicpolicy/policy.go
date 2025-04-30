@@ -43,7 +43,7 @@ import (
 	advisorapi "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpuadvisor"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpueviction"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
-	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/tuner"
+	irqtuingcontroller "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/controller"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/state"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/validator"
 	cpuutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/util"
@@ -214,7 +214,13 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	}
 
 	// TODO(KFX): ensure
-	policyImplement.irqTuner = tuner.NewIRQTunerStub(conf, policyImplement)
+	irqTuner, err := irqtuingcontroller.NewIrqTuningController(conf.AgentConfiguration.DynamicAgentConfiguration, policyImplement)
+	if err != nil {
+		general.Errorf("failed to NewIrqTuningController, err %s", err)
+	} else {
+		policyImplement.irqTuner = irqTuner
+	}
+
 	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
 		if dc.IRQTuningConfiguration != nil {
 			policyImplement.enableIRQTuner = &dc.IRQTuningConfiguration.EnableTuner
@@ -374,7 +380,7 @@ func (p *DynamicPolicy) Start() (err error) {
 	}
 	go p.advisorMonitor.Run(p.stopCh)
 
-	if p.enableIRQTuner != nil && *p.enableIRQTuner {
+	if p.enableIRQTuner != nil && *p.enableIRQTuner && p.irqTuner != nil {
 		go p.irqTuner.Run(p.stopCh)
 	}
 
