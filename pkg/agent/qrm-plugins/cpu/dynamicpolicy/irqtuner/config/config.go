@@ -2,6 +2,8 @@ package config
 
 import (
 	"flag"
+
+	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
 )
 
 const (
@@ -178,6 +180,10 @@ func NewConfiguration() *IrqTuningConfig {
 }
 
 func (c *IrqTuningConfig) Validate() error {
+	return nil
+}
+
+func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration) *IrqTuningConfig {
 	return nil
 }
 
