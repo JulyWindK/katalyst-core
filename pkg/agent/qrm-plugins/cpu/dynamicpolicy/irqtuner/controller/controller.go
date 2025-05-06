@@ -82,6 +82,14 @@ const (
 	IrqBalanceNG IrqAffinityPolicy = "irq-balance-ng"
 )
 
+type ExclusiveIrqCoresSelectOrder int
+
+const (
+	Forward ExclusiveIrqCoresSelectOrder = iota
+	Backward
+	None
+)
+
 type CpuNetLoad interface {
 	GetLoad() int
 	GetCpuID() int64
@@ -285,6 +293,7 @@ type NicIrqTuningManager struct {
 	IrqAffinityPolicy     IrqAffinityPolicy
 	FallbackToBalanceFair bool  // if server error happened in IrqCoresExclusive policy, then fallback to balance-fair policy, and cannot be changed back again.
 	AssignedSockets       []int // assigned sockets which nic irqs should affinity to, which are determined by the number of active nics and nic's binded numa in physical topo
+	ExclusiveIrqCoresSelectOrder
 	IrqCoresExclusionSwitchStat
 	TuningRecords
 }
@@ -378,21 +387,77 @@ type IrqTuningController struct {
 	IrqAffinityChanges map[int]*IrqAffinityChange // nic ifindex as map key. used to record irq affinity changes in each periodicTuning, and will be reset at the beginning of periodicTuning
 }
 
-func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *util.NicBasicInfo, irqAffSockets []int) (*NicIrqTuningManager, error) {
+func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *util.NicBasicInfo, irqAffSockets []int, order ExclusiveIrqCoresSelectOrder) (*NicIrqTuningManager, error) {
 	nicInfo, err := GetNicInfo(nic)
 	if err != nil {
 		return nil, fmt.Errorf("failed to GetNicInfo for nic %s, err %v", nic, err)
 	}
 
 	return &NicIrqTuningManager{
-		Conf:              conf,
-		NicInfo:           nicInfo,
-		IrqAffinityPolicy: InitTuning,
-		AssignedSockets:   irqAffSockets,
+		Conf:                         conf,
+		NicInfo:                      nicInfo,
+		IrqAffinityPolicy:            InitTuning,
+		AssignedSockets:              irqAffSockets,
+		ExclusiveIrqCoresSelectOrder: order,
 		IrqCoresExclusionSwitchStat: IrqCoresExclusionSwitchStat{
 			IrqCoresExclusionLastSwitchTime: time.Now(),
 		},
 	}, nil
+}
+
+func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*util.NicBasicInfo, cpuInfo *util.CPUInfo) ([]*NicIrqTuningManager, error) {
+	nicIrqsAffSockets, err := AssignSocketsForNics(nics, cpuInfo, conf.NicAffinitySocketsPolicy)
+	if err != nil {
+		return nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
+	}
+
+	var nicsAssignedSockets [][]int
+	for _, sockets := range nicIrqsAffSockets {
+		nicsAssignedSockets = append(nicsAssignedSockets, sockets)
+	}
+
+	var nicsAssignedSocketsHasOverlap bool
+	for i, sockets := range nicsAssignedSockets {
+		if i == len(nicsAssignedSockets)-1 {
+			break
+		}
+
+		for _, skts := range nicsAssignedSockets[i+1:] {
+			for _, s1 := range sockets {
+				for _, s2 := range skts {
+					if s1 == s2 {
+						nicsAssignedSocketsHasOverlap = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// when multiple nics's assigned sockets has overlaps, then one nic's exclusive irq cores change may cause another nic with
+	// overlapped assigned sockets to change exclusive irq cores accordingly. In order to avoid this situation, two nics with overlapped
+	// assgined sockets can select exlcusive irq cores from different part of overlapped socket, for exmaple, one nic select exclusive irq
+	// cores from head part of numa cpus, and another nic select exclusive irq cores from tail part of numa cpus.
+
+	prevNicExclusiveIrqCoresSelectOrder := None
+	var nicManagers []*NicIrqTuningManager
+	for _, n := range nics {
+		irqCoresSelectOrder := Forward
+		if nicsAssignedSocketsHasOverlap {
+			if prevNicExclusiveIrqCoresSelectOrder == Forward {
+				irqCoresSelectOrder = Backward
+			}
+			prevNicExclusiveIrqCoresSelectOrder = irqCoresSelectOrder
+		}
+
+		mng, err := NewNicIrqTuningManager(conf, n, nicIrqsAffSockets[n.IfIndex], irqCoresSelectOrder)
+		if err != nil {
+			return nil, fmt.Errorf("failed to NewNicIrqTuningManager for nic %s, err %v", n, err)
+		}
+		nicManagers = append(nicManagers, mng)
+	}
+
+	return nicManagers, nil
 }
 
 func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter) (*IrqTuningController, error) {
@@ -431,18 +496,9 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 		return nil, err
 	}
 
-	nicIrqsAffSockets, err := AssignSocketsForNics(nics, cpuInfo, conf.NicAffinitySocketsPolicy)
+	nicManagers, err := NewNicIrqTuningManagers(conf, nics, cpuInfo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
-	}
-
-	var nicManagers []*NicIrqTuningManager
-	for _, n := range nics {
-		mng, err := NewNicIrqTuningManager(conf, n, nicIrqsAffSockets[n.IfIndex])
-		if err != nil {
-			return nil, fmt.Errorf("failed to NewNicIrqTuningManager for nic %s, err %v", n, err)
-		}
-		nicManagers = append(nicManagers, mng)
+		return nil, fmt.Errorf("failed to NewNicIrqTuningManagers, err %v", err)
 	}
 
 	controller := &IrqTuningController{
@@ -1080,22 +1136,33 @@ func (ic *IrqTuningController) syncNics() error {
 	}
 	ic.LastNicSyncTime = time.Now()
 
-	notChangedNicMap := make(map[int]interface{})
-	for _, oldNic := range ic.Nics {
-		for _, newNic := range nics {
-			if newNic.Equal(oldNic.NicInfo.NicBasicInfo) {
-				notChangedNicMap[newNic.IfIndex] = nil
+	nicsChanged := false
+	if len(nics) != len(ic.Nics) {
+		nicsChanged = true
+	}
+
+	if !nicsChanged {
+		for _, oldNic := range ic.Nics {
+			matched := false
+			for _, newNic := range nics {
+				if newNic.Equal(oldNic.NicInfo.NicBasicInfo) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				nicsChanged = true
 				break
 			}
 		}
 	}
 
-	if len(notChangedNicMap) == len(ic.Nics) {
+	if !nicsChanged {
 		klog.Infof("no nic changed")
 		return nil
 	}
 
-	klog.Infof("%s %d nic changed", IrqTuningLogPrefix, len(ic.Nics)-len(notChangedNicMap))
+	klog.Infof("%s nics changed", IrqTuningLogPrefix)
 
 	// if any nics changes happened, it's the simplest way to recalculate sockets assignment for nics's irq affinity and re-new
 	// all nics's controller, regardless of unchanged nics's current configuration about irq affinity and assigned sockets,
@@ -1106,20 +1173,28 @@ func (ic *IrqTuningController) syncNics() error {
 	//    because qrm use the same policy to assign nic for container in 2-nics machine to align with irq-tuning manager for best performance.
 	// 3) there is an extremely low probability that any nic will change during node running.
 
-	nicIrqsAffSockets, err := AssignSocketsForNics(nics, ic.CPUInfo, ic.conf.NicAffinitySocketsPolicy)
-	if err != nil {
-		return fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
-	}
-
-	var nicManagers []*NicIrqTuningManager
-	for _, n := range nics {
-		mng, err := NewNicIrqTuningManager(ic.conf, n, nicIrqsAffSockets[n.IfIndex])
-		if err != nil {
-			return fmt.Errorf("failed to NewNicIrqTuningManager for nic %s, err %v", n, err)
+	// regardless of whether the original nics exists or not, tune original nics irq affintiy to balance-fair
+	for _, nic := range ic.Nics {
+		if nic.IrqAffinityPolicy != IrqBalanceFair {
+			nic.IrqAffinityPolicy = IrqBalanceFair
 		}
-		nicManagers = append(nicManagers, mng)
 	}
 
+	if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
+		klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
+	}
+
+	totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
+	if err != nil || len(totalIrqCores) > 0 {
+		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet()); err != nil {
+			klog.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
+		}
+	}
+
+	nicManagers, err := NewNicIrqTuningManagers(ic.conf, nics, ic.CPUInfo)
+	if err != nil {
+		return fmt.Errorf("failed to NewNicIrqTuningManagers, err %v", err)
+	}
 	ic.Nics = nicManagers
 
 	return nil
@@ -2610,7 +2685,7 @@ func (ic *IrqTuningController) calculateExclusiveIrqCores(nic *NicIrqTuningManag
 	return expectedIrqCoresCount
 }
 
-func (ic *IrqTuningController) selectExclusiveIrqCoresFromNuma(irqCoresNum int, socketID int, numaID int, qualifiedCoresMap map[int64]interface{}) ([]int64, error) {
+func (ic *IrqTuningController) selectExclusiveIrqCoresFromNuma(irqCoresNum int, socketID int, numaID int, qualifiedCoresMap map[int64]interface{}, irqCoresSelectOrder ExclusiveIrqCoresSelectOrder) ([]int64, error) {
 	socket, ok := ic.CPUInfo.Sockets[socketID]
 	if !ok {
 		return nil, fmt.Errorf("invalid socket id %d", socketID)
@@ -2620,8 +2695,7 @@ func (ic *IrqTuningController) selectExclusiveIrqCoresFromNuma(irqCoresNum int, 
 		return nil, fmt.Errorf("irqCoresNum %d less-equal 0", irqCoresNum)
 	}
 
-	var selectedIrqCores []int64
-	selectedIrqCoresCount := 0
+	var phyCores []util.PhyCore
 	if ic.CPUInfo.CPUVendor == cpuid.AMD {
 		numa, ok := socket.AMDNumas[numaID]
 		if !ok {
@@ -2629,17 +2703,7 @@ func (ic *IrqTuningController) selectExclusiveIrqCoresFromNuma(irqCoresNum int, 
 		}
 
 		for _, ccd := range numa.CCDs {
-			for _, phyCore := range ccd.PhyCores {
-				for _, cpu := range phyCore.CPUs {
-					if _, ok := qualifiedCoresMap[cpu]; ok {
-						selectedIrqCores = append(selectedIrqCores, cpu)
-						selectedIrqCoresCount++
-						if selectedIrqCoresCount >= irqCoresNum {
-							return selectedIrqCores, nil
-						}
-					}
-				}
-			}
+			phyCores = append(phyCores, ccd.PhyCores...)
 		}
 	} else if ic.CPUInfo.CPUVendor == cpuid.Intel {
 		numa, ok := socket.IntelNumas[numaID]
@@ -2647,12 +2711,29 @@ func (ic *IrqTuningController) selectExclusiveIrqCoresFromNuma(irqCoresNum int, 
 			return nil, fmt.Errorf("invalid numa id %d", numaID)
 		}
 
-		for _, phyCore := range numa.PhyCores {
+		phyCores = append(phyCores, numa.PhyCores...)
+	}
+
+	var selectedIrqCores []int64
+
+	if irqCoresSelectOrder == Forward {
+		for _, phyCore := range phyCores {
 			for _, cpu := range phyCore.CPUs {
 				if _, ok := qualifiedCoresMap[cpu]; ok {
 					selectedIrqCores = append(selectedIrqCores, cpu)
-					selectedIrqCoresCount++
-					if selectedIrqCoresCount >= irqCoresNum {
+					if len(selectedIrqCores) >= irqCoresNum {
+						return selectedIrqCores, nil
+					}
+				}
+			}
+		}
+	} else {
+		for i := len(phyCores) - 1; i >= 0; i-- {
+			phyCore := phyCores[i]
+			for _, cpu := range phyCore.CPUs {
+				if _, ok := qualifiedCoresMap[cpu]; ok {
+					selectedIrqCores = append(selectedIrqCores, cpu)
+					if len(selectedIrqCores) >= irqCoresNum {
 						return selectedIrqCores, nil
 					}
 				}
@@ -2708,7 +2789,7 @@ func (ic *IrqTuningController) selectExclusiveIrqCoresForNic(nic *NicIrqTuningMa
 					len(qualifiedCoresMap), numaIrqCoresCount)
 			}
 
-			numaExclusiveIrqCores, err := ic.selectExclusiveIrqCoresFromNuma(numaIrqCoresCount, socket, numa, qualifiedCoresMap)
+			numaExclusiveIrqCores, err := ic.selectExclusiveIrqCoresFromNuma(numaIrqCoresCount, socket, numa, qualifiedCoresMap, nic.ExclusiveIrqCoresSelectOrder)
 			if err != nil {
 				return nil, fmt.Errorf("failed to selectExclusiveIrqCoresFromNuma(%d, %d, %d) for nic %s",
 					numaIrqCoresCount, socket, numa, nic.NicInfo)
@@ -2786,7 +2867,7 @@ func (ic *IrqTuningController) allocExclusiveIrqCoresForNic_deprecated(nic *NicI
 			numaIncIrqCoresCount := numaIrqCoresCount - len(oriNumaIrqCores)
 
 			qualifiedCoresMap := ic.getNumaQualifiedCoresMapForExclusiveIrqCores(numa)
-			numaExclusiveIrqCores, err := ic.selectExclusiveIrqCoresFromNuma(numaIncIrqCoresCount, socket, numa, qualifiedCoresMap)
+			numaExclusiveIrqCores, err := ic.selectExclusiveIrqCoresFromNuma(numaIncIrqCoresCount, socket, numa, qualifiedCoresMap, nic.ExclusiveIrqCoresSelectOrder)
 			if err != nil {
 				return nil, fmt.Errorf("failed to selectExclusiveIrqCoresFromNuma(%d, %d, %d) for nic %s",
 					numaIrqCoresCount, socket, numa, nic.NicInfo)
