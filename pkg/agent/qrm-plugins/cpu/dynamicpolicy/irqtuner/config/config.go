@@ -1,25 +1,27 @@
 package config
 
 import (
-	"flag"
-
 	"github.com/kubewharf/katalyst-api/pkg/apis/config/v1alpha1"
 	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
 )
 
+type IrqTuningPolicy string
+
 const (
-	IrqTuningBalanceFair       string = "balance-fair"
-	IrqTuningIrqCoresExclusive string = "irq-cores-exclusive"
-	IrqTuningAuto              string = "auto"
+	IrqTuningBalanceFair       IrqTuningPolicy = "balance-fair"
+	IrqTuningIrqCoresExclusive IrqTuningPolicy = "irq-cores-exclusive"
+	IrqTuningAuto              IrqTuningPolicy = "auto"
 )
+
+type NicAffinitySocketsPolicy string
 
 const (
 	// no matter how many nics, each nic's irqs affinity all sockets balancely
-	EachNicBalanceAllSockets string = "each-nic-sockets-balance"
+	EachNicBalanceAllSockets NicAffinitySocketsPolicy = "each-nic-sockets-balance"
 	// according number of nics and nics's physical topo binded numa, decide nic's irqs affinity which socket(s)
-	OverallNicsBalanceAllSockets string = "overall-nics-sockets-balance"
+	OverallNicsBalanceAllSockets NicAffinitySocketsPolicy = "overall-nics-sockets-balance"
 	// nic's irqs affitnied socket strictly follow whose physical topology binded socket
-	NicPhysicalTopoBindNuma string = "physical-topo-bind"
+	NicPhysicalTopoBindNuma NicAffinitySocketsPolicy = "physical-topo-bind"
 )
 
 // when there are one or more irq cores's ratio of softnet_stat 3rd col time_squeeze packets / 1st col processed packets
@@ -108,9 +110,9 @@ type IrqCoresExclusionConfig struct {
 type IrqTuningConfig struct {
 	Interval                 int
 	EnableIrqTuning          bool
-	IrqTuningPolicy          string
-	EnableRPS                bool   // only balance-fair policy support enable rps
-	NicAffinitySocketsPolicy string // nics's irqs affinity sockets policy
+	IrqTuningPolicy          IrqTuningPolicy
+	EnableRPS                bool                     // only balance-fair policy support enable rps
+	NicAffinitySocketsPolicy NicAffinitySocketsPolicy // nics's irqs affinity sockets policy
 	IrqCoresExpectedCpuUtil  int
 	ReniceIrqCoresKsoftirqd  bool
 	IrqCoresKsoftirqdNice    int
@@ -282,72 +284,4 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 	}
 
 	return conf
-}
-
-func (ic *IrqTuningConfig) InitFlags(fs *flag.FlagSet) {
-	fs.IntVar(&ic.Interval, "interval", ic.Interval, "irq tuning periodic interval")
-	fs.BoolVar(&ic.EnableIrqTuning, "enable-irq-tuning", ic.EnableIrqTuning,
-		"if enable irq-tuning feature")
-	fs.StringVar(&ic.IrqTuningPolicy, "irq-tuning-policy", ic.IrqTuningPolicy, "irq tuning policy, optional choices [disable, balance-fair, irq-cores-exclusive, auto]")
-	fs.BoolVar(&ic.EnableRPS, "enable-rps", ic.EnableRPS,
-		"if enable rps, only can eanble rps when irq-tuning-policy is balance-fair")
-	fs.StringVar(&ic.NicAffinitySocketsPolicy, "nic-affiniy-sockets-policy", ic.NicAffinitySocketsPolicy, "the policy of decide nic's irqs affinty which socket(s)")
-	fs.IntVar(&ic.IrqCoresExpectedCpuUtil, "irq-cores-expected-cpu-util", ic.IrqCoresExpectedCpuUtil,
-		"irq cores expeteced cpu util, valid value range [0, 100]")
-	fs.BoolVar(&ic.ReniceIrqCoresKsoftirqd, "renice-ksoftirqd", ic.ReniceIrqCoresKsoftirqd,
-		"if eable ksoftirqd kthread running on irq cores")
-	fs.IntVar(&ic.IrqCoresKsoftirqdNice, "ksoftirqd-nice", ic.IrqCoresKsoftirqdNice,
-		"ksoftirqd kthread nice value")
-
-	fs.Float64Var(&ic.IrqCoreNetOverLoadThresh.IrqCoreSoftNetTimeSqueezeRatio, "softnet-timesqueeze-ratio-thresh", ic.IrqCoreNetOverLoadThresh.IrqCoreSoftNetTimeSqueezeRatio,
-		"exceed this thresh will trigger irq load balance tuning or increase irq cores")
-
-	fs.IntVar(&ic.IrqLoadBalanceConf.SuccessiveTuningInterval, "irq-load-balance-successive-tune-interval", ic.IrqLoadBalanceConf.SuccessiveTuningInterval,
-		"min interval of successvie irq load balance tuning")
-	fs.IntVar(&ic.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilThresh, "irq-load-balance-cpu-util-thresh", ic.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilThresh,
-		"irq cores cpu util thresh of triggering irq load balance")
-	fs.IntVar(&ic.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilGapThresh, "irq-load-balance-cpu-util-gap-thresh", ic.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilGapThresh,
-		"threshold of cpu util gap between source core and dest core of irq load balance")
-	fs.IntVar(&ic.IrqLoadBalanceConf.PingPongIntervalThresh, "irq-load-balance-pingpong-interval-thresh", ic.IrqLoadBalanceConf.PingPongIntervalThresh,
-		"two successive tune interval less equal this thresh, then considered as pingpong tuning")
-	fs.IntVar(&ic.IrqLoadBalanceConf.PingPongCountThresh, "irq-load-balance-pingpong-count-thresh", ic.IrqLoadBalanceConf.PingPongCountThresh,
-		"ping pong count threshold, greater-equal this threshold will trigger increasing irq cores")
-	fs.IntVar(&ic.IrqLoadBalanceConf.IrqsTunedNumMaxEachTime, "irq-load-balance-max-irqs", ic.IrqLoadBalanceConf.IrqsTunedNumMaxEachTime,
-		"max number of irqs are permitted to be tuned from some irq cores to other cores in each time")
-	fs.IntVar(&ic.IrqLoadBalanceConf.IrqCoresTunedNumMaxEachTime, "irq-load-balance-max-cores", ic.IrqLoadBalanceConf.IrqCoresTunedNumMaxEachTime,
-		"max number of irq cores whose affinitied irqs are permitted to tuned to other cores in each time")
-
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresPercentMin, "irq-cores-pct-min", ic.IrqCoresAdjustConf.IrqCoresPercentMin,
-		"minimum percent of (100 * irq cores/total(or socket) cores), valid value [0,100], default 2")
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresPercentMax, "irq-cores-pct-max", ic.IrqCoresAdjustConf.IrqCoresPercentMax,
-		"maximum percent of (100 * irq cores/total(or socket) cores), valid value [0,100], default 30")
-
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresIncConf.SuccessiveIncInterval, "irq-cores-inc-successive-interval", ic.IrqCoresAdjustConf.IrqCoresIncConf.SuccessiveIncInterval,
-		"min interval of successvie irq cores increase")
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresIncConf.IrqCoresCpuFullThresh, "irq-cores-cpu-full-thresh", ic.IrqCoresAdjustConf.IrqCoresIncConf.IrqCoresCpuFullThresh,
-		"when irq cores cpu util hit this thresh, then fallback to balance-fair policy")
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresIncConf.Thresholds.IrqCoresAvgCpuUtilThresh, "irq-cores-inc-cpu-util-thresh", ic.IrqCoresAdjustConf.IrqCoresIncConf.Thresholds.IrqCoresAvgCpuUtilThresh,
-		"threshold of increasing irq cores, generally this thresh equal to or a litter greater than IrqCoresExpectedCpuUtil")
-
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresDecConf.SuccessiveDecInterval, "irq-cores-dec-successive-interval", ic.IrqCoresAdjustConf.IrqCoresDecConf.SuccessiveDecInterval,
-		"min interval of successvie irq cores decrease")
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresDecConf.PingPongAdjustInterval, "irq-cores-pingpong-adjust-interval", ic.IrqCoresAdjustConf.IrqCoresDecConf.PingPongAdjustInterval,
-		"min interval of pingpong adjust irq cores, pingpong adjust means last adjust is increase and current adjust is decrease")
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresDecConf.SinceLastBalanceInterval, "irq-cores-since-last-balance-dec-interval", ic.IrqCoresAdjustConf.IrqCoresDecConf.SinceLastBalanceInterval,
-		"min interval of decrease and last irq load balance")
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresDecConf.Thresholds.IrqCoresAvgCpuUtilThresh, "irq-cores-dec-cpu-util-thresh", ic.IrqCoresAdjustConf.IrqCoresDecConf.Thresholds.IrqCoresAvgCpuUtilThresh,
-		"threshold of decreasing irq cores, generally this thresh should be less than IrqCoresExpectedCpuUtil")
-	fs.IntVar(&ic.IrqCoresAdjustConf.IrqCoresDecConf.DecCoresMaxEachTime, "irq-cores-dec-max-eachtime", ic.IrqCoresAdjustConf.IrqCoresDecConf.DecCoresMaxEachTime,
-		"max cores to decrease each time, deault 1")
-
-	fs.Float64Var(&ic.IrqCoresExclusionConf.SuccessiveSwitchInterval, "irq-cores-exclusion-succesive-switch-interval", ic.IrqCoresExclusionConf.SuccessiveSwitchInterval,
-		"interval of successive enable/disable irq cores exclusion MUST >= SuccessiveSwitchInterval")
-	fs.Uint64Var(&ic.IrqCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh, "irq-cores-exclusion-enable-rx-pps-thresh", ic.IrqCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh,
-		"threshold of enable exclusion of irq cores from shared-cores, dedicated-cores, .etc.")
-	fs.IntVar(&ic.IrqCoresExclusionConf.Thresholds.EnableThresholds.SuccessiveCount, "irq-cores-exclusion-enable-rx-pps-succesive-count", ic.IrqCoresExclusionConf.Thresholds.EnableThresholds.SuccessiveCount,
-		"if successive count of nic's total pps >= irq-cores-exclusion-enable-rx-pps-thresh greater-than irq-cores-exclusion-enable-rx-pps-succesive-count, then enable irq cores exclusion")
-	fs.Uint64Var(&ic.IrqCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh, "irq-cores-exclusion-disable-rx-pps-thresh", ic.IrqCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh,
-		"threshold of disable exclusion of irq cores from shared-cores, dedicated-cores, .etc.")
-	fs.IntVar(&ic.IrqCoresExclusionConf.Thresholds.DisableThresholds.SuccessiveCount, "irq-cores-exclusion-disable-rx-pps-succesive-count", ic.IrqCoresExclusionConf.Thresholds.DisableThresholds.SuccessiveCount,
-		"if successive count of nic's total pps <= irq-cores-exclusion-disable-rx-pps-thresh greater-than irq-cores-exclusion-disable-rx-pps-succesive-count, then disable irq cores exclusion")
 }
