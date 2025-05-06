@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 
+	"github.com/kubewharf/katalyst-api/pkg/apis/config/v1alpha1"
 	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
 )
 
@@ -184,6 +185,97 @@ func (c *IrqTuningConfig) Validate() error {
 }
 
 func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration) *IrqTuningConfig {
+	conf := NewConfiguration()
+
+	if dynamicConf.IRQTuningConfiguration != nil {
+		conf.Interval = dynamicConf.IRQTuningConfiguration.TuningInterval
+		conf.EnableIrqTuning = dynamicConf.IRQTuningConfiguration.EnableTuner
+
+		switch dynamicConf.IRQTuningConfiguration.TuningPolicy {
+		case v1alpha1.TuningPolicyExclusive:
+			conf.IrqTuningPolicy = IrqTuningIrqCoresExclusive
+		case v1alpha1.TuningPolicyAuto:
+			conf.IrqTuningPolicy = IrqTuningAuto
+		case v1alpha1.TuningPolicyBalance:
+			fallthrough
+		default:
+			conf.IrqTuningPolicy = IrqTuningBalanceFair
+		}
+
+		conf.EnableRPS = dynamicConf.IRQTuningConfiguration.EnableRPS
+
+		switch dynamicConf.IRQTuningConfiguration.NICAffinityPolicy {
+		case v1alpha1.NICAffinityPolicyPhysicalTopo:
+			conf.NicAffinitySocketsPolicy = NicPhysicalTopoBindNuma
+		case v1alpha1.NICAffinityPolicyCompleteMap:
+			conf.NicAffinitySocketsPolicy = EachNicBalanceAllSockets
+		case v1alpha1.NICAffinityPolicyOverallBalance:
+			fallthrough
+		default:
+			conf.NicAffinitySocketsPolicy = OverallNicsBalanceAllSockets
+		}
+
+		conf.IrqCoresExpectedCpuUtil = dynamicConf.IRQTuningConfiguration.CoresExpectedCPUUtil
+		conf.ReniceIrqCoresKsoftirqd = dynamicConf.IRQTuningConfiguration.ReniceKsoftirqd
+		conf.IrqCoresKsoftirqdNice = dynamicConf.IRQTuningConfiguration.KsoftirqdNice
+
+		if dynamicConf.IRQTuningConfiguration.CoreNetOverLoadThresh != nil {
+			conf.IrqCoreNetOverLoadThresh.IrqCoreSoftNetTimeSqueezeRatio = dynamicConf.IRQTuningConfiguration.CoreNetOverLoadThresh.SoftNetTimeSqueezeRatio
+		}
+
+		if dynamicConf.IRQTuningConfiguration.LoadBalanceConf != nil {
+			dynLoadBalanceConf := dynamicConf.IRQTuningConfiguration.LoadBalanceConf
+			conf.IrqLoadBalanceConf.SuccessiveTuningInterval = dynLoadBalanceConf.SuccessiveTuningInterval
+			if dynLoadBalanceConf.Thresholds != nil {
+				conf.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilThresh = dynLoadBalanceConf.Thresholds.CPUUtilThresh
+				conf.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilGapThresh = dynLoadBalanceConf.Thresholds.CPUUtilGapThresh
+			}
+			conf.IrqLoadBalanceConf.PingPongIntervalThresh = dynLoadBalanceConf.PingPongIntervalThresh
+			conf.IrqLoadBalanceConf.PingPongCountThresh = dynLoadBalanceConf.PingPongCountThresh
+			conf.IrqLoadBalanceConf.IrqsTunedNumMaxEachTime = dynLoadBalanceConf.IRQsTunedNumMaxEachTime
+			conf.IrqLoadBalanceConf.IrqCoresTunedNumMaxEachTime = dynLoadBalanceConf.IRQCoresTunedNumMaxEachTime
+		}
+
+		if dynamicConf.IRQTuningConfiguration.CoresAdjustConf != nil {
+			dynCoresAdjustConf := dynamicConf.IRQTuningConfiguration.CoresAdjustConf
+			conf.IrqCoresAdjustConf.IrqCoresPercentMin = dynCoresAdjustConf.PercentMin
+			conf.IrqCoresAdjustConf.IrqCoresPercentMax = dynCoresAdjustConf.PercentMax
+
+			if dynCoresAdjustConf.IncConf != nil {
+				conf.IrqCoresAdjustConf.IrqCoresIncConf.SuccessiveIncInterval = dynCoresAdjustConf.IncConf.SuccessiveIncInterval
+				// later will change FullScaleFactor to CpuFullThresh
+				conf.IrqCoresAdjustConf.IrqCoresIncConf.IrqCoresCpuFullThresh = int(dynCoresAdjustConf.IncConf.FullScaleFactor)
+				if dynCoresAdjustConf.IncConf.Thresholds != nil {
+					conf.IrqCoresAdjustConf.IrqCoresIncConf.Thresholds.IrqCoresAvgCpuUtilThresh = dynCoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh
+				}
+			}
+
+			if dynCoresAdjustConf.DecConf != nil {
+				conf.IrqCoresAdjustConf.IrqCoresDecConf.SuccessiveDecInterval = dynCoresAdjustConf.DecConf.SuccessiveDecInterval
+				conf.IrqCoresAdjustConf.IrqCoresDecConf.PingPongAdjustInterval = dynCoresAdjustConf.DecConf.PingPongAdjustInterval
+				conf.IrqCoresAdjustConf.IrqCoresDecConf.SinceLastBalanceInterval = dynCoresAdjustConf.DecConf.SinceLastBalanceInterval
+				if dynCoresAdjustConf.DecConf.Thresholds != nil {
+					conf.IrqCoresAdjustConf.IrqCoresDecConf.Thresholds.IrqCoresAvgCpuUtilThresh = dynCoresAdjustConf.DecConf.Thresholds.AvgCPUUtilThresh
+				}
+				conf.IrqCoresAdjustConf.IrqCoresDecConf.DecCoresMaxEachTime = dynCoresAdjustConf.DecConf.DecCoresMaxEachTime
+			}
+		}
+
+		if dynamicConf.IRQTuningConfiguration.CoresExclusionConf != nil {
+			dynCoresExclusionConf := dynamicConf.IRQTuningConfiguration.CoresExclusionConf
+			if dynCoresExclusionConf.Thresholds != nil {
+				if dynCoresExclusionConf.Thresholds.EnableThresholds != nil {
+					conf.IrqCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh = dynCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh
+					conf.IrqCoresExclusionConf.Thresholds.EnableThresholds.SuccessiveCount = dynCoresExclusionConf.Thresholds.EnableThresholds.SuccessiveCount
+				}
+				if dynCoresExclusionConf.Thresholds.DisableThresholds != nil {
+					conf.IrqCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh = dynCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh
+					conf.IrqCoresExclusionConf.Thresholds.DisableThresholds.SuccessiveCount = dynCoresExclusionConf.Thresholds.DisableThresholds.SuccessiveCount
+				}
+				conf.IrqCoresExclusionConf.SuccessiveSwitchInterval = dynCoresExclusionConf.SuccessiveSwitchInterval
+			}
+		}
+	}
 	return nil
 }
 
