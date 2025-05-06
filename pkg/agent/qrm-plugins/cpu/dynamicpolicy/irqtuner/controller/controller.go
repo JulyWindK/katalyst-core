@@ -431,7 +431,7 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 		return nil, err
 	}
 
-	nicIrqsAffSockets, err := AssignSocketsForNicIrqs(nics, cpuInfo)
+	nicIrqsAffSockets, err := AssignSocketsForNics(nics, cpuInfo, conf.NicAffinitySocketsPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
 	}
@@ -720,7 +720,7 @@ func listActiveUplinkNicsExcludeSriovVFs() ([]*util.NicBasicInfo, error) {
 }
 
 // map[int]int : nic ifindex as map key, nic irqs should affinitied socket slice as value
-func AssignSocketsForNicIrqs(nics []*util.NicBasicInfo, cpuInfo *util.CPUInfo) (map[int][]int, error) {
+func AssignSocketsForNicIrqsForOverallNicsBalance(nics []*util.NicBasicInfo, cpuInfo *util.CPUInfo) (map[int][]int, error) {
 	ifIndex2Sockets := make(map[int][]int)
 
 	if len(nics) == 0 {
@@ -786,6 +786,43 @@ func AssignSocketsForNicIrqs(nics []*util.NicBasicInfo, cpuInfo *util.CPUInfo) (
 	}
 
 	return ifIndex2Sockets, nil
+}
+
+func AssignSocketsForNics(nics []*util.NicBasicInfo, cpuInfo *util.CPUInfo, nicAffinitySocketsPolicy config.NicAffinitySocketsPolicy) (map[int][]int, error) {
+	ifIndex2Sockets := make(map[int][]int)
+
+	switch nicAffinitySocketsPolicy {
+	case config.NicPhysicalTopoBindNuma:
+		hasUnknownSocketBindNic := false
+		for _, nic := range nics {
+			if nic.SocketBind == util.UnknownSocketBind {
+				hasUnknownSocketBindNic = true
+				break
+			}
+			ifIndex2Sockets[nic.IfIndex] = []int{nic.SocketBind}
+		}
+
+		if hasUnknownSocketBindNic {
+			return AssignSocketsForNicIrqsForOverallNicsBalance(nics, cpuInfo)
+		} else {
+			return ifIndex2Sockets, nil
+		}
+	case config.EachNicBalanceAllSockets:
+		var sockets []int
+		for socket, _ := range cpuInfo.Sockets {
+			sockets = append(sockets, socket)
+		}
+
+		for _, nic := range nics {
+			ifIndex2Sockets[nic.IfIndex] = sockets
+		}
+
+		return ifIndex2Sockets, nil
+	case config.OverallNicsBalanceAllSockets:
+		fallthrough
+	default:
+		return AssignSocketsForNicIrqsForOverallNicsBalance(nics, cpuInfo)
+	}
 }
 
 func irqCoresEqual(a []int64, b []int64) bool {
@@ -1069,7 +1106,7 @@ func (ic *IrqTuningController) syncNics() error {
 	//    because qrm use the same policy to assign nic for container in 2-nics machine to align with irq-tuning manager for best performance.
 	// 3) there is an extremely low probability that any nic will change during node running.
 
-	nicIrqsAffSockets, err := AssignSocketsForNicIrqs(nics, ic.CPUInfo)
+	nicIrqsAffSockets, err := AssignSocketsForNics(nics, ic.CPUInfo, ic.conf.NicAffinitySocketsPolicy)
 	if err != nil {
 		return fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
 	}
