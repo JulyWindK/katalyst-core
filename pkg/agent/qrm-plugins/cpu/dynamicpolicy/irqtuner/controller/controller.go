@@ -2517,6 +2517,13 @@ func (ic *IrqTuningController) adaptIrqAffinityPolicy(oldIndicatorsStats *Indica
 			continue
 		}
 
+		if ic.conf.IrqTuningPolicy == config.IrqTuningIrqCoresExclusive {
+			if nic.IrqAffinityPolicy != IrqCoresExclusive {
+				ic.IrqAffinityChanges[nic.NicInfo.IfIndex] = buildNicIrqAffinityChange(nic, IrqCoresExclusive, nil)
+			}
+			continue
+		}
+
 		oldStats, ok := oldNicStats[nic.NicInfo.IfIndex]
 		if !ok {
 			klog.Errorf("impossible, failed to find nic %s in old nic stats", nic.NicInfo)
@@ -2538,7 +2545,6 @@ func (ic *IrqTuningController) adaptIrqAffinityPolicy(oldIndicatorsStats *Indica
 
 		if nic.IrqAffinityPolicy == InitTuning {
 			if rxPPS >= ic.conf.IrqCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh {
-				nic.IrqCoresExclusionLastSwitchTime = time.Now()
 				// NewIrqCores will be populated after completing exclusive irq cores calculation and selection
 				ic.IrqAffinityChanges[nic.NicInfo.IfIndex] = buildNicIrqAffinityChange(nic, IrqCoresExclusive, nil)
 			} else {
