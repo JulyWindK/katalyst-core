@@ -13,7 +13,9 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/config"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/util"
+	metricUtil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
 	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
+	"github.com/kubewharf/katalyst-core/pkg/metrics"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
@@ -118,6 +120,17 @@ func (x CPUUtilSlice) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 // sortCpuUtilSliceByIrqUtilInDecOrder sorts a slice of CPUUtil in decreasing order.
 func sortCpuUtilSliceByIrqUtilInDecOrder(x []*CPUUtil) {
 	sort.Sort(CPUUtilSlice(x))
+}
+
+type CPUUtilSlice2 []*CPUUtil
+
+func (x CPUUtilSlice2) Len() int           { return len(x) }
+func (x CPUUtilSlice2) Less(i, j int) bool { return x[j].ActiveUtil < x[i].ActiveUtil }
+func (x CPUUtilSlice2) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+
+// sortCpuUtilSliceByActiveUtilInDecOrder sorts a slice of CPUUtil in decreasing order.
+func sortCpuUtilSliceByActiveUtilInDecOrder(x []*CPUUtil) {
+	sort.Sort(CPUUtilSlice2(x))
 }
 
 // return value:
@@ -372,12 +385,12 @@ type ContainerInfoWrapper struct {
 type IrqTuningController struct {
 	dynamicConfHolder    *dynconfig.DynamicAgentConfiguration
 	conf                 *config.IrqTuningConfig
+	emitter              metrics.MetricEmitter
 	CPUInfo              *util.CPUInfo
 	Ksoftirqds           map[int64]int // cpuid as map key, ksoftirqd pid as value
 	IrqStateAdapter      irqtuner.StateAdapter
 	Containers           map[string]*ContainerInfoWrapper // container id as map key
 	IrqAffForbiddenCores []int64
-	// MetricClient, used to report some metrics
 
 	NicSyncInterval int // interval of sync nic interval, periodic sync for active nics change, like nic number changed, nic queue number changed
 	LastNicSyncTime time.Time
@@ -460,7 +473,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*util.NicBasic
 	return nicManagers, nil
 }
 
-func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter) (*IrqTuningController, error) {
+func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter) (*IrqTuningController, error) {
 	if isIrqBalanceNGServiceRuning() {
 		return nil, fmt.Errorf("irqbalance-ng service is running")
 	}
@@ -504,6 +517,7 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 	controller := &IrqTuningController{
 		dynamicConfHolder:  dynamicConfHolder,
 		conf:               conf,
+		emitter:            emitter,
 		CPUInfo:            cpuInfo,
 		Ksoftirqds:         ksoftirqds,
 		IrqStateAdapter:    irqStateAdapter,
@@ -1019,6 +1033,120 @@ func (nm *NicIrqTuningManager) getIrqsCorrespondingRxQueuesPPSInDecOrder(irqs []
 	}
 
 	return nm.getRxQueuesPPSInDecOrder(queues, oldStats, newStats)
+}
+
+func (ic *IrqTuningController) emitErrMetric(reason string, level int64) {
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningErr, level, metrics.MetricTypeNameRaw,
+		metrics.MetricTag{Key: "reason", Val: reason})
+}
+
+func (ic *IrqTuningController) emitIrqTuningPolicy() {
+	irqTuningPolicyMetricVal := int64(-1)
+
+	switch ic.conf.IrqTuningPolicy {
+	case config.IrqTuningBalanceFair:
+		irqTuningPolicyMetricVal = 0
+	case config.IrqTuningIrqCoresExclusive:
+		irqTuningPolicyMetricVal = 1
+	case config.IrqTuningAuto:
+		irqTuningPolicyMetricVal = 2
+	default:
+		irqTuningPolicyMetricVal = -1
+	}
+
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningPolicy, irqTuningPolicyMetricVal, metrics.MetricTypeNameRaw)
+}
+
+func (ic *IrqTuningController) emitNicsIrqAffinityPolicy() {
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicsCount, int64(len(ic.Nics)), metrics.MetricTypeNameRaw)
+
+	for _, nic := range ic.Nics {
+		val := int64(-1)
+		if nic.IrqAffinityPolicy == IrqBalanceFair {
+			val = 0
+		} else if nic.IrqAffinityPolicy == IrqCoresExclusive {
+			val = 1
+		}
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicIrqAffinityPolicy, val, metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+	}
+}
+
+func (ic *IrqTuningController) emitExclusiveIrqCores() {
+	for _, nic := range ic.Nics {
+		if nic.IrqAffinityPolicy != IrqCoresExclusive {
+			continue
+		}
+
+		irqCores := nic.NicInfo.getIrqCores()
+		irqCoresStr := util.ConvertLinuxListToString(irqCores)
+
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCores, int64(len(irqCores)), metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()},
+			metrics.MetricTag{Key: "irq_cores", Val: irqCoresStr})
+	}
+
+	totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
+	if err != nil {
+		totalIrqCoresStr := util.ConvertLinuxListToString(totalIrqCores)
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningTotalExclusiveIrqCores, int64(len(totalIrqCores)), metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "irq_cores", Val: totalIrqCoresStr})
+
+	}
+}
+
+func (ic *IrqTuningController) emitNicsExclusiveIrqCoresCpuUsage(oldIndicatorsStats *IndicatorsStats) {
+	for _, nic := range ic.Nics {
+		if nic.IrqAffinityPolicy != IrqCoresExclusive {
+			continue
+		}
+
+		irqCores := nic.NicInfo.getIrqCores()
+
+		cpuUtils, cpuUtilAvg := calculateCpuUtils(oldIndicatorsStats.CPUStats, ic.IndicatorsStats.CPUStats, nic.NicInfo.getIrqCores())
+
+		// sort irq cores cpu util by irq util in deceasing order
+		sortCpuUtilSliceByIrqUtilInDecOrder(cpuUtils)
+
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilAvg, int64(cpuUtilAvg.IrqUtil), metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilMax, int64(cpuUtils[0].IrqUtil), metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilMin, int64(cpuUtils[len(cpuUtils)-1].IrqUtil), metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+
+		irqCoresIrqUsage := float64(len(irqCores)) * float64(cpuUtilAvg.IrqUtil) / 100
+		_ = ic.emitter.StoreFloat64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresIrqUsage, irqCoresIrqUsage, metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+
+		// sort irq cores cpu util by active util in deceasing order
+		sortCpuUtilSliceByActiveUtilInDecOrder(cpuUtils)
+
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresCpuUtilAvg, int64(cpuUtilAvg.ActiveUtil), metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresCpuUtilMax, int64(cpuUtils[0].ActiveUtil), metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresCpuUtilMin, int64(cpuUtils[len(cpuUtils)-1].ActiveUtil), metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+
+		irqCoresCpuUsage := float64(len(irqCores)) * float64(cpuUtilAvg.ActiveUtil) / 100
+		_ = ic.emitter.StoreFloat64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresCpuUsage, irqCoresCpuUsage, metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+	}
+}
+
+func (ic *IrqTuningController) emitNicIrqLoadBalance(nic *NicIrqTuningManager, lb *IrqLoadBalance) {
+	if lb == nil {
+		return
+	}
+
+	sourceIrqCoresStr := util.ConvertLinuxListToString(lb.SourceCores)
+	destIrqCoresStr := util.ConvertLinuxListToString(lb.DestCores)
+
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicIrqLoadBalance, 1, metrics.MetricTypeNameRaw,
+		metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()},
+		metrics.MetricTag{Key: "source_cores", Val: sourceIrqCoresStr},
+		metrics.MetricTag{Key: "dest_cores", Val: destIrqCoresStr})
 }
 
 func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error) {
@@ -2239,6 +2367,7 @@ func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
 			nic.IrqAffinityPolicy = IrqCoresExclusive
 			err := fmt.Errorf("nic %s irq cores count %d, exclusive irq cores count %d", nic.NicInfo, len(nicIrqCores), len(nicExclusiveIrqCores))
 			ic.fallbackToBalanceFairPolicyByError(nic, err)
+			ic.emitErrMetric(irqtuner.RestoreNicsOriginalIrqCoresExclusivePolicyFailed, irqtuner.IrqTuningWarning)
 		} else {
 			nic.IrqAffinityPolicy = IrqCoresExclusive
 		}
@@ -2956,6 +3085,7 @@ func (ic *IrqTuningController) calculateExclusiveIrqCoresIncrease(oldIndicatorsS
 			err := fmt.Errorf("failed to calculateNicExclusiveIrqCoresIncrease for nic %s, err %s",
 				nic.NicInfo, err)
 			ic.fallbackToBalanceFairPolicyByError(nic, err)
+			ic.emitErrMetric(irqtuner.CalculateNicExclusiveIrqCoresIncreaseFailed, irqtuner.IrqTuningError)
 			continue
 		}
 
@@ -2986,6 +3116,7 @@ func (ic *IrqTuningController) calculateExclusiveIrqCoresIncrease(oldIndicatorsS
 				err := fmt.Errorf("failed to calculateNicIrqCoresWhenSwitchToIrqCoresExclusive for nic %s, err %s",
 					irqAffChange.Nic.NicInfo, err)
 				ic.fallbackToBalanceFairPolicyByError(nic, err)
+				ic.emitErrMetric(irqtuner.CalculateNicIrqCoresWhenSwitchToIrqCoresExclusiveFailed, irqtuner.IrqTuningError)
 				continue
 			}
 			irqAffChange.NewIrqCores = irqCores
@@ -3235,6 +3366,7 @@ func (ic *IrqTuningController) balanceIrqLoadBasedOnIrqUtil(nic *NicIrqTuningMan
 
 	if hasIrqsBalanced {
 		nic.LastIrqLoadBalance = newLoadBalance
+		ic.emitNicIrqLoadBalance(nic, newLoadBalance)
 	}
 
 	return needToIncIrqCores, hasIrqsBalanced
@@ -3277,6 +3409,7 @@ func (ic *IrqTuningController) balanceIrqsForNicsWithExclusiveIrqCores(oldIndica
 			if err != nil {
 				err := fmt.Errorf("failed to selectExclusiveIrqCoresForNic, err %s", err)
 				ic.fallbackToBalanceFairPolicyByError(nic, err)
+				ic.emitErrMetric(irqtuner.SelectExclusiveIrqCoresForNicFailed, irqtuner.IrqTuningError)
 				continue
 			} else {
 				irqAffinityChange = buildNicIrqAffinityChange(nic, nic.IrqAffinityPolicy, newIrqCores)
@@ -3366,6 +3499,7 @@ func (ic *IrqTuningController) calculateExclusiveIrqCoresDecrease(oldIndicatorsS
 			err := fmt.Errorf("failed to calculateNicExclusiveIrqCoresDecrease for nic %s, err %s",
 				nic.NicInfo, err)
 			ic.fallbackToBalanceFairPolicyByError(nic, err)
+			ic.emitErrMetric(irqtuner.CalculateNicExclusiveIrqCoresDecreaseFailed, irqtuner.IrqTuningError)
 			continue
 		}
 
@@ -3410,6 +3544,7 @@ func (ic *IrqTuningController) reAdjustAllNicsExclusiveIrqCores() {
 					err := fmt.Errorf("failed to selectExclusiveIrqCoresForNic for nic %s with expected irq cores count %d, err %s",
 						nic.NicInfo, len(change.NewIrqCores), err)
 					ic.fallbackToBalanceFairPolicyByError(nic, err)
+					ic.emitErrMetric(irqtuner.SelectExclusiveIrqCoresForNicFailed, irqtuner.IrqTuningError)
 					continue
 				}
 				change.NewIrqCores = newIrqCores
@@ -3422,6 +3557,7 @@ func (ic *IrqTuningController) reAdjustAllNicsExclusiveIrqCores() {
 					err := fmt.Errorf("failed to selectExclusiveIrqCoresForNic for nic %s with expected irq cores count %d, err %s",
 						nic.NicInfo, len(change.NewIrqCores), err)
 					ic.fallbackToBalanceFairPolicyByError(nic, err)
+					ic.emitErrMetric(irqtuner.SelectExclusiveIrqCoresForNicFailed, irqtuner.IrqTuningError)
 					continue
 				}
 
@@ -3467,6 +3603,7 @@ func (ic *IrqTuningController) handleUnqualifiedCoresChangeForExclusiveIrqCores(
 		if err != nil {
 			err := fmt.Errorf("failed to selectExclusiveIrqCoresForNic for nic %s with exclusive irq core count %d", nic.NicInfo, len(irqCores))
 			ic.fallbackToBalanceFairPolicyByError(nic, err)
+			ic.emitErrMetric(irqtuner.SelectExclusiveIrqCoresForNicFailed, irqtuner.IrqTuningError)
 			continue
 		}
 
@@ -3594,6 +3731,7 @@ func (ic *IrqTuningController) balanceNicsIrqsAwayFromDecreasedCores(oldIndicato
 		if irqAffinityChange.OldIrqAffinityPolicy == IrqCoresExclusive && irqAffinityChange.NewIrqAffinityPolicy != IrqCoresExclusive {
 			if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
 				klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+				ic.emitErrMetric(irqtuner.TuneNicIrqAffinityWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 				continue
 			}
 			continue
@@ -3609,6 +3747,7 @@ func (ic *IrqTuningController) balanceNicsIrqsAwayFromDecreasedCores(oldIndicato
 			if len(incIrqCores) == 0 {
 				if err := ic.balanceIrqsToOtherExclusiveIrqCores(nic, decCoresAffinitiedIrqs, irqAffinityChange.NewIrqCores, oldIndicatorsStats); err != nil {
 					klog.Errorf("failed balanceIrqsToOtherExclusiveIrqCores for nic %s, err %s", nic.NicInfo, err)
+					ic.emitErrMetric(irqtuner.BalanceIrqsToOtherExclusiveIrqCoresFailed, irqtuner.IrqTuningError)
 				}
 			} else {
 				// temporarily balance decresed cores affinitied irqs to non-exclusive cores, after succeed to request new exclusive irq
@@ -3622,6 +3761,7 @@ func (ic *IrqTuningController) balanceNicsIrqsAwayFromDecreasedCores(oldIndicato
 
 				if err := ic.tuneNicIrqsAffinityQualifiedCores(nic.NicInfo, decCoresAffinitiedIrqs, qualifiedCoresMap); err != nil {
 					klog.Errorf("failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", nic.NicInfo, err)
+					ic.emitErrMetric(irqtuner.TuneNicIrqsAffinityQualifiedCoresFailed, irqtuner.IrqTuningError)
 				}
 			}
 		}
@@ -3944,6 +4084,7 @@ func (ic *IrqTuningController) tuneNicIrqAffinityPolicyToIrqCoresExclusive(nic *
 func (ic *IrqTuningController) balanceNicsIrqsToNewIrqCores(oldIndicatorsStats *IndicatorsStats) error {
 	totalExclusiveIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
 	if err != nil {
+		ic.emitErrMetric(irqtuner.GetCurrentTotalExclusiveIrqCoresFailed, irqtuner.IrqTuningFatal)
 		return err
 	}
 
@@ -3981,6 +4122,7 @@ func (ic *IrqTuningController) balanceNicsIrqsToNewIrqCores(oldIndicatorsStats *
 		totalExclusiveIrqCores = calculateIrqCoresDiff(totalExclusiveIrqCores, needToDecreasedIrqCores)
 		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(util.ConvertInt64SliceToIntSlice(totalExclusiveIrqCores)...)); err != nil {
 			klog.Errorf("failed to decrease irq cores, err %s", err)
+			ic.emitErrMetric(irqtuner.SetExclusiveIRQCPUSetFailed, irqtuner.IrqTuningFatal)
 		}
 	}
 
@@ -4000,6 +4142,7 @@ func (ic *IrqTuningController) balanceNicsIrqsToNewIrqCores(oldIndicatorsStats *
 		if err := ic.balanceNicIrqsToNewIrqCores(nic, change.NewIrqCores, oldIndicatorsStats); err != nil {
 			err := fmt.Errorf("failed to balanceNicIrqsToNewIrqCores for nic %s, err %s", nic.NicInfo, err)
 			ic.fallbackToBalanceFairPolicyByError(nic, err)
+			ic.emitErrMetric(irqtuner.BalanceNicIrqsToNewIrqCoresFailed, irqtuner.IrqTuningError)
 		}
 	}
 
@@ -4018,6 +4161,7 @@ func (ic *IrqTuningController) balanceNicsIrqsToNewIrqCores(oldIndicatorsStats *
 			if err := ic.tuneNicIrqAffinityPolicyToIrqCoresExclusive(nic, change.NewIrqCores, oldIndicatorsStats); err != nil {
 				err := fmt.Errorf("failed to tuneNicIrqAffinityPolicyToIrqCoresExclusive for nic %s, err %s", nic.NicInfo, err)
 				ic.fallbackToBalanceFairPolicyByError(nic, err)
+				ic.emitErrMetric(irqtuner.TuneNicIrqAffinityPolicyToIrqCoresExclusiveFailed, irqtuner.IrqTuningError)
 			}
 		}
 	}
@@ -4162,6 +4306,7 @@ func (ic *IrqTuningController) setRPSForNics() error {
 	for _, nic := range ic.Nics {
 		if err := ic.setRPSForNic(nic); err != nil {
 			klog.Errorf("failed to setRPSForNic for nic %s, err %s", nic.NicInfo, err)
+			ic.emitErrMetric(irqtuner.SetRPSForNicFailed, irqtuner.IrqTuningError)
 		}
 	}
 
@@ -4196,6 +4341,7 @@ func (ic *IrqTuningController) clearRPSForNics() error {
 	for _, nic := range ic.Nics {
 		if err := ic.clearRPSForNic(nic); err != nil {
 			klog.Errorf("failed to clearRPSForNic for nic %s, err %s", nic.NicInfo, err)
+			ic.emitErrMetric(irqtuner.ClearRPSForNicFailed, irqtuner.IrqTuningError)
 		}
 	}
 
@@ -4308,12 +4454,14 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 	if time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
 		if err := ic.syncNics(); err != nil {
 			klog.Errorf("failed to syncNics, err %v", err)
+			ic.emitErrMetric(irqtuner.SyncNicFailed, irqtuner.IrqTuningFatal)
 			return
 		}
 	}
 
 	if err := ic.syncContainers(); err != nil {
 		klog.Errorf("failed to syncContainers, err %s", err)
+		ic.emitErrMetric(irqtuner.SyncContainersFailed, irqtuner.IrqTuningError)
 	}
 
 	// set each nic's IrqAffinityPolicy to IrqBalanceFair
@@ -4325,12 +4473,19 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 
 	if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
 		klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
+		ic.emitErrMetric(irqtuner.TuneIrqAffinityForAllNicsWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 	}
 
 	totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
 	if err != nil || len(totalIrqCores) > 0 {
+		if err != nil {
+			klog.Errorf("failed to getCurrentTotalExclusiveIrqCores, err %s", err)
+			ic.emitErrMetric(irqtuner.GetCurrentTotalExclusiveIrqCoresFailed, irqtuner.IrqTuningFatal)
+		}
+
 		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet()); err != nil {
 			klog.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
+			ic.emitErrMetric(irqtuner.SetExclusiveIRQCPUSetFailed, irqtuner.IrqTuningFatal)
 		}
 	}
 
@@ -4339,20 +4494,26 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 		if err := ic.setRPSForNics(); err != nil {
 			klog.Errorf("failed to setRPSForNics, err %s", err)
 		}
+
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningRPSEnabled, 1, metrics.MetricTypeNameRaw)
 	} else {
 		if err := ic.clearRPSForNics(); err != nil {
 			klog.Errorf("failed to clearRPSForNics, err %s", err)
 		}
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningRPSEnabled, 0, metrics.MetricTypeNameRaw)
 	}
 
 	// restore ksoftirqd default nice
 	if err := ic.adjustKsoftirqdsNice(); err != nil {
 		klog.Errorf("failed to adjustKsoftirqdsNice, err %s", err)
+		ic.emitErrMetric(irqtuner.AdjustKsoftirqdsNiceFailed, irqtuner.IrqTuningError)
 	}
 }
 
 func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	klog.Infof("periodic irq tuning for periodicTuningIrqCoresExclusive")
+
+	ic.emitExclusiveIrqCores()
 
 	defer func() {
 		// make sure IrqAffinityChanges was cleared after exit periodicTuningIrqCoresExclusive
@@ -4362,6 +4523,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	if time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
 		if err := ic.syncNics(); err != nil {
 			klog.Errorf("failed to syncNics, err %v", err)
+			ic.emitErrMetric(irqtuner.SyncNicFailed, irqtuner.IrqTuningFatal)
 			return
 		}
 	}
@@ -4393,8 +4555,11 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	oldStats, err := ic.updateIndicatorsStats()
 	if err != nil {
 		klog.Errorf("failed to updateIndicatorsStats, err %v", err)
+		ic.emitErrMetric(irqtuner.UpdateIndicatorsStatsFailed, irqtuner.IrqTuningFatal)
 		return
 	}
+
+	ic.emitNicsExclusiveIrqCoresCpuUsage(oldStats)
 
 	//////////////////////////////////////////
 	//[4] syncContainers for later possible irq cores selection, and specical containers process
@@ -4403,6 +4568,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	// after collect stats then syncContainers
 	if err := ic.syncContainers(); err != nil {
 		klog.Errorf("failed to syncContainers, err %v", err)
+		ic.emitErrMetric(irqtuner.SyncContainersFailed, irqtuner.IrqTuningError)
 		return
 	}
 
@@ -4454,6 +4620,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 
 	if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
 		klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
+		ic.emitErrMetric(irqtuner.TuneIrqAffinityForAllNicsWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -4485,6 +4652,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	/////////////////////////////////////////////////////////////
 	if err := ic.adjustKsoftirqdsNice(); err != nil {
 		klog.Errorf("failed to adjustKsoftirqdsNice, err %s", err)
+		ic.emitErrMetric(irqtuner.AdjustKsoftirqdsNiceFailed, irqtuner.IrqTuningError)
 	}
 
 	return
@@ -4521,8 +4689,11 @@ func (ic *IrqTuningController) periodicTuning() {
 
 	if !ic.conf.EnableIrqTuning {
 		ic.disableIrqTuning()
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 0, metrics.MetricTypeNameRaw)
 		return
 	}
+
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 1, metrics.MetricTypeNameRaw)
 
 	switch ic.conf.IrqTuningPolicy {
 	case config.IrqTuningIrqCoresExclusive:
@@ -4534,6 +4705,9 @@ func (ic *IrqTuningController) periodicTuning() {
 	default:
 		ic.periodicTuningIrqBalanceFair()
 	}
+
+	ic.emitIrqTuningPolicy()
+	ic.emitNicsIrqAffinityPolicy()
 }
 
 func (ic *IrqTuningController) Run(stopCh <-chan struct{}) {

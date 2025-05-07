@@ -214,7 +214,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	}
 
 	// TODO(KFX): ensure
-	irqTuner, err := irqtuingcontroller.NewIrqTuningController(conf.AgentConfiguration.DynamicAgentConfiguration, policyImplement)
+	irqTuner, err := irqtuingcontroller.NewIrqTuningController(conf.AgentConfiguration.DynamicAgentConfiguration, policyImplement, policyImplement.emitter)
 	if err != nil {
 		general.Errorf("failed to NewIrqTuningController, err %s", err)
 	} else {

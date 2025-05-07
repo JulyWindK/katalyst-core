@@ -1240,6 +1240,14 @@ func (n *NicBasicInfo) String() string {
 	}
 }
 
+func (n *NicBasicInfo) UniqName() string {
+	if n.NetNSName == "" {
+		return fmt.Sprintf("%s", n.Name)
+	} else {
+		return fmt.Sprintf("%s/%s", n.NetNSName, n.Name)
+	}
+}
+
 func (n *NicBasicInfo) Equal(other *NicBasicInfo) bool {
 	if other == nil {
 		return false
