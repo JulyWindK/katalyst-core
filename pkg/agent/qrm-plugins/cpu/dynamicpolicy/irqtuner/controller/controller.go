@@ -2190,6 +2190,61 @@ func (ic *IrqTuningController) TuneIrqAffinityForAllNicsWithBalanceFairPolicy() 
 	return nil
 }
 
+func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
+	initTuning := false
+	for _, nic := range ic.Nics {
+		if nic.IrqAffinityPolicy == InitTuning {
+			initTuning = true
+			break
+		}
+	}
+
+	if !initTuning {
+		return
+	}
+
+	totalExclusiveIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
+	if err != nil {
+		klog.Errorf("failed to getCurrentTotalExclusiveIrqCores, err %s", err)
+		return
+	}
+
+	if len(totalExclusiveIrqCores) == 0 {
+		return
+	}
+
+	for _, nic := range ic.Nics {
+		if nic.IrqAffinityPolicy != InitTuning {
+			continue
+		}
+
+		nicIrqCores := nic.NicInfo.getIrqCores()
+		var nicExclusiveIrqCores []int64
+		for _, core := range nicIrqCores {
+			for _, c := range totalExclusiveIrqCores {
+				if c == core {
+					nicExclusiveIrqCores = append(nicExclusiveIrqCores, core)
+					break
+				}
+			}
+		}
+
+		if len(nicExclusiveIrqCores) == 0 {
+			nic.IrqAffinityPolicy = IrqBalanceFair
+			continue
+		}
+
+		if len(nicExclusiveIrqCores) < len(nicIrqCores) {
+			// set nic irq affinity policy to IrqCoresExclusive here, then this nic's exclusive irq cores will be released in fallbackToBalanceFairPolicyByError
+			nic.IrqAffinityPolicy = IrqCoresExclusive
+			err := fmt.Errorf("nic %s irq cores count %d, exclusive irq cores count %d", nic.NicInfo, len(nicIrqCores), len(nicExclusiveIrqCores))
+			ic.fallbackToBalanceFairPolicyByError(nic, err)
+		} else {
+			nic.IrqAffinityPolicy = IrqCoresExclusive
+		}
+	}
+}
+
 // We can evaluate each nic's each irq core's load only when this nic no overlapped irq cores with other nics,
 // note that the "nic" mentioned here refers to the logical nic, later will explain what the logical nic is.
 // Theoretically, there is a possibility that ic.Nics have overlapped irq cores only when irq-tuning manager first initialize.
@@ -4387,6 +4442,11 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 		// wait a while to settle down the net-rx softirq usage
 		time.Sleep(time.Minute)
 	}
+
+	//////////////////////////////////////////////////////////////////////////////////////////////////
+	// [1] after katatalyst qrm restart, restore nics's original IrqCoresExclusive irq affinity policy
+	//////////////////////////////////////////////////////////////////////////////////////////////////
+	ic.restoreNicsOriginalIrqCoresExclusivePolicy()
 
 	////////////////////////////////////////////////////////
 	// [1] make sure two nic's has no overlapped irq cores before collect indicators stats in machine with two sockets.
