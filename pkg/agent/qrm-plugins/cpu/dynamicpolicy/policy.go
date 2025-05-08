@@ -104,8 +104,7 @@ type DynamicPolicy struct {
 	cpuPressureEviction       agent.Component
 	cpuPressureEvictionCancel context.CancelFunc
 
-	irqTuner       irqtuner.Tuner
-	enableIRQTuner bool
+	irqTuner irqtuner.Tuner
 
 	// those are parsed from configurations
 	// todo if we want to use dynamic configuration, we'd better not use self-defined conf
@@ -215,11 +214,6 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 
 	// TODO(KFX): ensure
 	policyImplement.irqTuner = tuner.NewIRQTunerStub(conf, policyImplement)
-	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
-		if dc.IRQTuningConfiguration != nil {
-			policyImplement.enableIRQTuner = dc.IRQTuningConfiguration.EnableTuner
-		}
-	}
 
 	// register allocation behaviors for pods with different QoS level
 	policyImplement.allocationHandlers = map[string]util.AllocationHandler{
@@ -249,11 +243,8 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initReclaimPool failed with error: %v", err)
 	}
 
-	// TODO: ensure
-	if policyImplement.enableIRQTuner {
-		if err := policyImplement.initInterruptPool(); err != nil {
-			return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initInterruptPool failed with error: %v", err)
-		}
+	if err := policyImplement.initInterruptPool(); err != nil {
+		return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initInterruptPool failed with error: %v", err)
 	}
 
 	err = agentCtx.MetaServer.ConfigurationManager.AddConfigWatcher(crd.AdminQoSConfigurationGVR)
@@ -374,7 +365,7 @@ func (p *DynamicPolicy) Start() (err error) {
 	}
 	go p.advisorMonitor.Run(p.stopCh)
 
-	if p.enableIRQTuner {
+	if p.irqTuner != nil {
 		go p.irqTuner.Run(p.stopCh)
 	}
 
