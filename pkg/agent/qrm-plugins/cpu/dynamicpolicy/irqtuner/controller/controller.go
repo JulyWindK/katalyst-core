@@ -1108,30 +1108,32 @@ func (ic *IrqTuningController) emitNicsExclusiveIrqCoresCpuUsage(oldIndicatorsSt
 		// sort irq cores cpu util by irq util in deceasing order
 		sortCpuUtilSliceByIrqUtilInDecOrder(cpuUtils)
 
+		nicName := nic.NicInfo.UniqName()
+
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilAvg, int64(cpuUtilAvg.IrqUtil), metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+			metrics.MetricTag{Key: "nic", Val: nicName})
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilMax, int64(cpuUtils[0].IrqUtil), metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+			metrics.MetricTag{Key: "nic", Val: nicName})
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilMin, int64(cpuUtils[len(cpuUtils)-1].IrqUtil), metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+			metrics.MetricTag{Key: "nic", Val: nicName})
 
 		irqCoresIrqUsage := float64(len(irqCores)) * float64(cpuUtilAvg.IrqUtil) / 100
 		_ = ic.emitter.StoreFloat64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresIrqUsage, irqCoresIrqUsage, metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+			metrics.MetricTag{Key: "nic", Val: nicName})
 
 		// sort irq cores cpu util by active util in deceasing order
 		sortCpuUtilSliceByActiveUtilInDecOrder(cpuUtils)
 
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresCpuUtilAvg, int64(cpuUtilAvg.ActiveUtil), metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+			metrics.MetricTag{Key: "nic", Val: nicName})
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresCpuUtilMax, int64(cpuUtils[0].ActiveUtil), metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+			metrics.MetricTag{Key: "nic", Val: nicName})
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresCpuUtilMin, int64(cpuUtils[len(cpuUtils)-1].ActiveUtil), metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+			metrics.MetricTag{Key: "nic", Val: nicName})
 
 		irqCoresCpuUsage := float64(len(irqCores)) * float64(cpuUtilAvg.ActiveUtil) / 100
 		_ = ic.emitter.StoreFloat64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCoresCpuUsage, irqCoresCpuUsage, metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+			metrics.MetricTag{Key: "nic", Val: nicName})
 	}
 }
 
