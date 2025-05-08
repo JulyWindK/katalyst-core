@@ -42,14 +42,12 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/calculator"
 	advisorapi "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpuadvisor"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpueviction"
-	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/cpueviction/strategy"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/tuner"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/state"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/validator"
 	cpuutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/util"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
-	"github.com/kubewharf/katalyst-core/pkg/agent/utilcomponent/featuregatenegotiation"
 	"github.com/kubewharf/katalyst-core/pkg/agent/utilcomponent/periodicalhandler"
 	"github.com/kubewharf/katalyst-core/pkg/config"
 	dynamicconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
@@ -107,8 +105,7 @@ type DynamicPolicy struct {
 	cpuPressureEviction       agent.Component
 	cpuPressureEvictionCancel context.CancelFunc
 
-	irqTuner       irqtuner.Tuner
-	enableIRQTuner bool
+	irqTuner irqtuner.Tuner
 
 	// those are parsed from configurations
 	// todo if we want to use dynamic configuration, we'd better not use self-defined conf
@@ -227,11 +224,6 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 
 	// TODO(KFX): ensure
 	policyImplement.irqTuner = tuner.NewIRQTunerStub(conf, policyImplement)
-	if dc := conf.AgentConfiguration.DynamicAgentConfiguration.GetDynamicConfiguration(); dc != nil {
-		if dc.IRQTuningConfiguration != nil {
-			policyImplement.enableIRQTuner = dc.IRQTuningConfiguration.EnableTuner
-		}
-	}
 
 	// register allocation behaviors for pods with different QoS level
 	policyImplement.allocationHandlers = map[string]util.AllocationHandler{
@@ -261,16 +253,13 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initReclaimPool failed with error: %v", err)
 	}
 
+	if err := policyImplement.initInterruptPool(); err != nil {
+		return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initInterruptPool failed with error: %v", err)
+	}
+
 	numaNodes := policyImplement.machineInfo.CPUDetails.NUMANodes().ToSliceInt()
 	for _, numaID := range numaNodes {
 		policyImplement.numaMetrics[numaID] = make(strategy.SubEntries)
-	}
-
-	// TODO: ensure
-	if policyImplement.enableIRQTuner {
-		if err := policyImplement.initInterruptPool(); err != nil {
-			return false, agent.ComponentStub{}, fmt.Errorf("dynamic policy initInterruptPool failed with error: %v", err)
-		}
 	}
 
 	err = agentCtx.MetaServer.ConfigurationManager.AddConfigWatcher(crd.AdminQoSConfigurationGVR)
@@ -327,7 +316,7 @@ func (p *DynamicPolicy) Start() (err error) {
 
 	p.stopCh = make(chan struct{})
 
-	if p.enableIRQTuner {
+	if p.irqTuner != nil {
 		go p.irqTuner.Run(p.stopCh)
 	}
 
@@ -399,7 +388,6 @@ func (p *DynamicPolicy) Start() (err error) {
 		return
 	}
 	go p.advisorMonitor.Run(p.stopCh)
-
 	go wait.BackoffUntil(func() { p.serveForAdvisor(p.stopCh) }, wait.NewExponentialBackoffManager(
 		800*time.Millisecond, 30*time.Second, 2*time.Minute, 2.0, 0, &clock.RealClock{}), true, p.stopCh)
 
