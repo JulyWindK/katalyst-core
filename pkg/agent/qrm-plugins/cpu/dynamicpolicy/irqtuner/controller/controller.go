@@ -3328,6 +3328,9 @@ func (ic *IrqTuningController) balanceIrqLoadBasedOnIrqUtil(nic *NicIrqTuningMan
 				needToIncIrqCores = true
 				break
 			}
+		} else {
+			// reset IrqLoadBalancePingPongCount if non-pingpong irq balance happened
+			nic.TuningRecords.IrqLoadBalancePingPongCount = 0
 		}
 
 		irqTunings, err := ic.balanceIrqs(nic, srcIrqCore, cpuUtils[dstIrqCoreIndex], lbConf.Thresholds.IrqCoreCpuUtilGapThresh, lbConf.IrqsTunedNumMaxEachTime, oldIndicatorsStats)
@@ -3348,9 +3351,6 @@ func (ic *IrqTuningController) balanceIrqLoadBasedOnIrqUtil(nic *NicIrqTuningMan
 
 		hasIrqsBalanced = true
 		dstIrqCoreIndex--
-
-		// reset IrqLoadBalancePingPongCount after succeed to balance irq
-		nic.TuningRecords.IrqLoadBalancePingPongCount = 0
 
 		for irq, irqTune := range irqTunings {
 			newLoadBalance.SourceCores = append(newLoadBalance.SourceCores, irqTune.SourceCore)
