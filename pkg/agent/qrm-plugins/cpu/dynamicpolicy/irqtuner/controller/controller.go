@@ -4451,6 +4451,10 @@ func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 	klog.Infof("periodic irq tuning for periodicTuningIrqBalanceFair")
 
+	if ic.IndicatorsStats != nil {
+		ic.IndicatorsStats = nil
+	}
+
 	if time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
 		if err := ic.syncNics(); err != nil {
 			klog.Errorf("failed to syncNics, err %v", err)
@@ -4659,6 +4663,10 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 }
 
 func (ic *IrqTuningController) disableIrqTuning() {
+	if ic.IndicatorsStats != nil {
+		ic.IndicatorsStats = nil
+	}
+
 	// set each nic's IrqAffinityPolicy to IrqBalanceFair
 	for _, nic := range ic.Nics {
 		if nic.IrqAffinityPolicy != IrqBalanceFair {
