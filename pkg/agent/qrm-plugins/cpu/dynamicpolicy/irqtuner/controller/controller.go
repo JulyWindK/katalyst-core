@@ -1292,6 +1292,8 @@ func (ic *IrqTuningController) syncNics() error {
 
 	klog.Infof("%s nics changed", IrqTuningLogPrefix)
 
+	ic.IndicatorsStats = nil
+
 	// if any nics changes happened, it's the simplest way to recalculate sockets assignment for nics's irq affinity and re-new
 	// all nics's controller, regardless of unchanged nics's current configuration about irq affinity and assigned sockets,
 	// just like katalyst restart.
