@@ -66,7 +66,7 @@ const (
 	MetricNameIrqTuningNicIrqAffinityPolicy           = "irq_tuning_nic_irq_affinity_policy"
 	MetricNameIrqTuningNicExclusiveIrqCores           = "irq_tuning_nic_exclusive_irq_cores"
 	MetricNameIrqTuningTotalExclusiveIrqCores         = "irq_tuning_total_exclusive_irq_cores"
-	MetricNameIrqTuningNicIrqLoadBalance              = "irq_tuning_Nic_irq_load_balance"
+	MetricNameIrqTuningNicIrqLoadBalance              = "irq_tuning_nic_irq_load_balance"
 	MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilAvg = "irq_tuning_nic_exclusive_irq_cores_irq_util_avg"
 	MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilMax = "irq_tuning_nic_exclusive_irq_cores_irq_util_Max"
 	MetricNameIrqTuningNicExclusiveIrqCoresIrqUtilMin = "irq_tuning_nic_exclusive_irq_cores_irq_util_Min"
