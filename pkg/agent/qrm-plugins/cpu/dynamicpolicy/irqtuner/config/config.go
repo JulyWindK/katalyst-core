@@ -249,8 +249,7 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 
 			if dynCoresAdjustConf.IncConf != nil {
 				conf.IrqCoresAdjustConf.IrqCoresIncConf.SuccessiveIncInterval = dynCoresAdjustConf.IncConf.SuccessiveIncInterval
-				// later will change FullScaleFactor to CpuFullThresh
-				conf.IrqCoresAdjustConf.IrqCoresIncConf.IrqCoresCpuFullThresh = int(dynCoresAdjustConf.IncConf.FullScaleFactor)
+				conf.IrqCoresAdjustConf.IrqCoresIncConf.IrqCoresCpuFullThresh = dynCoresAdjustConf.IncConf.FullThresh
 				if dynCoresAdjustConf.IncConf.Thresholds != nil {
 					conf.IrqCoresAdjustConf.IrqCoresIncConf.Thresholds.IrqCoresAvgCpuUtilThresh = dynCoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh
 				}
