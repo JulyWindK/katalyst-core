@@ -49,6 +49,7 @@ type CPUTopology struct {
 	NumNUMANodes         int
 	NUMANodeIDToSocketID map[int]int
 	CPUDetails           CPUDetails
+	CPUInfo              *CPUInfo
 }
 
 type MemoryDetails map[int]uint64

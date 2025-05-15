@@ -137,7 +137,7 @@ func sortCpuUtilSliceByActiveUtilInDecOrder(x []*CPUUtil) {
 // return value:
 // map[int64]*CPUUtil: cpu level util, cpu id as may key
 // *CPUUtil: average cpu util
-func calculateCpuUtils(oldCpuStats, newCpuStats map[int64]*irqutil.CPUStat, cpus []int64) ([]*CPUUtil, *CPUUtil) {
+func calculateCpuUtils(oldCpuStats, newCpuStats map[int64]*machine.CPUStat, cpus []int64) ([]*CPUUtil, *CPUUtil) {
 	var cpuUtils []*CPUUtil
 
 	var allCpuIrqTimeDiff uint64
@@ -324,7 +324,7 @@ type NicStats struct {
 // but it can serve as a reference.
 type IndicatorsStats struct {
 	NicStats           map[int]*NicStats              // nic ifindex as map key
-	CPUStats           map[int64]*irqutil.CPUStat     // core id as map key
+	CPUStats           map[int64]*machine.CPUStat     // core id as map key
 	SoftNetStats       map[int64]*irqutil.SoftNetStat // core id as map key
 	KsoftirqdSchedWait map[int]uint64
 	NetRxSoftirqCount  map[int64]uint64 // cpu id as map key, only care net rx softirq counts on irq cores
@@ -387,7 +387,7 @@ type IrqTuningController struct {
 	dynamicConfHolder    *dynconfig.DynamicAgentConfiguration
 	conf                 *config.IrqTuningConfig
 	emitter              metrics.MetricEmitter
-	CPUInfo              *irqutil.CPUInfo
+	CPUInfo              *machine.CPUInfo
 	Ksoftirqds           map[int64]int // cpuid as map key, ksoftirqd pid as value
 	IrqStateAdapter      irqtuner.StateAdapter
 	Containers           map[string]*ContainerInfoWrapper // container id as map key
@@ -419,7 +419,7 @@ func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *irqutil.NicBasicI
 	}, nil
 }
 
-func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*irqutil.NicBasicInfo, cpuInfo *irqutil.CPUInfo) ([]*NicIrqTuningManager, error) {
+func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*irqutil.NicBasicInfo, cpuInfo *machine.CPUInfo) ([]*NicIrqTuningManager, error) {
 	nicIrqsAffSockets, err := AssignSocketsForNics(nics, cpuInfo, conf.NicAffinitySocketsPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
@@ -474,24 +474,18 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*irqutil.NicBa
 	return nicManagers, nil
 }
 
-func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter) (*IrqTuningController, error) {
+func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter, machineInfo *machine.KatalystMachineInfo) (*IrqTuningController, error) {
 	if isIrqBalanceNGServiceRuning() {
 		return nil, fmt.Errorf("irqbalance-ng service is running")
 	}
 
 	conf := config.ConvertDynamicConfigToIrqTuningConfig(dynamicConfHolder.GetDynamicConfiguration())
 
-	cpuInfo, err := irqutil.GetCPUInfoWithTopo()
-	if err != nil {
-		return nil, fmt.Errorf("failed to GetCPUInfoWithTopo, err %v", err)
-	}
+	//cpuInfo, err := machine.GetCPUInfoWithTopo()
+	cpuInfo := machineInfo.CPUTopology.CPUInfo
 
 	if len(cpuInfo.Sockets) == 0 {
 		return nil, fmt.Errorf("invalid cpuinfo with 0 socket")
-	}
-
-	if len(cpuInfo.Sockets) > 2 {
-		return nil, fmt.Errorf("invalid cpuinfo has %d sockets", len(cpuInfo.Sockets))
 	}
 
 	ksoftirqds, err := util.ListKsoftirqdProcesses()
@@ -583,7 +577,7 @@ func getSocketIrqCores(irq2Core map[int]int64) (map[int][]int64, error) {
 		}
 		coresMap[core] = nil
 
-		socketID, err := irqutil.GetCPUPackageID(core)
+		socketID, err := machine.GetCPUPackageID(core)
 		if err != nil {
 			return nil, fmt.Errorf("failed to GetCPUPackageID(%d), err %v", core, err)
 		}
@@ -791,7 +785,7 @@ func listActiveUplinkNicsExcludeSriovVFs() ([]*irqutil.NicBasicInfo, error) {
 }
 
 // map[int]int : nic ifindex as map key, nic irqs should affinitied socket slice as value
-func AssignSocketsForNicIrqsForOverallNicsBalance(nics []*irqutil.NicBasicInfo, cpuInfo *irqutil.CPUInfo) (map[int][]int, error) {
+func AssignSocketsForNicIrqsForOverallNicsBalance(nics []*irqutil.NicBasicInfo, cpuInfo *machine.CPUInfo) (map[int][]int, error) {
 	ifIndex2Sockets := make(map[int][]int)
 
 	if len(nics) == 0 {
@@ -859,7 +853,7 @@ func AssignSocketsForNicIrqsForOverallNicsBalance(nics []*irqutil.NicBasicInfo, 
 	return ifIndex2Sockets, nil
 }
 
-func AssignSocketsForNics(nics []*irqutil.NicBasicInfo, cpuInfo *irqutil.CPUInfo, nicAffinitySocketsPolicy config.NicAffinitySocketsPolicy) (map[int][]int, error) {
+func AssignSocketsForNics(nics []*irqutil.NicBasicInfo, cpuInfo *machine.CPUInfo, nicAffinitySocketsPolicy config.NicAffinitySocketsPolicy) (map[int][]int, error) {
 	ifIndex2Sockets := make(map[int][]int)
 
 	switch nicAffinitySocketsPolicy {
@@ -1162,7 +1156,7 @@ func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error
 		nicStats[nic.NicInfo.IfIndex] = stats
 	}
 
-	cpuStats, err := irqutil.CollectCpuStats()
+	cpuStats, err := machine.CollectCpuStats()
 	if err != nil {
 		return nil, fmt.Errorf("failed to CollectCpuStats, err %v", err)
 	}
@@ -1525,12 +1519,12 @@ func (ic *IrqTuningController) getNumaQualifiedCoresMapForBalanceFairPolicy(numa
 	return ic.getQualifiedCoresMap(cpuList, ic.getUnqualifiedCoresMapForBalanceFairPolicy())
 }
 
-func (ic *IrqTuningController) getCCDQualifiedCoresMapForBalanceFairPolicy(ccd *irqutil.LLCDomain) map[int64]interface{} {
-	cpuList := irqutil.GetLLCDomainCPUList(ccd)
+func (ic *IrqTuningController) getCCDQualifiedCoresMapForBalanceFairPolicy(ccd *machine.LLCDomain) map[int64]interface{} {
+	cpuList := machine.GetLLCDomainCPUList(ccd)
 	return ic.getQualifiedCoresMap(cpuList, ic.getUnqualifiedCoresMapForBalanceFairPolicy())
 }
 
-func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int) []*irqutil.LLCDomain {
+func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int) []*machine.LLCDomain {
 	unqualifiedCoresMap := ic.getUnqualifiedCoresMapForBalanceFairPolicy()
 
 	ccds, err := ic.CPUInfo.GetAMDNumaCCDs(numa)
@@ -1539,9 +1533,9 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 		return nil
 	}
 
-	var qualifiedCCDs []*irqutil.LLCDomain
+	var qualifiedCCDs []*machine.LLCDomain
 	for _, ccd := range ccds {
-		ccdCPUList := irqutil.GetLLCDomainCPUList(ccd)
+		ccdCPUList := machine.GetLLCDomainCPUList(ccd)
 		qualified := true
 		for _, cpu := range ccdCPUList {
 			// if ccd has at least one cpu is unqualified, then this ccd is unqualified
@@ -1615,7 +1609,7 @@ func (ic *IrqTuningController) selectPhysicalCoreWithLeastOrMostIrqs(coreIrqsCou
 		return 0, fmt.Errorf("qualifiedCoresMap length is zero")
 	}
 
-	var phyCores []irqutil.PhyCore
+	var phyCores []machine.PhyCore
 	for socketID, _ := range ic.CPUInfo.Sockets {
 		socketPhyCores := ic.CPUInfo.GetSocketPhysicalCores(socketID)
 		phyCores = append(phyCores, socketPhyCores...)
@@ -1919,7 +1913,7 @@ retry:
 	return nil
 }
 
-func (ic *IrqTuningController) tuneNicIrqsAffinityCCDsFairly(nic *NicInfo, irqs []int, ccds []*irqutil.LLCDomain) error {
+func (ic *IrqTuningController) tuneNicIrqsAffinityCCDsFairly(nic *NicInfo, irqs []int, ccds []*machine.LLCDomain) error {
 	avgCCDIrqCount := len(irqs) / len(ccds)
 	remainder := len(irqs) % len(ccds)
 
@@ -2178,7 +2172,7 @@ func (ic *IrqTuningController) balanceNicIrqsInCCDFairly(nic *NicInfo, assingedS
 	for _, socket := range assingedSockets {
 		for numaID, amdNuma := range ic.CPUInfo.Sockets[socket].AMDNumas {
 			for _, ccd := range amdNuma.CCDs {
-				ccdAffinitiedIrqs := nic.filterCoresAffinitiedIrqs(irqutil.GetLLCDomainCPUList(ccd))
+				ccdAffinitiedIrqs := nic.filterCoresAffinitiedIrqs(machine.GetLLCDomainCPUList(ccd))
 				if len(ccdAffinitiedIrqs) == 0 {
 					continue
 				}
@@ -2817,7 +2811,7 @@ func (ic *IrqTuningController) selectExclusiveIrqCoresFromNuma(irqCoresNum int, 
 		return nil, fmt.Errorf("irqCoresNum %d less-equal 0", irqCoresNum)
 	}
 
-	var phyCores []irqutil.PhyCore
+	var phyCores []machine.PhyCore
 	if ic.CPUInfo.CPUVendor == cpuid.AMD {
 		numa, ok := socket.AMDNumas[numaID]
 		if !ok {
@@ -4255,7 +4249,7 @@ func (ic *IrqTuningController) setRPSInCCDForNic(nic *NicIrqTuningManager, assin
 	for _, socket := range assingedSockets {
 		for numaID, amdNuma := range ic.CPUInfo.Sockets[socket].AMDNumas {
 			for _, ccd := range amdNuma.CCDs {
-				ccdCoresList := irqutil.GetLLCDomainCPUList(ccd)
+				ccdCoresList := machine.GetLLCDomainCPUList(ccd)
 				ccdAffinitiedQueues := nic.NicInfo.filterCoresAffinitiedQueues(ccdCoresList)
 				if len(ccdAffinitiedQueues) == 0 {
 					continue
