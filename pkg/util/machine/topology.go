@@ -425,21 +425,17 @@ func (d CPUDetails) CPUsInCores(ids ...int) CPUSet {
 	return b
 }
 
-// Discover returns CPUTopology based on cadvisor node info
-func Discover(machineInfo *info.MachineInfo) (*CPUTopology, *MemoryTopology, error) {
+// ExtractCPUTopologyFromMachineInfo returns CPUTopology based on cadvisor node info
+func ExtractCPUTopologyFromMachineInfo(machineInfo *info.MachineInfo) (*CPUTopology, error) {
 	if machineInfo.NumCores == 0 {
-		return nil, nil, fmt.Errorf("could not detect number of cpus")
+		return nil, fmt.Errorf("could not detect number of cpus")
 	}
 
 	CPUDetails := CPUDetails{}
 	numaNodeIDToSocketID := make(map[int]int, len(machineInfo.Topology))
 	numPhysicalCores := 0
 
-	memoryTopology := MemoryTopology{MemoryDetails: map[int]uint64{}}
-
 	for _, node := range machineInfo.Topology {
-		memoryTopology.MemoryDetails[node.Id] = node.Memory
-
 		numPhysicalCores += len(node.Cores)
 		for _, core := range node.Cores {
 			if coreID, err := getUniqueCoreID(core.Threads); err == nil {
@@ -455,7 +451,7 @@ func Discover(machineInfo *info.MachineInfo) (*CPUTopology, *MemoryTopology, err
 			} else {
 				klog.ErrorS(nil, "Could not get unique coreID for socket",
 					"socket", core.SocketID, "core", core.Id, "threads", core.Threads)
-				return nil, nil, err
+				return nil, err
 			}
 		}
 	}
@@ -467,7 +463,33 @@ func Discover(machineInfo *info.MachineInfo) (*CPUTopology, *MemoryTopology, err
 		NumNUMANodes:         CPUDetails.NUMANodes().Size(),
 		NUMANodeIDToSocketID: numaNodeIDToSocketID,
 		CPUDetails:           CPUDetails,
-	}, &memoryTopology, nil
+	}, nil
+}
+
+func ConstructCPUTopology(machineInfo *info.MachineInfo) (*CPUTopology, error) {
+	cpuTopo, err := ExtractCPUTopologyFromMachineInfo(machineInfo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ExtractCPUTopologyFromMachineInfo, err %s", err)
+	}
+
+	cpuInfo, err := GetCPUInfoWithTopo()
+	if err != nil {
+		return nil, fmt.Errorf("failed to GetCPUInfoWithTopo, err %s", err)
+	}
+
+	cpuTopo.CPUInfo = cpuInfo
+	return cpuTopo, nil
+}
+
+// ExtractMemoryTopologyFromMachineInfo returns MemoryTopology based on cadvisor node info
+func ExtractMemoryTopologyFromMachineInfo(machineInfo *info.MachineInfo) *MemoryTopology {
+	memoryTopology := MemoryTopology{MemoryDetails: map[int]uint64{}}
+
+	for _, node := range machineInfo.Topology {
+		memoryTopology.MemoryDetails[node.Id] = node.Memory
+	}
+
+	return &memoryTopology
 }
 
 // getUniqueCoreID computes coreId as the lowest cpuID

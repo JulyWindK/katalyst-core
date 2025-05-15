@@ -38,10 +38,12 @@ func GetKatalystMachineInfo(conf *global.MachineInfoConfiguration) (*KatalystMac
 		return nil, err
 	}
 
-	cpuTopology, memoryTopology, err := Discover(machineInfo)
+	cpuTopology, err := ConstructCPUTopology(machineInfo)
 	if err != nil {
 		return nil, err
 	}
+
+	memoryTopology := ExtractMemoryTopologyFromMachineInfo(machineInfo)
 
 	extraCPUInfo, err := GetExtraCPUInfo()
 	if err != nil {
