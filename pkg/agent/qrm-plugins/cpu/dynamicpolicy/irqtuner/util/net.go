@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/kubewharf/katalyst-core/pkg/util"
 	"github.com/safchain/ethtool"
 	"github.com/vishvananda/netns"
 	"k8s.io/klog/v2"
@@ -92,7 +93,7 @@ func SetIrqAffinityCPUs(irq int, cpus []int64) error {
 	}
 
 	smpAffinityListPath := path.Join(irqProcDir, "smp_affinity_list")
-	cpuListStr := ConvertLinuxListToString(cpus)
+	cpuListStr := util.ConvertLinuxListToString(cpus)
 
 	if err := os.WriteFile(smpAffinityListPath, []byte(cpuListStr), 0644); err != nil {
 		return fmt.Errorf("failed to write %s to %s, err %v", cpuListStr, smpAffinityListPath, err)
@@ -133,7 +134,7 @@ func GetIrqAffinityCPUs(irq int) ([]int64, error) {
 	}
 
 	smpAffinityListPath := path.Join(irqProcDir, "smp_affinity_list")
-	cpuList, err := ParseLinuxListFormatFromFile(smpAffinityListPath)
+	cpuList, err := util.ParseLinuxListFormatFromFile(smpAffinityListPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ParseLinuxListFormatFromFile(%s), err %v", smpAffinityListPath, err)
 	}
@@ -167,7 +168,7 @@ func setNicRxQueueRPS(nic *NicBasicInfo, queue int, rpsConf string) error {
 
 func SetNicRxQueueRPS(nic *NicBasicInfo, queue int, destCpus []int64) error {
 	// calculate rps
-	rpsConf, _ := ConvertIntSliceToBitmapString(destCpus)
+	rpsConf, _ := util.ConvertIntSliceToBitmapString(destCpus)
 
 	return setNicRxQueueRPS(nic, queue, rpsConf)
 }
@@ -725,9 +726,9 @@ func ListBondNetDevSlaves(nicSysPath string) ([]string, error) {
 }
 
 func ListNetNS() ([]NetNSInfo, error) {
-	hostNetNSInode, err := GetProcessNameSpaceInode(1, NetNS)
+	hostNetNSInode, err := util.GetProcessNameSpaceInode(1, util.NetNS)
 	if err != nil {
-		return nil, fmt.Errorf("failed to GetProcessNameSpaceInode(1, %s), err %v", NetNS, err)
+		return nil, fmt.Errorf("failed to GetProcessNameSpaceInode(1, %s), err %v", util.NetNS, err)
 	}
 
 	nsList := []NetNSInfo{
@@ -748,7 +749,7 @@ func ListNetNS() ([]NetNSInfo, error) {
 	for _, d := range dirEnts {
 		if !d.IsDir() {
 			netnsPath := filepath.Join(NetNSRunDir, d.Name())
-			inode, err := GetFileInode(netnsPath)
+			inode, err := util.GetFileInode(netnsPath)
 			if err != nil {
 				return nil, fmt.Errorf("failed to GetFileInode(%s), err %v", netnsPath, err)
 			}
@@ -1076,7 +1077,7 @@ func GetNetDevRxPackets(netns string, nicName string) (uint64, error) {
 
 	sysRxPacketsFile := filepath.Join(nsc.sysMountDir, ClassNetBasePath, nicName, "statistics/rx_packets")
 	if _, err := os.Stat(sysRxPacketsFile); err == nil {
-		rxPacket, err := ReadUint64FromFile(sysRxPacketsFile)
+		rxPacket, err := util.ReadUint64FromFile(sysRxPacketsFile)
 		if err == nil {
 			return rxPacket, nil
 
@@ -1087,7 +1088,7 @@ func GetNetDevRxPackets(netns string, nicName string) (uint64, error) {
 	}
 
 	// read rx packets from /proc/net/dev
-	lines, err := ReadLines(NetDevProcFile)
+	lines, err := util.ReadLines(NetDevProcFile)
 	if err != nil {
 		return 0, fmt.Errorf("failed to ReadLines(%s), err %v", NetDevProcFile, err)
 	}
@@ -1295,7 +1296,7 @@ func (n *NicBasicInfo) Equal(other *NicBasicInfo) bool {
 }
 
 func CollectSoftNetStats(onlineCpus map[int64]bool) (map[int64]*SoftNetStat, error) {
-	lines, err := ReadLines(SoftnetStatFile)
+	lines, err := util.ReadLines(SoftnetStatFile)
 	if err != nil {
 		return nil, err
 	}
@@ -1350,7 +1351,7 @@ func CollectSoftNetStats(onlineCpus map[int64]bool) (map[int64]*SoftNetStat, err
 }
 
 func CollectNetRxSoftirqStats() (map[int64]uint64, error) {
-	lines, err := ReadLines(SoftIrqsFile)
+	lines, err := util.ReadLines(SoftIrqsFile)
 	if err != nil {
 		return nil, err
 	}
