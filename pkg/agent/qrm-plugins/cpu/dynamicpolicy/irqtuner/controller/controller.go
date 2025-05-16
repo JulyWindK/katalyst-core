@@ -481,7 +481,6 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 
 	conf := config.ConvertDynamicConfigToIrqTuningConfig(dynamicConfHolder.GetDynamicConfiguration())
 
-	//cpuInfo, err := machine.GetCPUInfoWithTopo()
 	cpuInfo := machineInfo.CPUTopology.CPUInfo
 
 	if len(cpuInfo.Sockets) == 0 {

@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/kubewharf/katalyst-core/pkg/util"
+	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"github.com/safchain/ethtool"
 	"github.com/vishvananda/netns"
 	"k8s.io/klog/v2"
@@ -654,7 +655,7 @@ func GetNicBindedSocket(nicSysPath string) (int, error) {
 		return UnknownSocketBind, nil
 	}
 
-	socketID, err := GetNumaPackageID(numa)
+	socketID, err := machine.GetNumaPackageID(numa)
 	if err != nil {
 		return UnknownSocketBind, err
 	}
