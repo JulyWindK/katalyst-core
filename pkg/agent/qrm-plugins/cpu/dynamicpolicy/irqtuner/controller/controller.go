@@ -14,7 +14,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/config"
 	irqutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/util"
 	metricUtil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
-	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
+	"github.com/kubewharf/katalyst-core/pkg/config/agent"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
 	util "github.com/kubewharf/katalyst-core/pkg/util"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
@@ -384,7 +384,7 @@ type ContainerInfoWrapper struct {
 }
 
 type IrqTuningController struct {
-	dynamicConfHolder    *dynconfig.DynamicAgentConfiguration
+	agentConf            *agent.AgentConfiguration
 	conf                 *config.IrqTuningConfig
 	emitter              metrics.MetricEmitter
 	CPUInfo              *machine.CPUInfo
@@ -474,12 +474,12 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*irqutil.NicBa
 	return nicManagers, nil
 }
 
-func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter, machineInfo *machine.KatalystMachineInfo) (*IrqTuningController, error) {
+func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter, machineInfo *machine.KatalystMachineInfo) (*IrqTuningController, error) {
 	if isIrqBalanceNGServiceRuning() {
 		return nil, fmt.Errorf("irqbalance-ng service is running")
 	}
 
-	conf := config.ConvertDynamicConfigToIrqTuningConfig(dynamicConfHolder.GetDynamicConfiguration())
+	conf := config.ConvertDynamicConfigToIrqTuningConfig(agentConf.DynamicAgentConfiguration.GetDynamicConfiguration())
 
 	cpuInfo := machineInfo.CPUTopology.CPUInfo
 
@@ -498,7 +498,7 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 		}
 	}
 
-	nics, err := listActiveUplinkNicsExcludeSriovVFs()
+	nics, err := listActiveUplinkNicsExcludeSriovVFs(agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +509,7 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 	}
 
 	controller := &IrqTuningController{
-		dynamicConfHolder:  dynamicConfHolder,
+		agentConf:          agentConf,
 		conf:               conf,
 		emitter:            emitter,
 		CPUInfo:            cpuInfo,
@@ -755,8 +755,8 @@ func (n *NicInfo) sync() error {
 	return nil
 }
 
-func listActiveUplinkNicsExcludeSriovVFs() ([]*irqutil.NicBasicInfo, error) {
-	nics, err := irqutil.ListActiveUplinkNics()
+func listActiveUplinkNicsExcludeSriovVFs(netNSDir string) ([]*irqutil.NicBasicInfo, error) {
+	nics, err := irqutil.ListActiveUplinkNics(netNSDir)
 	if err != nil {
 		return nil, err
 	}
@@ -965,7 +965,7 @@ func calculateIrqCoresDiff(a []int64, b []int64) []int64 {
 }
 
 func (nm *NicIrqTuningManager) collectNicStats() (*NicStats, error) {
-	totalRxPackets, err := irqutil.GetNetDevRxPackets(nm.NicInfo.NetNSName, nm.NicInfo.Name)
+	totalRxPackets, err := irqutil.GetNetDevRxPackets(nm.NicInfo.NicBasicInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -1254,7 +1254,7 @@ func (c *ContainerInfoWrapper) isKataBMContainer() bool {
 func (ic *IrqTuningController) syncNics() error {
 	klog.Infof("%s sync nics", IrqTuningLogPrefix)
 
-	nics, err := listActiveUplinkNicsExcludeSriovVFs()
+	nics, err := listActiveUplinkNicsExcludeSriovVFs(ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
 	if err != nil {
 		return err
 	}
@@ -2448,7 +2448,7 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 	}
 
 	var netnsName string
-	netnsList, err := irqutil.ListNetNS()
+	netnsList, err := irqutil.ListNetNS(ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
 	if err != nil {
 		klog.Errorf("failed to ListNetNS, err %v", err)
 		return false, nil
@@ -4684,7 +4684,7 @@ func (ic *IrqTuningController) disableIrqTuning() {
 }
 
 func (ic *IrqTuningController) syncDynamicConfig() {
-	dynConf := ic.dynamicConfHolder.GetDynamicConfiguration()
+	dynConf := ic.agentConf.DynamicAgentConfiguration.GetDynamicConfiguration()
 	if dynConf != nil {
 		ic.conf = config.ConvertDynamicConfigToIrqTuningConfig(dynConf)
 	}

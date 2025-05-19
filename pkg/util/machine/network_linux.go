@@ -106,14 +106,14 @@ func GetExtraNetworkInfo(conf *global.MachineInfoConfiguration) (*ExtraNetworkIn
 // DoNetNS executes a callback function within the specified network namespace.
 // If the namespace is the default one, the callback runs in the current network namespace.
 // Otherwise, it mounts a temporary sysfs to avoid contaminating the host sysfs.
-func DoNetNS(nsName, netNSDirAbsPath string, cb func(sysFsDir, nsAbsPath string) error) error {
+func DoNetNS(nsName, netNSDirAbsPath string, cb func(sysFsDir string) error) error {
 	// if nsName is defaulted, the callback function will be run in the current network namespace.
 	// So skip the whole function, just call cb().
 	// cb() needs a sysFsDir as arg but ignored, give it a fake one.
 	var nsAbsPath string
 	sysFsDir := sysFSDirNormal
 	if nsName == DefaultNICNamespace {
-		return cb(sysFsDir, nsAbsPath)
+		return cb(sysFsDir)
 	}
 	nsAbsPath = path.Join(netNSDirAbsPath, nsName)
 
@@ -172,14 +172,14 @@ func DoNetNS(nsName, netNSDirAbsPath string, cb func(sysFsDir, nsAbsPath string)
 		}
 	}()
 
-	return cb(sysFsDir, nsAbsPath)
+	return cb(sysFsDir)
 }
 
 // getNSNetworkHardwareTopology set given network namespaces and get nics inside if needed
 func getNSNetworkHardwareTopology(nsName, netNSDirAbsPath string) ([]InterfaceInfo, error) {
 	var nics []InterfaceInfo
 
-	err := DoNetNS(nsName, netNSDirAbsPath, func(sysFsDir, nsAbsPath string) error {
+	err := DoNetNS(nsName, netNSDirAbsPath, func(sysFsDir string) error {
 		nicsBaseDirPath := path.Join(sysFsDir, nicPathNAMEBaseDir)
 		nicDirs, err := os.ReadDir(nicsBaseDirPath)
 		if err != nil {
@@ -210,9 +210,11 @@ func getNSNetworkHardwareTopology(nsName, netNSDirAbsPath string) ([]InterfaceIn
 			}
 
 			nic := InterfaceInfo{
-				Iface:          nicName,
-				NSName:         nsName,
-				NSAbsolutePath: nsAbsPath,
+				NetNSInfo: NetNSInfo{
+					NSName:   nsName,
+					NSAbsDir: netNSDirAbsPath,
+				},
+				Iface: nicName,
 			}
 			if nicAddr, exist := nicsAddrMap[nicName]; exist {
 				nic.Addr = nicAddr
