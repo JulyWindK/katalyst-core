@@ -1155,8 +1155,8 @@ func (p *StaticPolicy) getResourceAllocationAnnotations(
 		resourceAllocationAnnotations[p.netBandwidthResourceAllocationAnnotationKey] = strconv.Itoa(int(allocation.Egress))
 	}
 
-	if len(selectedNIC.NSAbsolutePath) > 0 {
-		resourceAllocationAnnotations[p.netNSPathResourceAllocationAnnotationKey] = selectedNIC.NSAbsolutePath
+	if len(selectedNIC.NSName) > 0 {
+		resourceAllocationAnnotations[p.netNSPathResourceAllocationAnnotationKey] = selectedNIC.NetNSInfo.GetNetNSAbsPath()
 	}
 
 	return resourceAllocationAnnotations, nil
