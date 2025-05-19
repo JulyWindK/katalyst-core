@@ -1156,7 +1156,7 @@ func (p *StaticPolicy) getResourceAllocationAnnotations(
 	}
 
 	if len(selectedNIC.NSAbsolutePath) > 0 {
-		resourceAllocationAnnotations[p.netNSPathResourceAllocationAnnotationKey] = selectedNIC.NSAbsolutePath
+		resourceAllocationAnnotations[p.netNSPathResourceAllocationAnnotationKey] = selectedNIC.NetNSInfo.GetNetNSAbsPath()
 	}
 
 	return resourceAllocationAnnotations, nil

@@ -14,6 +14,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/config"
 	irqutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/util"
 	metricUtil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
+	"github.com/kubewharf/katalyst-core/pkg/config/agent"
 	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
 	util "github.com/kubewharf/katalyst-core/pkg/util"
@@ -386,6 +387,7 @@ type ContainerInfoWrapper struct {
 type IrqTuningController struct {
 	dynamicConfHolder    *dynconfig.DynamicAgentConfiguration
 	conf                 *config.IrqTuningConfig
+	agentConf            *agent.AgentConfiguration
 	emitter              metrics.MetricEmitter
 	CPUInfo              *machine.CPUInfo
 	Ksoftirqds           map[int64]int // cpuid as map key, ksoftirqd pid as value
@@ -474,7 +476,8 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*irqutil.NicBa
 	return nicManagers, nil
 }
 
-func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter, machineInfo *machine.KatalystMachineInfo) (*IrqTuningController, error) {
+func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter,
+	machineInfo *machine.KatalystMachineInfo, agentConf *agent.AgentConfiguration) (*IrqTuningController, error) {
 	if isIrqBalanceNGServiceRuning() {
 		return nil, fmt.Errorf("irqbalance-ng service is running")
 	}
@@ -498,7 +501,8 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 		}
 	}
 
-	nics, err := listActiveUplinkNicsExcludeSriovVFs()
+	netNSDir := agentConf.MachineInfoConfiguration.NetNSDirAbsPath
+	nics, err := listActiveUplinkNicsExcludeSriovVFs(netNSDir)
 	if err != nil {
 		return nil, err
 	}
@@ -511,6 +515,7 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 	controller := &IrqTuningController{
 		dynamicConfHolder:  dynamicConfHolder,
 		conf:               conf,
+		agentConf:          agentConf,
 		emitter:            emitter,
 		CPUInfo:            cpuInfo,
 		Ksoftirqds:         ksoftirqds,
@@ -755,8 +760,8 @@ func (n *NicInfo) sync() error {
 	return nil
 }
 
-func listActiveUplinkNicsExcludeSriovVFs() ([]*irqutil.NicBasicInfo, error) {
-	nics, err := irqutil.ListActiveUplinkNics()
+func listActiveUplinkNicsExcludeSriovVFs(netNSDir string) ([]*irqutil.NicBasicInfo, error) {
+	nics, err := irqutil.ListActiveUplinkNics(netNSDir)
 	if err != nil {
 		return nil, err
 	}
@@ -965,7 +970,7 @@ func calculateIrqCoresDiff(a []int64, b []int64) []int64 {
 }
 
 func (nm *NicIrqTuningManager) collectNicStats() (*NicStats, error) {
-	totalRxPackets, err := irqutil.GetNetDevRxPackets(nm.NicInfo.NetNSName, nm.NicInfo.Name)
+	totalRxPackets, err := irqutil.GetNetDevRxPackets(nm.NicInfo.NicBasicInfo)
 	if err != nil {
 		return nil, err
 	}
@@ -1254,7 +1259,8 @@ func (c *ContainerInfoWrapper) isKataBMContainer() bool {
 func (ic *IrqTuningController) syncNics() error {
 	klog.Infof("%s sync nics", IrqTuningLogPrefix)
 
-	nics, err := listActiveUplinkNicsExcludeSriovVFs()
+	netNSDir := ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath
+	nics, err := listActiveUplinkNicsExcludeSriovVFs(netNSDir)
 	if err != nil {
 		return err
 	}
