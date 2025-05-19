@@ -210,9 +210,11 @@ func getNSNetworkHardwareTopology(nsName, netNSDirAbsPath string) ([]InterfaceIn
 			}
 
 			nic := InterfaceInfo{
-				Iface:          nicName,
-				NSName:         nsName,
-				NSAbsolutePath: nsAbsPath,
+				NetNSInfo: NetNSInfo{
+					NSName:   nsName,
+					NSAbsDir: nsAbsPath,
+				},
+				Iface: nicName,
 			}
 			if nicAddr, exist := nicsAddrMap[nicName]; exist {
 				nic.Addr = nicAddr
