@@ -19,6 +19,7 @@ package machine
 import (
 	"fmt"
 	"net"
+	"path/filepath"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -66,7 +67,19 @@ func (e ExtraNetworkInfo) GetAllocatableNICs(conf *global.MachineInfoConfigurati
 	return filteredNICs
 }
 
+type NetNSInfo struct {
+	NSName   string
+	NSInode  uint64 // used to compare with container's process's /proc/net/ns/net linked inode to get process's nents
+	NSAbsDir string
+}
+
+func (ns NetNSInfo) GetNetNSAbsPath() string {
+	return filepath.Join(ns.NSAbsDir, ns.NSName)
+}
+
 type InterfaceInfo struct {
+	// net namespace of this interface
+	NetNSInfo
 	// Iface name of this interface.
 	Iface string
 	// IfIndex is an index of network interface.
@@ -79,11 +92,6 @@ type InterfaceInfo struct {
 	Enable bool
 	// Addr address of this interface, which includes ipv4 and ipv6.
 	Addr *IfaceAddr
-
-	// NSName indicates the namespace for this interface
-	NSName string
-	// NSAbsolutePath indicates the namespace path for this interface
-	NSAbsolutePath string
 }
 
 type IfaceAddr struct {

@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	NetNSRunDir        = "/var/run/netns"
+	DefaultNetNSDir    = "/var/run/netns"
 	HostNetNSName      = ""
 	DefaultNetNSSysDir = "/sys"
 	TmpNetNSSysDir     = "/tmp/net_ns_sysfs"
@@ -50,6 +50,11 @@ const (
 type NetNSInfo struct {
 	NetNSName  string
 	NetNSInode uint64 // used to compare with container's process's /proc/net/ns/net linked inode to get process's nents
+	NSAbsDir   string
+}
+
+func (ns NetNSInfo) GetNetNSAbsPath() string {
+	return filepath.Join(ns.NSAbsDir, ns.NetNSName)
 }
 
 type NicBasicInfo struct {
@@ -147,7 +152,7 @@ func setNicRxQueueRPS(nic *NicBasicInfo, queue int, rpsConf string) error {
 		return fmt.Errorf("invalid rx queue %d", queue)
 	}
 
-	nsc, err := netnsEnter(nic.NetNSName)
+	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
 		return fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
 	}
@@ -254,7 +259,7 @@ func getNicRxQueueRpsConf(nicSysDir string, queue int) (string, error) {
 }
 
 func GetNicRxQueueRpsConf(nic *NicBasicInfo, queue int) (string, error) {
-	nsc, err := netnsEnter(nic.NetNSName)
+	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
 		return "", fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
 	}
@@ -269,7 +274,7 @@ func GetNicRxQueuesRpsConf(nic *NicBasicInfo) (map[int]string, error) {
 		return nil, fmt.Errorf("invalid queue number %d", nic.QueueNum)
 	}
 
-	nsc, err := netnsEnter(nic.NetNSName)
+	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
 	}
@@ -726,7 +731,7 @@ func ListBondNetDevSlaves(nicSysPath string) ([]string, error) {
 	return slaves, nil
 }
 
-func ListNetNS() ([]NetNSInfo, error) {
+func ListNetNS(netNSDir string) ([]NetNSInfo, error) {
 	hostNetNSInode, err := util.GetProcessNameSpaceInode(1, util.NetNS)
 	if err != nil {
 		return nil, fmt.Errorf("failed to GetProcessNameSpaceInode(1, %s), err %v", util.NetNS, err)
@@ -739,7 +744,11 @@ func ListNetNS() ([]NetNSInfo, error) {
 		},
 	}
 
-	dirEnts, err := os.ReadDir(NetNSRunDir)
+	if netNSDir == "" {
+		netNSDir = DefaultNetNSDir
+	}
+
+	dirEnts, err := os.ReadDir(netNSDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nsList, nil
@@ -749,7 +758,7 @@ func ListNetNS() ([]NetNSInfo, error) {
 
 	for _, d := range dirEnts {
 		if !d.IsDir() {
-			netnsPath := filepath.Join(NetNSRunDir, d.Name())
+			netnsPath := filepath.Join(netNSDir, d.Name())
 			inode, err := util.GetFileInode(netnsPath)
 			if err != nil {
 				return nil, fmt.Errorf("failed to GetFileInode(%s), err %v", netnsPath, err)
@@ -758,6 +767,7 @@ func ListNetNS() ([]NetNSInfo, error) {
 			nsList = append(nsList, NetNSInfo{
 				NetNSName:  d.Name(),
 				NetNSInode: inode,
+				NSAbsDir:   netNSDir,
 			})
 		}
 	}
@@ -765,7 +775,7 @@ func ListNetNS() ([]NetNSInfo, error) {
 	return nsList, nil
 }
 
-func netnsEnter(nsName string) (*netnsSwitchContext, error) {
+func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 	var retErr error
 
 	// need to LockOSThread during switch netns
@@ -777,9 +787,9 @@ func netnsEnter(nsName string) (*netnsSwitchContext, error) {
 		}
 	}()
 
-	if nsName == HostNetNSName {
+	if netnsInfo.NetNSName == HostNetNSName {
 		return &netnsSwitchContext{
-			newNetNSName: nsName,
+			newNetNSName: netnsInfo.NetNSName,
 			sysMountDir:  DefaultNetNSSysDir,
 		}, nil
 	}
@@ -796,7 +806,7 @@ func netnsEnter(nsName string) (*netnsSwitchContext, error) {
 		}
 	}()
 
-	newNetNSPath := path.Join(NetNSRunDir, nsName)
+	newNetNSPath := netnsInfo.GetNetNSAbsPath()
 	newNetNSHdl, err := netns.GetFromPath(newNetNSPath)
 	if err != nil {
 		retErr = fmt.Errorf("failed to GetFromPath(%s), err %v", newNetNSPath, err)
@@ -809,7 +819,7 @@ func netnsEnter(nsName string) (*netnsSwitchContext, error) {
 	}()
 
 	if err := netns.Set(newNetNSHdl); err != nil {
-		retErr = fmt.Errorf("failed to setns to %s, err %v", nsName, retErr)
+		retErr = fmt.Errorf("failed to setns to %s, err %v", netnsInfo.NetNSName, retErr)
 		return nil, retErr
 	}
 
@@ -842,7 +852,7 @@ func netnsEnter(nsName string) (*netnsSwitchContext, error) {
 
 	return &netnsSwitchContext{
 		originalNetNSHdl: originalNetNSHdl,
-		newNetNSName:     nsName,
+		newNetNSName:     netnsInfo.NetNSName,
 		newNetNSHdl:      newNetNSHdl,
 		sysMountDir:      TmpNetNSSysDir,
 		sysDirRemounted:  true,
@@ -872,7 +882,7 @@ func (nsc *netnsSwitchContext) netnsExit() {
 }
 
 func ListActiveUplinkNicsFromNetNS(netnsInfo NetNSInfo) ([]*NicBasicInfo, error) {
-	nsc, err := netnsEnter(netnsInfo.NetNSName)
+	nsc, err := netnsEnter(netnsInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", netnsInfo.NetNSName, err)
 	}
@@ -1035,8 +1045,8 @@ func ListInterfacesWithIPAddr() ([]string, error) {
 	return intfs, nil
 }
 
-func ListActiveUplinkNics() ([]*NicBasicInfo, error) {
-	netnsList, err := ListNetNS()
+func ListActiveUplinkNics(netNSDir string) ([]*NicBasicInfo, error) {
+	netnsList, err := ListNetNS(netNSDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ListNetNS, err %v", err)
 	}
@@ -1069,14 +1079,14 @@ func ListActiveUplinkNics() ([]*NicBasicInfo, error) {
 	return nics, nil
 }
 
-func GetNetDevRxPackets(netns string, nicName string) (uint64, error) {
-	nsc, err := netnsEnter(netns)
+func GetNetDevRxPackets(nic *NicBasicInfo) (uint64, error) {
+	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
-		return 0, fmt.Errorf("failed to netnsEnter(%s), err %v", netns, err)
+		return 0, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
 	}
 	defer nsc.netnsExit()
 
-	sysRxPacketsFile := filepath.Join(nsc.sysMountDir, ClassNetBasePath, nicName, "statistics/rx_packets")
+	sysRxPacketsFile := filepath.Join(nsc.sysMountDir, ClassNetBasePath, nic.Name, "statistics/rx_packets")
 	if _, err := os.Stat(sysRxPacketsFile); err == nil {
 		rxPacket, err := util.ReadUint64FromFile(sysRxPacketsFile)
 		if err == nil {
@@ -1098,7 +1108,7 @@ func GetNetDevRxPackets(netns string, nicName string) (uint64, error) {
 		return 0, fmt.Errorf("%s lines count %d, less than 3", NetDevProcFile, len(lines))
 	}
 
-	nicNameFilter := fmt.Sprintf("%s:", nicName)
+	nicNameFilter := fmt.Sprintf("%s:", nic.Name)
 
 	for _, line := range lines {
 		cols := strings.Fields(line)
@@ -1117,7 +1127,7 @@ func GetNetDevRxPackets(netns string, nicName string) (uint64, error) {
 		return rxPackets, nil
 	}
 
-	return 0, fmt.Errorf("failed to find %s in %s", nicName, NetDevProcFile)
+	return 0, fmt.Errorf("failed to find %s in %s", nic.Name, NetDevProcFile)
 }
 
 func GetNicRxQueuePackets(nic *NicBasicInfo) (map[int]uint64, error) {
@@ -1127,7 +1137,7 @@ func GetNicRxQueuePackets(nic *NicBasicInfo) (map[int]uint64, error) {
 		return nil, fmt.Errorf("unknow driver: %s", driver)
 	}
 
-	nsc, err := netnsEnter(nic.NetNSName)
+	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
 	}
