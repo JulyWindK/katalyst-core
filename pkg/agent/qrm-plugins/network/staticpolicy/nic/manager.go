@@ -133,7 +133,7 @@ func (n *nicManagerImpl) checkNICs(nics []machine.InterfaceInfo) (*NICs, error) 
 
 	for _, nic := range nics {
 		successCheckers := sets.NewString()
-		err := machine.DoNetNS(nic.NSName, n.conf.NetNSDirAbsPath, func(sysFsDir, nsAbsPath string) error {
+		err := machine.DoNetNS(nic.NSName, n.conf.NetNSDirAbsPath, func(sysFsDir string) error {
 			for i := 0; i <= n.nicHealthCheckTime; i++ {
 				for name, healthChecker := range n.checkers {
 					health, err := healthChecker.CheckHealth(nic)
