@@ -13,7 +13,6 @@ import (
 	"syscall"
 
 	"github.com/kubewharf/katalyst-core/pkg/util"
-	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"github.com/safchain/ethtool"
 	"github.com/vishvananda/netns"
 	"k8s.io/klog/v2"
@@ -34,7 +33,7 @@ const (
 	SoftIrqsFile       = "/proc/softirqs"
 )
 
-const UnknownSocketBind = -1
+const UnknownNumaNode = -1
 
 type NicDriver string
 
@@ -63,7 +62,7 @@ type NicBasicInfo struct {
 	IfIndex        int
 	PCIAddr        string    // used to locate nic's irq line in some special scnerios
 	Driver         NicDriver // used to filter queue stats of ethtool stats, different driver has different format
-	SocketBind     int
+	NumaNode       int
 	IsVirtioNetDev bool
 	VirtioNetName  string // used to filter virtio nic's irqs in /proc/interrupts
 	Irqs           []int  // store nic's all irqs including rx irqs, Irqs is used to resolve conflicts when there 2 active nics with the same name in /proc/interrupts
@@ -623,7 +622,7 @@ func GetNicVirtioName(nicSysPath string) (string, error) {
 }
 
 // /sys/class/net/ethX/device/numa_node not exist, or contains negtive value, then return -1 as unknown socket bind
-func GetNicBindedSocket(nicSysPath string) (int, error) {
+func GetNicNumaNode(nicSysPath string) (int, error) {
 	nicBindNumaPath := filepath.Join(nicSysPath, "device/numa_node")
 	if _, err := os.Stat(nicBindNumaPath); err != nil {
 		// no /sys/class/net/ethX/device/numa_node file for virtio-net device, but numa_node can be acquired by general method
@@ -632,39 +631,35 @@ func GetNicBindedSocket(nicSysPath string) (int, error) {
 			nicDevPath := filepath.Join(nicSysPath, "device")
 			devRealPath, err := filepath.EvalSymlinks(nicDevPath)
 			if err != nil {
-				return UnknownSocketBind, fmt.Errorf("failed to EvalSymlinks(%s), err %s", nicDevPath, err)
+				return UnknownNumaNode, fmt.Errorf("failed to EvalSymlinks(%s), err %s", nicDevPath, err)
 			}
 
 			nicBindNumaPath = filepath.Join(filepath.Dir(devRealPath), "numa_node")
 			if _, err := os.Stat(nicBindNumaPath); err != nil {
-				return UnknownSocketBind, err
+				return UnknownNumaNode, err
 			}
 		} else {
-			return UnknownSocketBind, fmt.Errorf("failed to Stat(%s), err %v", nicBindNumaPath, err)
+			return UnknownNumaNode, fmt.Errorf("failed to Stat(%s), err %v", nicBindNumaPath, err)
 		}
 	}
 
 	b, err := os.ReadFile(nicBindNumaPath)
 	if err != nil {
-		return UnknownSocketBind, fmt.Errorf("failed to ReadFile(%s), err %v", nicBindNumaPath, err)
+		return UnknownNumaNode, fmt.Errorf("failed to ReadFile(%s), err %v", nicBindNumaPath, err)
 	}
 
 	numaStr := strings.TrimSpace(strings.TrimRight(string(b), "\n"))
 	numa, err := strconv.Atoi(numaStr)
 	if err != nil {
-		return UnknownSocketBind, fmt.Errorf("failed to Atoi(%s), err %v", numaStr, err)
+		return UnknownNumaNode, fmt.Errorf("failed to Atoi(%s), err %v", numaStr, err)
 	}
 
 	// -1 storeed in /sys/class/net/device/numa_node for passthrough non-virtio device (e.g. mellanox SRIOV VF)
 	if numa < 0 {
-		return UnknownSocketBind, nil
+		return UnknownNumaNode, nil
 	}
 
-	socketID, err := machine.GetNumaPackageID(numa)
-	if err != nil {
-		return UnknownSocketBind, err
-	}
-	return socketID, nil
+	return numa, nil
 }
 
 func GetIfIndex(nicName string, nicSysPath string) (int, error) {
@@ -954,9 +949,9 @@ func ListActiveUplinkNicsFromNetNS(netnsInfo NetNSInfo) ([]*NicBasicInfo, error)
 			return nil, fmt.Errorf("failed to getNicDriver(%s), err %v", nicSysPath, err)
 		}
 
-		bindedSocket, err := GetNicBindedSocket(nicSysPath)
+		numaNode, err := GetNicNumaNode(nicSysPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to GetNicBindedSocket(%s), err %v", nicSysPath, err)
+			return nil, fmt.Errorf("failed to GetNicNumaNode(%s), err %v", nicSysPath, err)
 		}
 
 		isVirtioNetDev := IsVirtioNetDevice(nicSysPath)
@@ -986,7 +981,7 @@ func ListActiveUplinkNicsFromNetNS(netnsInfo NetNSInfo) ([]*NicBasicInfo, error)
 			IfIndex:        ifIndex,
 			PCIAddr:        pciAddr,
 			Driver:         driver,
-			SocketBind:     bindedSocket,
+			NumaNode:       numaNode,
 			IsVirtioNetDev: isVirtioNetDev,
 			VirtioNetName:  virtioNetDevName,
 			Irqs:           irqs,
@@ -1266,7 +1261,7 @@ func (n *NicBasicInfo) Equal(other *NicBasicInfo) bool {
 	}
 
 	if n.NetNSName != other.NetNSName || n.NetNSInode != other.NetNSInode || n.Name != other.Name ||
-		n.IfIndex != other.IfIndex || n.PCIAddr != other.PCIAddr || n.SocketBind != other.SocketBind ||
+		n.IfIndex != other.IfIndex || n.PCIAddr != other.PCIAddr || n.NumaNode != other.NumaNode ||
 		n.IsVirtioNetDev != other.IsVirtioNetDev || n.VirtioNetName != other.VirtioNetName || n.QueueNum != other.QueueNum {
 		return false
 	}

@@ -815,21 +815,32 @@ func AssignSocketsForNicIrqsForOverallNicsBalance(nics []*irqutil.NicBasicInfo, 
 		return ifIndex2Sockets, nil
 	}
 
-	if nics[0].SocketBind != nics[1].SocketBind {
+	nicsTopoBindSocket := make(map[int]int)
+	for _, nic := range nics {
+		socket, err := machine.GetNumaPackageID(nic.NumaNode)
+		if err != nil {
+			nicsTopoBindSocket[nic.IfIndex] = -1
+			klog.Errorf("failed to GetNumaPackageID(%d), err %s", nic.NumaNode, err)
+		} else {
+			nicsTopoBindSocket[nic.IfIndex] = socket
+		}
+	}
+
+	if nicsTopoBindSocket[nics[0].IfIndex] != nicsTopoBindSocket[nics[1].IfIndex] {
 		var nicIndexWithKnownSocketBind int
 		var otherNicIndex int
 
-		if nics[0].SocketBind != irqutil.UnknownSocketBind {
+		if nicsTopoBindSocket[nics[0].IfIndex] != -1 {
 			nicIndexWithKnownSocketBind = 0
 			otherNicIndex = 1
 		} else {
 			nicIndexWithKnownSocketBind = 1
 			otherNicIndex = 0
 		}
-		ifIndex2Sockets[nics[nicIndexWithKnownSocketBind].IfIndex] = []int{nics[nicIndexWithKnownSocketBind].SocketBind}
+		ifIndex2Sockets[nics[nicIndexWithKnownSocketBind].IfIndex] = []int{nicsTopoBindSocket[nics[nicIndexWithKnownSocketBind].IfIndex]}
 
 		var otherNicAffSocket int
-		if nics[nicIndexWithKnownSocketBind].SocketBind == 0 {
+		if nicsTopoBindSocket[nics[nicIndexWithKnownSocketBind].IfIndex] == 0 {
 			otherNicAffSocket = 1
 		} else {
 			otherNicAffSocket = 0
@@ -859,11 +870,19 @@ func AssignSocketsForNics(nics []*irqutil.NicBasicInfo, cpuInfo *machine.CPUInfo
 	case config.NicPhysicalTopoBindNuma:
 		hasUnknownSocketBindNic := false
 		for _, nic := range nics {
-			if nic.SocketBind == irqutil.UnknownSocketBind {
+			if nic.NumaNode == irqutil.UnknownNumaNode {
 				hasUnknownSocketBindNic = true
 				break
 			}
-			ifIndex2Sockets[nic.IfIndex] = []int{nic.SocketBind}
+
+			socketID, err := machine.GetNumaPackageID(nic.NumaNode)
+			if err != nil {
+				klog.Errorf("failed to GetNumaPackageID(%d), err %s", nic.NumaNode, err)
+				hasUnknownSocketBindNic = true
+				break
+			}
+
+			ifIndex2Sockets[nic.IfIndex] = []int{socketID}
 		}
 
 		if hasUnknownSocketBindNic {
