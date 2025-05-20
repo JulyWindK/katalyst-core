@@ -766,7 +766,7 @@ func listActiveUplinkNicsExcludeSriovVFs(netNSDir string) ([]*irqutil.NicBasicIn
 	var tmpNics []*irqutil.NicBasicInfo
 	for _, nic := range nics {
 		// all sriov netns's names hava prefix "cni-", sriov netns is managed by cni plugin
-		if !strings.HasPrefix(nic.NetNSName, "cni-") {
+		if !strings.HasPrefix(nic.NSName, "cni-") {
 			tmpNics = append(tmpNics, nic)
 		}
 	}
@@ -2461,41 +2461,38 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 	// dose not means this container's netns is not shared with other containers, so check if this container's
 	// netns name has prefix "cni-" is neccessary.
 	for _, nic := range ic.Nics {
-		if netnsInode == nic.NicInfo.NetNSInode {
+		if netnsInode == nic.NicInfo.NSInode {
 			return false, nil
 		}
 	}
 
-	var netnsName string
 	netnsList, err := irqutil.ListNetNS(ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
 	if err != nil {
 		klog.Errorf("failed to ListNetNS, err %v", err)
 		return false, nil
 	}
 
+	var containerNetNSInfo machine.NetNSInfo
 	for _, netnsInfo := range netnsList {
-		if netnsInfo.NetNSInode == netnsInode {
-			netnsName = netnsInfo.NetNSName
+		if netnsInfo.NSInode == netnsInode {
+			containerNetNSInfo = netnsInfo
+			break
 		}
 	}
 
 	// container maybe exited
-	if netnsName == "" {
+	if containerNetNSInfo.NSName == "" {
 		return false, nil
 	}
 
 	// all sriov netns's names hava prefix "cni-", sriov netns is managed by cni plugin
-	if !strings.HasPrefix(netnsName, "cni-") {
+	if !strings.HasPrefix(containerNetNSInfo.NSName, "cni-") {
 		return false, nil
 	}
 
-	netnsInfo := irqutil.NetNSInfo{
-		NetNSName:  netnsName,
-		NetNSInode: netnsInode,
-	}
-	activeUplinkNics, err := irqutil.ListActiveUplinkNicsFromNetNS(netnsInfo)
+	activeUplinkNics, err := irqutil.ListActiveUplinkNicsFromNetNS(containerNetNSInfo)
 	if err != nil {
-		klog.Errorf("failed to ListActiveUplinkNicsFromNetNS for netns %s, err %v", netnsName, err)
+		klog.Errorf("failed to ListActiveUplinkNicsFromNetNS for netns %s, err %v", containerNetNSInfo.NSName, err)
 		return false, nil
 	}
 

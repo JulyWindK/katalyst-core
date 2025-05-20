@@ -13,6 +13,7 @@ import (
 	"syscall"
 
 	"github.com/kubewharf/katalyst-core/pkg/util"
+	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"github.com/safchain/ethtool"
 	"github.com/vishvananda/netns"
 	"k8s.io/klog/v2"
@@ -46,23 +47,9 @@ const (
 	NicDriverUnknown   NicDriver = "unknown"
 )
 
-type NetNSInfo struct {
-	NetNSName  string
-	NetNSInode uint64 // used to compare with container's process's /proc/net/ns/net linked inode to get process's nents
-	NSAbsDir   string
-}
-
-func (ns NetNSInfo) GetNetNSAbsPath() string {
-	return filepath.Join(ns.NSAbsDir, ns.NetNSName)
-}
-
 type NicBasicInfo struct {
-	NetNSInfo
-	Name           string // generally use Name to locate nic's irq line, N.B., nics in different netns may have the same name
-	IfIndex        int
-	PCIAddr        string    // used to locate nic's irq line in some special scnerios
+	machine.InterfaceInfo
 	Driver         NicDriver // used to filter queue stats of ethtool stats, different driver has different format
-	NumaNode       int
 	IsVirtioNetDev bool
 	VirtioNetName  string // used to filter virtio nic's irqs in /proc/interrupts
 	Irqs           []int  // store nic's all irqs including rx irqs, Irqs is used to resolve conflicts when there 2 active nics with the same name in /proc/interrupts
@@ -153,7 +140,7 @@ func setNicRxQueueRPS(nic *NicBasicInfo, queue int, rpsConf string) error {
 
 	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
-		return fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
+		return fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NSName, err)
 	}
 	defer nsc.netnsExit()
 
@@ -260,7 +247,7 @@ func getNicRxQueueRpsConf(nicSysDir string, queue int) (string, error) {
 func GetNicRxQueueRpsConf(nic *NicBasicInfo, queue int) (string, error) {
 	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
-		return "", fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
+		return "", fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NSName, err)
 	}
 	defer nsc.netnsExit()
 
@@ -275,7 +262,7 @@ func GetNicRxQueuesRpsConf(nic *NicBasicInfo) (map[int]string, error) {
 
 	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
+		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NSName, err)
 	}
 	defer nsc.netnsExit()
 
@@ -354,7 +341,7 @@ func GetNicQueue2IrqWithQueueFilter(nicInfo *NicBasicInfo, queueFilter string, q
 		}
 		if findQueue >= 0 {
 			if i, ok := queue2Irq[findQueue]; ok {
-				klog.Errorf("%s: %d: %s queue %d has multiple irqs {%d, %d}", nicInfo.NetNSName, nicInfo.IfIndex, nicInfo.Name, findQueue, i, irq)
+				klog.Errorf("%s: %d: %s queue %d has multiple irqs {%d, %d}", nicInfo.NSName, nicInfo.IfIndex, nicInfo.Name, findQueue, i, irq)
 				continue
 			}
 			queue2Irq[findQueue] = irq
@@ -388,7 +375,7 @@ func GetNicQueue2IrqWithQueueFilter(nicInfo *NicBasicInfo, queueFilter string, q
 			}
 
 			if i, ok := queue2Irq[queue]; ok {
-				klog.Errorf("%s: %d: %s queue %d has multiple irqs {%d, %d}", nicInfo.NetNSName, nicInfo.IfIndex, nicInfo.Name, queue, i, irq)
+				klog.Errorf("%s: %d: %s queue %d has multiple irqs {%d, %d}", nicInfo.NSName, nicInfo.IfIndex, nicInfo.Name, queue, i, irq)
 				continue
 			}
 			queue2Irq[queue] = irq
@@ -726,21 +713,22 @@ func ListBondNetDevSlaves(nicSysPath string) ([]string, error) {
 	return slaves, nil
 }
 
-func ListNetNS(netNSDir string) ([]NetNSInfo, error) {
+func ListNetNS(netNSDir string) ([]machine.NetNSInfo, error) {
 	hostNetNSInode, err := util.GetProcessNameSpaceInode(1, util.NetNS)
 	if err != nil {
 		return nil, fmt.Errorf("failed to GetProcessNameSpaceInode(1, %s), err %v", util.NetNS, err)
 	}
 
-	nsList := []NetNSInfo{
-		{
-			NetNSName:  HostNetNSName,
-			NetNSInode: hostNetNSInode,
-		},
-	}
-
 	if netNSDir == "" {
 		netNSDir = DefaultNetNSDir
+	}
+
+	nsList := []machine.NetNSInfo{
+		{
+			NSName:   HostNetNSName,
+			NSInode:  hostNetNSInode,
+			NSAbsDir: netNSDir,
+		},
 	}
 
 	dirEnts, err := os.ReadDir(netNSDir)
@@ -759,10 +747,10 @@ func ListNetNS(netNSDir string) ([]NetNSInfo, error) {
 				return nil, fmt.Errorf("failed to GetFileInode(%s), err %v", netnsPath, err)
 			}
 
-			nsList = append(nsList, NetNSInfo{
-				NetNSName:  d.Name(),
-				NetNSInode: inode,
-				NSAbsDir:   netNSDir,
+			nsList = append(nsList, machine.NetNSInfo{
+				NSName:   d.Name(),
+				NSInode:  inode,
+				NSAbsDir: netNSDir,
 			})
 		}
 	}
@@ -770,7 +758,7 @@ func ListNetNS(netNSDir string) ([]NetNSInfo, error) {
 	return nsList, nil
 }
 
-func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
+func netnsEnter(netnsInfo machine.NetNSInfo) (*netnsSwitchContext, error) {
 	var retErr error
 
 	// need to LockOSThread during switch netns
@@ -782,9 +770,9 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 		}
 	}()
 
-	if netnsInfo.NetNSName == HostNetNSName {
+	if netnsInfo.NSName == HostNetNSName {
 		return &netnsSwitchContext{
-			newNetNSName: netnsInfo.NetNSName,
+			newNetNSName: netnsInfo.NSName,
 			sysMountDir:  DefaultNetNSSysDir,
 		}, nil
 	}
@@ -814,7 +802,7 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 	}()
 
 	if err := netns.Set(newNetNSHdl); err != nil {
-		retErr = fmt.Errorf("failed to setns to %s, err %v", netnsInfo.NetNSName, retErr)
+		retErr = fmt.Errorf("failed to setns to %s, err %v", netnsInfo.NSName, retErr)
 		return nil, retErr
 	}
 
@@ -847,7 +835,7 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 
 	return &netnsSwitchContext{
 		originalNetNSHdl: originalNetNSHdl,
-		newNetNSName:     netnsInfo.NetNSName,
+		newNetNSName:     netnsInfo.NSName,
 		newNetNSHdl:      newNetNSHdl,
 		sysMountDir:      TmpNetNSSysDir,
 		sysDirRemounted:  true,
@@ -876,10 +864,10 @@ func (nsc *netnsSwitchContext) netnsExit() {
 	nsc.originalNetNSHdl.Close()
 }
 
-func ListActiveUplinkNicsFromNetNS(netnsInfo NetNSInfo) ([]*NicBasicInfo, error) {
+func ListActiveUplinkNicsFromNetNS(netnsInfo machine.NetNSInfo) ([]*NicBasicInfo, error) {
 	nsc, err := netnsEnter(netnsInfo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", netnsInfo.NetNSName, err)
+		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", netnsInfo.NSName, err)
 	}
 	defer nsc.netnsExit()
 
@@ -976,12 +964,14 @@ func ListActiveUplinkNicsFromNetNS(netnsInfo NetNSInfo) ([]*NicBasicInfo, error)
 		}
 
 		nicInfo := &NicBasicInfo{
-			NetNSInfo:      netnsInfo,
-			Name:           n,
-			IfIndex:        ifIndex,
-			PCIAddr:        pciAddr,
+			InterfaceInfo: machine.InterfaceInfo{
+				NetNSInfo: netnsInfo,
+				Name:      n,
+				IfIndex:   ifIndex,
+				PCIAddr:   pciAddr,
+				NumaNode:  numaNode,
+			},
 			Driver:         driver,
-			NumaNode:       numaNode,
 			IsVirtioNetDev: isVirtioNetDev,
 			VirtioNetName:  virtioNetDevName,
 			Irqs:           irqs,
@@ -1050,7 +1040,7 @@ func ListActiveUplinkNics(netNSDir string) ([]*NicBasicInfo, error) {
 	for _, ns := range netnsList {
 		netnsNics, err := ListActiveUplinkNicsFromNetNS(ns)
 		if err != nil {
-			return nil, fmt.Errorf("failed to ListActiveUplinkNicsFromNetNS(%s), err %v", ns.NetNSName, err)
+			return nil, fmt.Errorf("failed to ListActiveUplinkNicsFromNetNS(%s), err %v", ns.NSName, err)
 		}
 
 		for _, n := range netnsNics {
@@ -1077,7 +1067,7 @@ func ListActiveUplinkNics(netNSDir string) ([]*NicBasicInfo, error) {
 func GetNetDevRxPackets(nic *NicBasicInfo) (uint64, error) {
 	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
-		return 0, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
+		return 0, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NSName, err)
 	}
 	defer nsc.netnsExit()
 
@@ -1134,7 +1124,7 @@ func GetNicRxQueuePackets(nic *NicBasicInfo) (map[int]uint64, error) {
 
 	nsc, err := netnsEnter(nic.NetNSInfo)
 	if err != nil {
-		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NetNSName, err)
+		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", nic.NSName, err)
 	}
 	defer nsc.netnsExit()
 
@@ -1240,18 +1230,18 @@ func GetNicRxQueuePackets(nic *NicBasicInfo) (map[int]uint64, error) {
 }
 
 func (n *NicBasicInfo) String() string {
-	if n.NetNSName == "" {
+	if n.NSName == "" {
 		return fmt.Sprintf("%d: %s", n.IfIndex, n.Name)
 	} else {
-		return fmt.Sprintf("%s %d: %s", n.NetNSName, n.IfIndex, n.Name)
+		return fmt.Sprintf("%s %d: %s", n.NSName, n.IfIndex, n.Name)
 	}
 }
 
 func (n *NicBasicInfo) UniqName() string {
-	if n.NetNSName == "" {
+	if n.NSName == "" {
 		return fmt.Sprintf("%s", n.Name)
 	} else {
-		return fmt.Sprintf("%s/%s", n.NetNSName, n.Name)
+		return fmt.Sprintf("%s/%s", n.NSName, n.Name)
 	}
 }
 
@@ -1260,7 +1250,7 @@ func (n *NicBasicInfo) Equal(other *NicBasicInfo) bool {
 		return false
 	}
 
-	if n.NetNSName != other.NetNSName || n.NetNSInode != other.NetNSInode || n.Name != other.Name ||
+	if n.NSName != other.NSName || n.NSInode != other.NSInode || n.Name != other.Name ||
 		n.IfIndex != other.IfIndex || n.PCIAddr != other.PCIAddr || n.NumaNode != other.NumaNode ||
 		n.IsVirtioNetDev != other.IsVirtioNetDev || n.VirtioNetName != other.VirtioNetName || n.QueueNum != other.QueueNum {
 		return false
