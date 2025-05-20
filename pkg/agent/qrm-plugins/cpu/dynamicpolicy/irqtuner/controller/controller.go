@@ -15,7 +15,6 @@ import (
 	irqutil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/dynamicpolicy/irqtuner/util"
 	metricUtil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent"
-	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
 	util "github.com/kubewharf/katalyst-core/pkg/util"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
@@ -385,9 +384,8 @@ type ContainerInfoWrapper struct {
 }
 
 type IrqTuningController struct {
-	dynamicConfHolder    *dynconfig.DynamicAgentConfiguration
-	conf                 *config.IrqTuningConfig
 	agentConf            *agent.AgentConfiguration
+	conf                 *config.IrqTuningConfig
 	emitter              metrics.MetricEmitter
 	CPUInfo              *machine.CPUInfo
 	Ksoftirqds           map[int64]int // cpuid as map key, ksoftirqd pid as value
@@ -476,13 +474,12 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*irqutil.NicBa
 	return nicManagers, nil
 }
 
-func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter,
-	machineInfo *machine.KatalystMachineInfo, agentConf *agent.AgentConfiguration) (*IrqTuningController, error) {
+func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter, machineInfo *machine.KatalystMachineInfo) (*IrqTuningController, error) {
 	if isIrqBalanceNGServiceRuning() {
 		return nil, fmt.Errorf("irqbalance-ng service is running")
 	}
 
-	conf := config.ConvertDynamicConfigToIrqTuningConfig(dynamicConfHolder.GetDynamicConfiguration())
+	conf := config.ConvertDynamicConfigToIrqTuningConfig(agentConf.DynamicAgentConfiguration.GetDynamicConfiguration())
 
 	cpuInfo := machineInfo.CPUTopology.CPUInfo
 
@@ -512,9 +509,8 @@ func NewIrqTuningController(dynamicConfHolder *dynconfig.DynamicAgentConfigurati
 	}
 
 	controller := &IrqTuningController{
-		dynamicConfHolder:  dynamicConfHolder,
-		conf:               conf,
 		agentConf:          agentConf,
+		conf:               conf,
 		emitter:            emitter,
 		CPUInfo:            cpuInfo,
 		Ksoftirqds:         ksoftirqds,
@@ -4688,7 +4684,7 @@ func (ic *IrqTuningController) disableIrqTuning() {
 }
 
 func (ic *IrqTuningController) syncDynamicConfig() {
-	dynConf := ic.dynamicConfHolder.GetDynamicConfiguration()
+	dynConf := ic.agentConf.DynamicAgentConfiguration.GetDynamicConfiguration()
 	if dynConf != nil {
 		ic.conf = config.ConvertDynamicConfigToIrqTuningConfig(dynConf)
 	}
