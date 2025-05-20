@@ -138,7 +138,7 @@ func (n *nicManagerImpl) checkNICs(nics []machine.InterfaceInfo) (*NICs, error) 
 				for name, healthChecker := range n.checkers {
 					health, err := healthChecker.CheckHealth(nic)
 					if err != nil {
-						general.Warningf("NIC %s health check '%s' error: %v", nic.Iface, name, err)
+						general.Warningf("NIC %s health check '%s' error: %v", nic.Name, name, err)
 						continue
 					}
 
@@ -156,15 +156,15 @@ func (n *nicManagerImpl) checkNICs(nics []machine.InterfaceInfo) (*NICs, error) 
 		}
 
 		if successCheckers.Len() == len(n.checkers) {
-			general.Infof("NIC %s passed all health checks", nic.Iface)
+			general.Infof("NIC %s passed all health checks", nic.Name)
 			healthyNICs = append(healthyNICs, nic)
 		} else {
-			general.Warningf("NIC %s health check partitial success: %v, checkers: %v", nic.Iface, successCheckers.List(), n.checkers)
+			general.Warningf("NIC %s health check partitial success: %v, checkers: %v", nic.Name, successCheckers.List(), n.checkers)
 			unHealthyNICs = append(unHealthyNICs, nic)
 			for name := range n.checkers {
 				if !successCheckers.Has(name) {
 					_ = n.emitter.StoreInt64(metricsNameNICUnhealthyState, 1, metrics.MetricTypeNameRaw,
-						metrics.MetricTag{Key: "nic", Val: nic.Iface},
+						metrics.MetricTag{Key: "nic", Val: nic.Name},
 						metrics.MetricTag{Key: "checker", Val: name},
 					)
 				}

@@ -218,7 +218,7 @@ func makeNICs(hasNics bool) []machine.InterfaceInfo {
 	if hasNics {
 		return []machine.InterfaceInfo{
 			{
-				Iface:    testEth0Name,
+				Name:     testEth0Name,
 				IfIndex:  0,
 				Speed:    25000,
 				NumaNode: testEth0AffinitiveNUMANode,
@@ -232,7 +232,7 @@ func makeNICs(hasNics bool) []machine.InterfaceInfo {
 				},
 			},
 			{
-				Iface:    testEth1Name,
+				Name:     testEth1Name,
 				IfIndex:  1,
 				Speed:    25000,
 				NumaNode: testEth1AffinitiveNUMANode,
@@ -240,7 +240,7 @@ func makeNICs(hasNics bool) []machine.InterfaceInfo {
 				Addr:     &machine.IfaceAddr{},
 			},
 			{
-				Iface:    testEth2Name,
+				Name:     testEth2Name,
 				IfIndex:  2,
 				Speed:    25000,
 				NumaNode: testEth2AffinitiveNUMANode,
@@ -257,7 +257,7 @@ func makeNICs(hasNics bool) []machine.InterfaceInfo {
 	} else {
 		return []machine.InterfaceInfo{
 			{
-				Iface:    testEth0Name,
+				Name:     testEth0Name,
 				IfIndex:  0,
 				Speed:    25000,
 				NumaNode: testEth0AffinitiveNUMANode,
@@ -271,7 +271,7 @@ func makeNICs(hasNics bool) []machine.InterfaceInfo {
 				},
 			},
 			{
-				Iface:    testEth1Name,
+				Name:     testEth1Name,
 				IfIndex:  1,
 				Speed:    25000,
 				NumaNode: testEth1AffinitiveNUMANode,
@@ -279,7 +279,7 @@ func makeNICs(hasNics bool) []machine.InterfaceInfo {
 				Addr:     &machine.IfaceAddr{},
 			},
 			{
-				Iface:    testEth2Name,
+				Name:     testEth2Name,
 				IfIndex:  2,
 				Speed:    25000,
 				NumaNode: testEth2AffinitiveNUMANode,

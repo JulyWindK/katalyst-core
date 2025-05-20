@@ -72,7 +72,7 @@ func TestGetInterfaceAttr(t *testing.T) {
 	t.Parallel()
 
 	nic := &InterfaceInfo{
-		Iface: "eth0",
+		Name: "eth0",
 	}
 
 	getInterfaceAttr(nic, "/sys/class/net")

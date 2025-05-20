@@ -214,7 +214,7 @@ func getNSNetworkHardwareTopology(nsName, netNSDirAbsPath string) ([]InterfaceIn
 					NSName:   nsName,
 					NSAbsDir: netNSDirAbsPath,
 				},
-				Iface: nicName,
+				Name: nicName,
 			}
 			if nicAddr, exist := nicsAddrMap[nicName]; exist {
 				nic.Addr = nicAddr
@@ -240,7 +240,7 @@ func getInterfaceIndex(nicsBaseDirPath string, info *InterfaceInfo) {
 		return
 	}
 
-	nicName := info.Iface
+	nicName := info.Name
 	iface, err := net.InterfaceByName(nicName)
 	if err != nil {
 		general.Warningf("failed to InterfaceByName(%s), err %v", nicName, err)
@@ -258,20 +258,20 @@ func getInterfaceIndex(nicsBaseDirPath string, info *InterfaceInfo) {
 // getInterfaceAttr parses key information from system files
 func getInterfaceAttr(info *InterfaceInfo, nicPath string) {
 	if nicNUMANode, err := general.ReadFileIntoInt(path.Join(nicPath, netFileNameNUMANode)); err != nil {
-		general.Errorf("ns %v name %v, read NUMA node failed with error: %v. Suppose it's associated with NUMA node 0", info.NSName, info.Iface, err)
+		general.Errorf("ns %v name %v, read NUMA node failed with error: %v. Suppose it's associated with NUMA node 0", info.NSName, info.Name, err)
 		// some net device files are missed on VMs (e.g. "device/numanode")
 		info.NumaNode = -1
 	} else {
 		info.NumaNode = nicNUMANode
 		if info.NumaNode == -1 {
 			// the "device/numanode" file is filled with -1 on some VMs (e.g. byte-vm), we should return 0 instead
-			general.Errorf("Invalid NUMA node %v for interface %v. Suppose it's associated with NUMA node 0", info.NumaNode, info.Iface)
+			general.Errorf("Invalid NUMA node %v for interface %v. Suppose it's associated with NUMA node 0", info.NumaNode, info.Name)
 		}
 	}
 
 	if general.IsPathExists(path.Join(nicPath, netFileNameEnable)) {
 		if nicEnabledStatus, err := general.ReadFileIntoInt(path.Join(nicPath, netFileNameEnable)); err != nil {
-			general.Errorf("ns %v name %v, read enable status failed with error: %v", info.NSName, info.Iface, err)
+			general.Errorf("ns %v name %v, read enable status failed with error: %v", info.NSName, info.Name, err)
 			info.Enable = false
 		} else {
 			info.Enable = nicEnabledStatus == netEnable
@@ -279,7 +279,7 @@ func getInterfaceAttr(info *InterfaceInfo, nicPath string) {
 	} else {
 		// some VMs do not have "device/enable" file under nicPath, we can read "operstate" for nic status instead
 		if nicUPStatus, err := general.ReadFileIntoLines(path.Join(nicPath, netOperstate)); err != nil || len(nicUPStatus) == 0 {
-			general.Errorf("ns %v name %v, read operstate failed with error: %v", info.NSName, info.Iface, err)
+			general.Errorf("ns %v name %v, read operstate failed with error: %v", info.NSName, info.Name, err)
 			info.Enable = false
 		} else {
 			info.Enable = nicUPStatus[0] == netUP
@@ -287,7 +287,7 @@ func getInterfaceAttr(info *InterfaceInfo, nicPath string) {
 	}
 
 	if nicSpeed, err := general.ReadFileIntoInt(path.Join(nicPath, netFileNameSpeed)); err != nil {
-		general.Errorf("ns %v name %v, read speed failed with error: %v", info.NSName, info.Iface, err)
+		general.Errorf("ns %v name %v, read speed failed with error: %v", info.NSName, info.Name, err)
 		info.Speed = -1
 	} else {
 		info.Speed = nicSpeed

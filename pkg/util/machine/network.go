@@ -45,15 +45,15 @@ func (e ExtraNetworkInfo) GetAllocatableNICs(conf *global.MachineInfoConfigurati
 	filteredNICs := make([]InterfaceInfo, 0, len(e.Interface))
 	for _, nic := range e.Interface {
 		if nic.NSName != DefaultNICNamespace && !general.IsNameEnabled(nic.NSName, nil, conf.NetAllocatableNS) {
-			general.Infof("skip allocatable nic: %s with namespace: %s", nic.Iface, nic.NSName)
+			general.Infof("skip allocatable nic: %s with namespace: %s", nic.Name, nic.NSName)
 			continue
 		}
 
 		if !nic.Enable {
-			general.Warningf("nic: %s isn't enabled", nic.Iface)
+			general.Warningf("nic: %s isn't enabled", nic.Name)
 			continue
 		} else if nic.Addr == nil || (len(nic.Addr.IPV4) == 0 && len(nic.Addr.IPV6) == 0) {
-			general.Warningf("nic: %s doesn't have IP address", nic.Iface)
+			general.Warningf("nic: %s doesn't have IP address", nic.Name)
 			continue
 		}
 
@@ -81,7 +81,7 @@ type InterfaceInfo struct {
 	// net namespace of this interface
 	NetNSInfo
 	// Iface name of this interface.
-	Iface string
+	Name string
 	// IfIndex is an index of network interface.
 	IfIndex int
 	// Speed of this interface.
