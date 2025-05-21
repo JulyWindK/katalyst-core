@@ -75,7 +75,7 @@ func (p *DynamicPolicy) sharedCoresWithoutNUMABindingAllocationHandler(_ context
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckSharedOrDedicatedNUMABinding))
 	// TODO(KFX): ensure
 	// cores that are prohibited from user binding need to be deducted from the pool.
-	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, p.state.GetPodEntries())
+	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
 	if err != nil {
 		return nil, fmt.Errorf("getProhibitedCPUs failed with error: %v", err)
 	}
@@ -393,7 +393,7 @@ func (p *DynamicPolicy) dedicatedCoresWithNUMABindingAllocationHandler(ctx conte
 
 	// TODO(KFX): ensure
 	// avoid running services on prohibited CPUs.
-	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, p.state.GetPodEntries())
+	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
 	if err != nil {
 		return nil, fmt.Errorf("getProhibitedCPUs failed with error: %v", err)
 	}
@@ -720,8 +720,6 @@ func (p *DynamicPolicy) putAllocationsAndAdjustAllocationEntriesResizeAware(orig
 		// if sys advisor is enabled, we believe the pools' ratio that sys advisor indicates
 		// TODO(KFX): ensure whether need to ignore interrupt pool
 		csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools)
-		//csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(sets.NewString(commonstate.PoolNameInterrupt)))
-		//csetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(state.ProhibitedPools))
 		if err != nil {
 			return fmt.Errorf("GetFilteredPoolsCPUSetMap failed with error: %v", err)
 		}
@@ -887,8 +885,6 @@ func (p *DynamicPolicy) adjustAllocationEntries(persistCheckpoint bool) error {
 		!cpuutil.AdvisorDegradation(p.advisorMonitor.GetHealthy(), p.dynamicConfig.GetDynamicConfiguration().EnableReclaim) {
 		// TODO(KFX): ensure whether need to ignore interrupt pool
 		poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools)
-		//poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(sets.NewString(commonstate.PoolNameInterrupt)))
-		//poolsCPUSetMap, err := entries.GetFilteredPoolsCPUSetMap(state.ResidentPools.Union(state.ProhibitedPools))
 		if err != nil {
 			return fmt.Errorf("GetFilteredPoolsCPUSetMap failed with error: %v", err)
 		}
@@ -927,7 +923,7 @@ func (p *DynamicPolicy) adjustPoolsAndIsolatedEntries(
 
 	// TODO(KFX): ensure logic
 	// deduct the cpus that is prohibited from being used by user containers.
-	prohibitedPoolCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, entries)
+	prohibitedPoolCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, entries)
 	if err != nil {
 		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
 	}
@@ -1115,11 +1111,11 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 		Difference(unionDedicatedIsolatedCPUSet).
 		Difference(sharedBindingNUMACPUs)
 	// TODO(KFX): ensure logic
-	prohibitedPoolsCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, newPodEntries)
+	forbiddenPoolsCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, newPodEntries)
 	if err != nil {
 		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
 	}
-	rampUpCPUs = rampUpCPUs.Difference(prohibitedPoolsCPUs)
+	rampUpCPUs = rampUpCPUs.Difference(forbiddenPoolsCPUs)
 
 	rampUpCPUsTopologyAwareAssignments, err := machine.GetNumaAwareAssignments(p.machineInfo.CPUTopology, rampUpCPUs)
 	if err != nil {
@@ -1524,7 +1520,7 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 	// TODO: whether if deal with prohibited pools
 	// deal with prohibited pools
 	currentPodEntries := p.state.GetPodEntries()
-	for _, poolName := range state.ProhibitedPools.List() {
+	for _, poolName := range state.ForbiddenPools.List() {
 		cset, err := currentPodEntries.GetCPUSetForPool(poolName)
 		if err != nil {
 			general.Infof("can't get CPUSet for pool %s: %v", poolName, err)
