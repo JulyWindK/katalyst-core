@@ -102,14 +102,18 @@ func (p *DynamicPolicy) getPodContainerInfos(podUID string, entry state.Containe
 			continue
 		}
 
-		cis = append(cis, irqtuner.ContainerInfo{
+		ci := irqtuner.ContainerInfo{
 			AllocationMeta:   allocationInfo.AllocationMeta.Clone(),
 			ContainerID:      containerID,
 			CgroupPath:       cgroupPath,
 			RuntimeClassName: runtimeClassName,
 			ActualCPUSet:     allocationInfo.TopologyAwareAssignments,
 			StartedAt:        startedAt,
-		})
+		}
+		// inject pod complete anno
+		ci.Annotations = general.MergeMap(pod.Annotations, ci.Annotations)
+
+		cis = append(cis, ci)
 	}
 
 	return cis, nil
