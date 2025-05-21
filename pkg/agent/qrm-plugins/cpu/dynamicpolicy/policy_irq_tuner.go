@@ -62,7 +62,7 @@ func (p *DynamicPolicy) getPodContainerInfos(podUID string, entry state.Containe
 	}
 
 	// get the runtime class from pod spec
-	runtimeClassName := "runc"
+	var runtimeClassName string
 	if pod.Spec.RuntimeClassName != nil {
 		runtimeClassName = *pod.Spec.RuntimeClassName
 	}
