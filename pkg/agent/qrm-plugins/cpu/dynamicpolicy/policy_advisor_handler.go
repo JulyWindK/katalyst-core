@@ -587,7 +587,7 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 	// walk through prohibited pools to construct blockCPUSet (for prohibited pool),
 	// and calculate availableCPUs after deducting prohibited pools
 	// TODO(KFX): Determine if the logic is correct
-	for _, poolName := range state.ProhibitedPools.List() {
+	for _, poolName := range state.ForbiddenPools.List() {
 		allocationInfo := p.state.GetAllocationInfo(poolName, commonstate.FakedContainerName)
 		if allocationInfo == nil {
 			continue
@@ -980,7 +980,7 @@ func (p *DynamicPolicy) applyNUMAHeadroom(resp *advisorapi.ListAndWatchResponse)
 
 func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclaimActualBindingNUMAs, pooledUnionDedicatedCPUSet machine.CPUSet) error {
 	// TODO(KFX): ensure
-	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ProhibitedPools, p.state.GetPodEntries())
+	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
 	if err != nil {
 		return fmt.Errorf("GetUnitedPoolsCPUs for prohibited pools failed with error: %v", err)
 	}

@@ -98,7 +98,7 @@ func (c *CPUAdvisorValidator) Validate(resp *advisorapi.ListAndWatchResponse) er
 	for _, validator := range []cpuAdvisorValidationFunc{
 		c.validateEntries,
 		c.validateStaticPools,
-		c.validateProhibitedPools,
+		c.validateForbiddenPools,
 		c.validateBlocks,
 	} {
 		errList = append(errList, validator(resp))
@@ -232,10 +232,10 @@ func (c *CPUAdvisorValidator) validateStaticPools(resp *advisorapi.ListAndWatchR
 	return nil
 }
 
-func (c *CPUAdvisorValidator) validateProhibitedPools(resp *advisorapi.ListAndWatchResponse) error {
+func (c *CPUAdvisorValidator) validateForbiddenPools(resp *advisorapi.ListAndWatchResponse) error {
 	entries := c.state.GetPodEntries()
 
-	for _, poolName := range state.ProhibitedPools.List() {
+	for _, poolName := range state.ForbiddenPools.List() {
 		var nilStateEntry, nilRespEntry bool
 		if entries[poolName] == nil || entries[poolName][commonstate.FakedContainerName] == nil {
 			nilStateEntry = true
