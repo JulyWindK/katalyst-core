@@ -817,6 +817,11 @@ func AssignSocketsForNicIrqsForOverallNicsBalance(nics []*irqutil.NicBasicInfo, 
 
 	nicsTopoBindSocket := make(map[int]int)
 	for _, nic := range nics {
+		if nic.NumaNode == irqutil.UnknownNumaNode {
+			nicsTopoBindSocket[nic.IfIndex] = -1
+			continue
+		}
+
 		socket, err := machine.GetNumaPackageID(nic.NumaNode)
 		if err != nil {
 			nicsTopoBindSocket[nic.IfIndex] = -1
