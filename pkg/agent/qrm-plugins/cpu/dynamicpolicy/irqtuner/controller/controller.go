@@ -780,87 +780,22 @@ func listActiveUplinkNicsExcludeSriovVFs(netNSDir string) ([]*machine.NicBasicIn
 
 // map[int]int : nic ifindex as map key, nic irqs should affinitied socket slice as value
 func AssignSocketsForNicIrqsForOverallNicsBalance(nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo) (map[int][]int, error) {
-	ifIndex2Sockets := make(map[int][]int)
-
-	if len(nics) == 0 {
-		return nil, fmt.Errorf("no nic")
-	}
-
-	if len(nics) > 2 {
-		return nil, fmt.Errorf("too many nics(%d), now at mostly support 2 nics", len(nics))
-	}
-
-	if len(cpuInfo.Sockets) == 0 {
-		return nil, fmt.Errorf("no sockets to assign")
-	}
-
-	if len(cpuInfo.Sockets) > 2 {
-		return nil, fmt.Errorf("two many sockets(%d), now only support 2 sockets", len(cpuInfo.Sockets))
-	}
-
-	if len(cpuInfo.Sockets) == 1 {
-		for _, nic := range nics {
-			ifIndex2Sockets[nic.IfIndex] = []int{0}
-		}
-		return ifIndex2Sockets, nil
-	}
-
-	if len(nics) == 1 {
-		ifIndex2Sockets[nics[0].IfIndex] = []int{0, 1}
-		return ifIndex2Sockets, nil
-	}
-
-	nicsTopoBindSocket := make(map[int]int)
+	var interfaces []machine.InterfaceInfo
 	for _, nic := range nics {
-		if nic.NumaNode == machine.UnknownNumaNode {
-			nicsTopoBindSocket[nic.IfIndex] = -1
-			continue
-		}
-
-		socket, err := machine.GetNumaPackageID(nic.NumaNode)
-		if err != nil {
-			nicsTopoBindSocket[nic.IfIndex] = -1
-			klog.Errorf("failed to GetNumaPackageID(%d), err %s", nic.NumaNode, err)
-		} else {
-			nicsTopoBindSocket[nic.IfIndex] = socket
-		}
+		interfaces = append(interfaces, nic.InterfaceInfo)
 	}
 
-	if nicsTopoBindSocket[nics[0].IfIndex] != nicsTopoBindSocket[nics[1].IfIndex] {
-		var nicIndexWithKnownSocketBind int
-		var otherNicIndex int
-
-		if nicsTopoBindSocket[nics[0].IfIndex] != -1 {
-			nicIndexWithKnownSocketBind = 0
-			otherNicIndex = 1
-		} else {
-			nicIndexWithKnownSocketBind = 1
-			otherNicIndex = 0
-		}
-		ifIndex2Sockets[nics[nicIndexWithKnownSocketBind].IfIndex] = []int{nicsTopoBindSocket[nics[nicIndexWithKnownSocketBind].IfIndex]}
-
-		var otherNicAffSocket int
-		if nicsTopoBindSocket[nics[nicIndexWithKnownSocketBind].IfIndex] == 0 {
-			otherNicAffSocket = 1
-		} else {
-			otherNicAffSocket = 0
-		}
-		ifIndex2Sockets[nics[otherNicIndex].IfIndex] = []int{otherNicAffSocket}
-	} else {
-		var leastIfIndexNicIndex int
-		var otherNicIndex int
-		if nics[0].IfIndex < nics[1].IfIndex {
-			leastIfIndexNicIndex = 0
-			otherNicIndex = 1
-		} else {
-			leastIfIndexNicIndex = 1
-			otherNicIndex = 0
-		}
-		ifIndex2Sockets[nics[leastIfIndexNicIndex].IfIndex] = []int{0}
-		ifIndex2Sockets[nics[otherNicIndex].IfIndex] = []int{1}
+	var sockets []int
+	for socket, _ := range cpuInfo.Sockets {
+		sockets = append(sockets, socket)
 	}
 
-	return ifIndex2Sockets, nil
+	interfacesSockets, err := machine.GetInterfaceSocketInfo(interfaces, sockets)
+	if err != nil {
+		return nil, fmt.Errorf("failed to GetInterfaceSocketInfo, err %s", err)
+	}
+
+	return interfacesSockets.IfIndex2Sockets, nil
 }
 
 func AssignSocketsForNics(nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo, nicAffinitySocketsPolicy config.NicAffinitySocketsPolicy) (map[int][]int, error) {
