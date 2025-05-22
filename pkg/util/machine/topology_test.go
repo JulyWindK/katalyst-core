@@ -800,7 +800,7 @@ func TestGetInterfaceSocketInfo(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := GetInterfaceSocketInfo(tc.nics, tc.cpuTopology)
+			result, err := GetInterfaceSocketInfo(tc.nics, tc.cpuTopology.CPUDetails.Sockets().ToSliceInt())
 			if tc.expectErr {
 				assert.Error(t, err)
 			} else {

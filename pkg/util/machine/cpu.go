@@ -703,6 +703,14 @@ func getIntelSocketPhysicalCores(socket *CPUSocket) []PhyCore {
 	return phyCores
 }
 
+func (c *CPUInfo) GetSocketSlice() []int {
+	var sockets []int
+	for socket, _ := range c.Sockets {
+		sockets = append(sockets, socket)
+	}
+	return sockets
+}
+
 func (c *CPUInfo) GetSocketPhysicalCores(socketID int) []PhyCore {
 	if socketID < 0 || socketID > len(c.Sockets) {
 		return nil

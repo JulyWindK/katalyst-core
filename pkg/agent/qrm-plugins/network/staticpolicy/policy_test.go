@@ -149,7 +149,7 @@ func makeStaticPolicy(t *testing.T, hasNic bool) *StaticPolicy {
 
 	allocatableInterfaceSocketInfo, err := machine.GetInterfaceSocketInfo(
 		agentCtx.KatalystMachineInfo.ExtraNetworkInfo.GetAllocatableNICs(conf.MachineInfoConfiguration),
-		agentCtx.KatalystMachineInfo.CPUTopology,
+		agentCtx.KatalystMachineInfo.CPUTopology.CPUDetails.Sockets().ToSliceInt(),
 	)
 	assert.NoError(t, err)
 
