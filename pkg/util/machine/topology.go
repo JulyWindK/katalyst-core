@@ -690,26 +690,9 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, cpuTopology *CPUTopology) (*Al
 	for _, socket := range cpuTopology.CPUDetails.Sockets().ToSliceNoSortInt() {
 		socket2IfIndexes[socket] = []int{}
 	}
-	// Track the number of NICs assigned to each socket
-	socketUsage := make(map[int]int)
-	numSockets := len(sockets)
-	if numSockets == 0 {
-		return nil, fmt.Errorf("no sockets available")
-	}
 
-	// Calculate the maximum ideal NICs per socket (rounded up division)
-	idealMax := (len(nics) + numSockets - 1) / numSockets
-	// Function to find the least-used socket, preferring lower-numbered sockets in case of ties
-	getLeastUsedSocket := func() int {
-		minSocket, minCount := sockets[0], len(nics)+1
-		for _, socket := range sockets {
-			if count := socketUsage[socket]; count < minCount {
-				minSocket, minCount = socket, count
-			} else if count == minCount && socket < minSocket {
-				minSocket = socket
-			}
-		}
-		return minSocket
+	if len(sockets) == 0 {
+		return nil, fmt.Errorf("no sockets available")
 	}
 
 	// Partition NICs into two distinct groups, one group contains NICs with known NUMA node is
@@ -743,7 +726,21 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, cpuTopology *CPUTopology) (*Al
 		return nics[i].IfIndex < nics[j].IfIndex
 	})
 
-	// Assign sockets to each NIC
+	// Calculate the maximum ideal NICs per socket (rounded up division)
+	idealMax := (len(nics) + len(sockets) - 1) / len(sockets)
+	// Function to select socket with least nics, preferring lower-numbered sockets in case of ties
+	selectSocketWithLeastNics := func() int {
+		targetSocket, targetSocketNicsCount := -1, -1
+		// sockets has been sorted
+		for _, socket := range sockets {
+			if targetSocket == -1 || len(socket2IfIndexes[socket]) < targetSocketNicsCount {
+				targetSocket, targetSocketNicsCount = socket, len(socket2IfIndexes[socket])
+			}
+		}
+		return targetSocket
+	}
+
+	// Assign sockets to each NIC, and make sure no socket assigned nics number more than idealMax
 	for _, nic := range nics {
 		var assignedSockets []int
 		socketBind, ok := cpuTopology.NUMANodeIDToSocketID[nic.NumaNode]
@@ -753,12 +750,12 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, cpuTopology *CPUTopology) (*Al
 		if len(nics) == 1 {
 			// If there is only one NIC, assign all available sockets to it
 			assignedSockets = append(assignedSockets, sockets...)
-		} else if socketBind != -1 && socketUsage[socketBind] < idealMax {
+		} else if socketBind != -1 && len(socket2IfIndexes[socketBind]) < idealMax {
 			// If NIC has a valid socket bind and the socket isn't overloaded, use it
 			assignedSockets = []int{socketBind}
 		} else {
 			// Otherwise, assign the least-used socket
-			least := getLeastUsedSocket()
+			least := selectSocketWithLeastNics()
 			assignedSockets = []int{least}
 		}
 		// Store NIC to socket assignment
@@ -766,9 +763,52 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, cpuTopology *CPUTopology) (*Al
 		for _, socket := range assignedSockets {
 			// Store socket to NIC mapping and update usage count
 			socket2IfIndexes[socket] = append(socket2IfIndexes[socket], nic.IfIndex)
-			socketUsage[socket]++
 		}
 	}
+
+	// Calculate the mininum ideal NICs per socket (rounded down division)
+	idealMin := len(nics) / len(sockets)
+
+	// Function to select socket with most nics, preferring lower-numbered sockets in case of ties
+	selectSocketWithMostNics := func() int {
+		targetSocket, targetSocketNicsCount := -1, -1
+		// sockets has been sorted
+		for _, socket := range sockets {
+			if targetSocket == -1 || len(socket2IfIndexes[socket]) > targetSocketNicsCount {
+				targetSocket, targetSocketNicsCount = socket, len(socket2IfIndexes[socket])
+			}
+		}
+		return targetSocket
+	}
+
+	for _, socket := range sockets {
+		if len(socket2IfIndexes[socket]) < idealMin {
+			if idealMin-len(socket2IfIndexes[socket]) > 2 {
+				klog.Errorf("it's impossible that socket %d has %d nics, round down socket nics count is %d, diff is greater-than 2",
+					socket, len(socket2IfIndexes[socket]), idealMin)
+			}
+
+			targetSocket := selectSocketWithMostNics()
+
+			targetSocketNicsCount := len(socket2IfIndexes[targetSocket])
+			if targetSocketNicsCount <= 1 {
+				klog.Errorf("it's impossible that target socket %d has %d nics, less-equal 1", socket, targetSocketNicsCount)
+				continue
+			}
+
+			if targetSocketNicsCount-len(socket2IfIndexes[socket]) < 2 {
+				klog.Errorf("it's impossible that target socket %d with %d nics, socket %d with %d nics, diff less than 2",
+					targetSocket, targetSocketNicsCount, socket, len(socket2IfIndexes[socket]))
+				continue
+			}
+
+			targetIfIndex := socket2IfIndexes[targetSocket][targetSocketNicsCount-1]
+
+			socket2IfIndexes[targetSocket] = socket2IfIndexes[targetSocket][:targetSocketNicsCount-1]
+			socket2IfIndexes[socket] = append(socket2IfIndexes[socket], targetIfIndex)
+		}
+	}
+
 	return &AllocatableInterfaceSocketInfo{
 		IfIndex2Sockets:  ifIndex2Sockets,
 		Socket2IfIndexes: socket2IfIndexes,
