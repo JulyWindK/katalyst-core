@@ -25,6 +25,7 @@ import (
 
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/global"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
+	"github.com/vishvananda/netns"
 )
 
 const (
@@ -32,6 +33,17 @@ const (
 
 	IPVersionV4 = 4
 	IPVersionV6 = 6
+)
+
+type NicDriver string
+
+const (
+	NicDriverMLX       NicDriver = "mlx"
+	NicDriverBNX       NicDriver = "bnxt"
+	NicDriverVirtioNet NicDriver = "virtio_net"
+	NicDriverI40E      NicDriver = "i40e"
+	NicDriverIXGBE     NicDriver = "ixgbe"
+	NicDriverUnknown   NicDriver = "unknown"
 )
 
 type ExtraNetworkInfo struct {
@@ -99,6 +111,30 @@ type InterfaceInfo struct {
 type IfaceAddr struct {
 	IPV4 []*net.IP
 	IPV6 []*net.IP
+}
+
+type NicBasicInfo struct {
+	InterfaceInfo
+	Driver         NicDriver // used to filter queue stats of ethtool stats, different driver has different format
+	IsVirtioNetDev bool
+	VirtioNetName  string // used to filter virtio nic's irqs in /proc/interrupts
+	Irqs           []int  // store nic's all irqs including rx irqs, Irqs is used to resolve conflicts when there 2 active nics with the same name in /proc/interrupts
+	QueueNum       int
+	Queue2Irq      map[int]int
+	Irq2Queue      map[int]int
+}
+
+type netnsSwitchContext struct {
+	originalNetNSHdl netns.NsHandle
+	newNetNSName     string
+	newNetNSHdl      netns.NsHandle
+	sysMountDir      string
+	sysDirRemounted  bool
+}
+
+type SoftNetStat struct {
+	ProcessedPackets   uint64 // /proc/net/softnet_stat 1st col
+	TimeSqueezePackets uint64 // /proc/net/softnet_stat 3rd col
 }
 
 func (addr *IfaceAddr) GetNICIPs(ipVersion int) []string {
