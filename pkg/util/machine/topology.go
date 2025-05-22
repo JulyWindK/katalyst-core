@@ -560,7 +560,7 @@ func GetExtraTopologyInfo(conf *global.MachineInfoConfiguration, cpuTopology *CP
 		return nil, err
 	}
 
-	interfaceSocketInfo, err := GetInterfaceSocketInfo(extraNetworkInfo.GetAllocatableNICs(conf), cpuTopology)
+	interfaceSocketInfo, err := GetInterfaceSocketInfo(extraNetworkInfo.GetAllocatableNICs(conf), cpuTopology.CPUDetails.Sockets().ToSliceInt())
 	if err != nil {
 		return nil, err
 	}
@@ -676,23 +676,33 @@ type AllocatableInterfaceSocketInfo struct {
 //   - Least-used socket when NUMA binding is unavailable or overloaded.
 //
 // 6. Populate the mappings and return them.
-func GetInterfaceSocketInfo(nics []InterfaceInfo, cpuTopology *CPUTopology) (*AllocatableInterfaceSocketInfo, error) {
+func GetInterfaceSocketInfo(nics []InterfaceInfo, sockets []int) (*AllocatableInterfaceSocketInfo, error) {
 	// Check if there are available sockets
-	if cpuTopology == nil {
-		return nil, fmt.Errorf("get nil CPUTopology")
+	if len(sockets) == 0 {
+		return nil, fmt.Errorf("no sockets available")
 	}
 
-	sockets := cpuTopology.CPUDetails.Sockets().ToSliceInt()
+	sort.Ints(sockets)
+
 	// Map NIC indices to their assigned sockets
 	ifIndex2Sockets := make(map[int][]int)
 	// Map sockets to the NIC indices assigned to them
 	socket2IfIndexes := make(map[int][]int)
-	for _, socket := range cpuTopology.CPUDetails.Sockets().ToSliceNoSortInt() {
-		socket2IfIndexes[socket] = []int{}
-	}
 
-	if len(sockets) == 0 {
-		return nil, fmt.Errorf("no sockets available")
+	getSocketBind := func(numaNode int) int {
+		var socketBind int
+		if numaNode != UnknownNumaNode {
+			if socket, err := GetNumaPackageID(numaNode); err == nil {
+				socketBind = socket
+			} else {
+				klog.Errorf("failed to GetNumaPackageID(%d), err %s", numaNode, err)
+				socketBind = -1
+			}
+		} else {
+			socketBind = -1
+		}
+
+		return socketBind
 	}
 
 	// Partition NICs into two distinct groups, one group contains NICs with known NUMA node is
@@ -701,15 +711,8 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, cpuTopology *CPUTopology) (*Al
 	// This ensures sockets allocation for NICs with known NUMA node takes precedence over
 	// those without known numa node.
 	sort.SliceStable(nics, func(i, j int) bool {
-		iNicSocketBind, ok := cpuTopology.NUMANodeIDToSocketID[nics[i].NumaNode]
-		if !ok {
-			iNicSocketBind = -1
-		}
-
-		jNicSocketBind, ok := cpuTopology.NUMANodeIDToSocketID[nics[j].NumaNode]
-		if !ok {
-			jNicSocketBind = -1
-		}
+		iNicSocketBind := getSocketBind(nics[i].NumaNode)
+		jNicSocketBind := getSocketBind(nics[j].NumaNode)
 
 		if iNicSocketBind == jNicSocketBind {
 			return nics[i].IfIndex < nics[j].IfIndex
@@ -743,10 +746,8 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, cpuTopology *CPUTopology) (*Al
 	// Assign sockets to each NIC, and make sure no socket assigned nics number more than idealMax
 	for _, nic := range nics {
 		var assignedSockets []int
-		socketBind, ok := cpuTopology.NUMANodeIDToSocketID[nic.NumaNode]
-		if !ok {
-			socketBind = -1
-		}
+		socketBind := getSocketBind(nic.NumaNode)
+
 		if len(nics) == 1 {
 			// If there is only one NIC, assign all available sockets to it
 			assignedSockets = append(assignedSockets, sockets...)

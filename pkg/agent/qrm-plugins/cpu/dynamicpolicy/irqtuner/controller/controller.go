@@ -775,10 +775,6 @@ func listActiveUplinkNicsExcludeSriovVFs(netNSDir string) ([]*machine.NicBasicIn
 		return nil, fmt.Errorf("no active uplink nics after filtering out sriov nics, it's impossible")
 	}
 
-	if len(nics) > 2 {
-		return nil, fmt.Errorf("still has %d active uplink nics after filtering out sriov nics, at most 2 active uplink nics are supported now", len(nics))
-	}
-
 	return nics, nil
 }
 
@@ -2657,7 +2653,10 @@ func (ic *IrqTuningController) adaptIrqAffinityPolicy(oldIndicatorsStats *Indica
 
 	oldNicStats := oldIndicatorsStats.NicStats
 	for _, nic := range ic.Nics {
-		if shouldFallbackToBalanceFairPolicy || nic.FallbackToBalanceFair {
+		// if nics count greater-than 2, then forcely use IrqBalanceFair policy
+		// In the future, we may support more than 2 nics with IrqCoresExclusive policy or
+		// provide a method to pick 2 largest throughput nics from ic.Nics to use IrqCoresExclusive policy.
+		if shouldFallbackToBalanceFairPolicy || nic.FallbackToBalanceFair || len(ic.Nics) > 2 {
 			if nic.IrqAffinityPolicy != IrqBalanceFair {
 				ic.IrqAffinityChanges[nic.NicInfo.IfIndex] = buildNicIrqAffinityChange(nic, IrqBalanceFair, nil)
 			}
