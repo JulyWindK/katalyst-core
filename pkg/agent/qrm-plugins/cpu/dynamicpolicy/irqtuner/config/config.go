@@ -24,6 +24,15 @@ const (
 	NicPhysicalTopoBindNuma NicAffinitySocketsPolicy = "physical-topo-bind"
 )
 
+// if a nic's throughput meet LowThroughPutNicCriteria, then this nic will be considered as low througput nic,
+// low throughput nic's irq affinity will be dealed separately, doesnot affect normal throughput nic's irq affinity
+// and socket assignments.
+// low throughput nic's irq affinity still need to be balanced, but only consider its own socket assignment, and its
+// socket assignment only consider its physical topo binded numa.
+type LowThroughPutNicCriteria struct {
+	RxPPSThresh uint64
+}
+
 // when there are one or more irq cores's ratio of softnet_stat 3rd col time_squeeze packets / 1st col processed packets
 // greater-equal IrqCoreSoftNetTimeSqueezeRatio,
 // then tring to tune irq load balance first, if failed to tune irq load balance, then increase irq cores.
@@ -114,6 +123,7 @@ type IrqTuningConfig struct {
 	EnableRPS                bool                     // only balance-fair policy support enable rps
 	NicAffinitySocketsPolicy NicAffinitySocketsPolicy // nics's irqs affinity sockets policy
 	IrqCoresExpectedCpuUtil  int
+	LowThroughPutNicCriteria LowThroughPutNicCriteria
 	ReniceIrqCoresKsoftirqd  bool
 	IrqCoresKsoftirqdNice    int
 	IrqCoreNetOverLoadThresh IrqCoreNetOverloadThresholds
@@ -130,8 +140,11 @@ func NewConfiguration() *IrqTuningConfig {
 		EnableRPS:                false,
 		NicAffinitySocketsPolicy: EachNicBalanceAllSockets,
 		IrqCoresExpectedCpuUtil:  50,
-		ReniceIrqCoresKsoftirqd:  false,
-		IrqCoresKsoftirqdNice:    -20,
+		LowThroughPutNicCriteria: LowThroughPutNicCriteria{
+			RxPPSThresh: 5000,
+		},
+		ReniceIrqCoresKsoftirqd: false,
+		IrqCoresKsoftirqdNice:   -20,
 		IrqCoreNetOverLoadThresh: IrqCoreNetOverloadThresholds{
 			IrqCoreSoftNetTimeSqueezeRatio: 0.1,
 		},

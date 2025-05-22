@@ -419,6 +419,28 @@ func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *machine.NicBasicI
 }
 
 func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo) ([]*NicIrqTuningManager, error) {
+	start := time.Now()
+	preNicRxPackets := make(map[int]uint64)
+	for _, nic := range nics {
+		rxPackets, err := machine.GetNetDevRxPackets(nic)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collectNicStats, err %v", err)
+		}
+		preNicRxPackets[nic.IfIndex] = rxPackets
+	}
+
+	time.Sleep(10 * time.Second)
+	timeDiff := time.Since(start).Seconds()
+
+	nicRxPackets := make(map[int]uint64)
+	for _, nic := range nics {
+		rxPackets, err := machine.GetNetDevRxPackets(nic)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collectNicStats, err %v", err)
+		}
+		nicRxPackets[nic.IfIndex] = rxPackets
+	}
+
 	nicIrqsAffSockets, err := AssignSocketsForNics(nics, cpuInfo, conf.NicAffinitySocketsPolicy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
