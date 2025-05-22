@@ -35,7 +35,7 @@ import (
 type NUMANodeInfo map[int]CPUSet
 
 // CPUDetails is a map from CPU ID to Core ID, Socket ID, and NUMA ID.
-type CPUDetails map[int]CPUTopInfo
+type CPUDetails map[int]CPUTopoInfo
 
 // CPUTopology contains details of node cpu, where :
 // CPU  - logical CPU, cadvisor - thread
@@ -192,7 +192,7 @@ func GenerateDummyCPUTopology(cpuNum, socketNum, numaNum int) (*CPUTopology, err
 	}
 
 	cpuTopology := new(CPUTopology)
-	cpuTopology.CPUDetails = make(map[int]CPUTopInfo)
+	cpuTopology.CPUDetails = make(map[int]CPUTopoInfo)
 	cpuTopology.NumCPUs = cpuNum
 	cpuTopology.NumCores = cpuNum / 2
 	cpuTopology.NumSockets = socketNum
@@ -205,13 +205,13 @@ func GenerateDummyCPUTopology(cpuNum, socketNum, numaNum int) (*CPUTopology, err
 	for i := 0; i < socketNum; i++ {
 		for j := i * numaPerSocket; j < (i+1)*numaPerSocket; j++ {
 			for k := j * (cpusPerNUMA / 2); k < (j+1)*(cpusPerNUMA/2); k++ {
-				cpuTopology.CPUDetails[k] = CPUTopInfo{
+				cpuTopology.CPUDetails[k] = CPUTopoInfo{
 					NUMANodeID: j,
 					SocketID:   i,
 					CoreID:     k,
 				}
 
-				cpuTopology.CPUDetails[k+cpuNum/2] = CPUTopInfo{
+				cpuTopology.CPUDetails[k+cpuNum/2] = CPUTopoInfo{
 					NUMANodeID: j,
 					SocketID:   i,
 					CoreID:     k,
@@ -273,8 +273,8 @@ func GenerateDummyExtraTopology(numaNum int) (*ExtraTopologyInfo, error) {
 	return extraTopology, nil
 }
 
-// CPUTopInfo contains the NUMA, socket, and core IDs associated with a CPU.
-type CPUTopInfo struct {
+// CPUTopoInfo contains the NUMA, socket, and core IDs associated with a CPU.
+type CPUTopoInfo struct {
 	NUMANodeID int
 	SocketID   int
 	CoreID     int
@@ -444,7 +444,7 @@ func Discover(machineInfo *info.MachineInfo) (*CPUTopology, *MemoryTopology, err
 		for _, core := range node.Cores {
 			if coreID, err := getUniqueCoreID(core.Threads); err == nil {
 				for _, cpu := range core.Threads {
-					CPUDetails[cpu] = CPUTopInfo{
+					CPUDetails[cpu] = CPUTopoInfo{
 						CoreID:     coreID,
 						SocketID:   core.SocketID,
 						NUMANodeID: node.Id,
