@@ -24,6 +24,26 @@ const (
 	NicPhysicalTopoBindNuma NicAffinitySocketsPolicy = "physical-topo-bind"
 )
 
+// thresholds of classifying a nic to low throughput class, if a nic's throughput meet LowThroughputThresholds, then
+// this nic will be considered as low througput nic, low throughput nic's irq affinity will be dealed separately, doesnot
+// affect normal throughput nic's irq affinity and socket assignments.
+// low throughput nic's irq affinity still need to be balanced, but only consider its own socket assignment, and its
+// socket assignment only consider its physical topo binded numa.
+type LowThroughputThresholds struct {
+	RxPPSThresh     uint64
+	SuccessiveCount int
+}
+
+type NormalThroughputThresholds struct {
+	RxPPSThresh     uint64
+	SuccessiveCount int
+}
+
+type ThroughputClassSwitchConfig struct {
+	LowThroughputThresholds    LowThroughputThresholds
+	NormalThroughputThresholds NormalThroughputThresholds
+}
+
 // when there are one or more irq cores's ratio of softnet_stat 3rd col time_squeeze packets / 1st col processed packets
 // greater-equal IrqCoreSoftNetTimeSqueezeRatio,
 // then tring to tune irq load balance first, if failed to tune irq load balance, then increase irq cores.
@@ -114,6 +134,7 @@ type IrqTuningConfig struct {
 	EnableRPS                bool                     // only balance-fair policy support enable rps
 	NicAffinitySocketsPolicy NicAffinitySocketsPolicy // nics's irqs affinity sockets policy
 	IrqCoresExpectedCpuUtil  int
+	ThrouputClassSwitchConf  ThroughputClassSwitchConfig
 	ReniceIrqCoresKsoftirqd  bool
 	IrqCoresKsoftirqdNice    int
 	IrqCoreNetOverLoadThresh IrqCoreNetOverloadThresholds
@@ -130,8 +151,18 @@ func NewConfiguration() *IrqTuningConfig {
 		EnableRPS:                false,
 		NicAffinitySocketsPolicy: EachNicBalanceAllSockets,
 		IrqCoresExpectedCpuUtil:  50,
-		ReniceIrqCoresKsoftirqd:  false,
-		IrqCoresKsoftirqdNice:    -20,
+		ThrouputClassSwitchConf: ThroughputClassSwitchConfig{
+			LowThroughputThresholds: LowThroughputThresholds{
+				RxPPSThresh:     3000,
+				SuccessiveCount: 30,
+			},
+			NormalThroughputThresholds: NormalThroughputThresholds{
+				RxPPSThresh:     6000,
+				SuccessiveCount: 10,
+			},
+		},
+		ReniceIrqCoresKsoftirqd: false,
+		IrqCoresKsoftirqdNice:   -20,
 		IrqCoreNetOverLoadThresh: IrqCoreNetOverloadThresholds{
 			IrqCoreSoftNetTimeSqueezeRatio: 0.1,
 		},
