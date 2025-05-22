@@ -15,7 +15,7 @@ import (
 	metricUtil "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
-	util "github.com/kubewharf/katalyst-core/pkg/util"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
@@ -486,7 +486,7 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		return nil, fmt.Errorf("invalid cpuinfo with 0 socket")
 	}
 
-	ksoftirqds, err := util.ListKsoftirqdProcesses()
+	ksoftirqds, err := general.ListKsoftirqdProcesses()
 	if err != nil {
 		return nil, fmt.Errorf("failed to ListKsoftirqdProcesses, err %v", err)
 	}
@@ -532,7 +532,7 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 }
 
 func isIrqBalanceNGServiceRuning() bool {
-	running, err := util.CheckIfProcCommRunning(IrqBalanceNGProcComm)
+	running, err := general.CheckIfProcCommRunning(IrqBalanceNGProcComm)
 	if err != nil { // just to be sure, if failed to check if irq balance service is running, consider it as running
 		return true
 	}
@@ -917,8 +917,8 @@ func irqCoresEqual(a []int64, b []int64) bool {
 		return false
 	}
 
-	util.SortInt64Slice(a)
-	util.SortInt64Slice(b)
+	general.SortInt64Slice(a)
+	general.SortInt64Slice(b)
 
 	for i := 0; i < len(a); i++ {
 		if a[i] != b[i] {
@@ -1096,7 +1096,7 @@ func (ic *IrqTuningController) emitExclusiveIrqCores() {
 		}
 
 		irqCores := nic.NicInfo.getIrqCores()
-		irqCoresStr := util.ConvertLinuxListToString(irqCores)
+		irqCoresStr := general.ConvertLinuxListToString(irqCores)
 
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicExclusiveIrqCores, int64(len(irqCores)), metrics.MetricTypeNameRaw,
 			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()},
@@ -1105,7 +1105,7 @@ func (ic *IrqTuningController) emitExclusiveIrqCores() {
 
 	totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
 	if err != nil {
-		totalIrqCoresStr := util.ConvertLinuxListToString(totalIrqCores)
+		totalIrqCoresStr := general.ConvertLinuxListToString(totalIrqCores)
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningTotalExclusiveIrqCores, int64(len(totalIrqCores)), metrics.MetricTypeNameRaw,
 			metrics.MetricTag{Key: "irq_cores", Val: totalIrqCoresStr})
 
@@ -1159,8 +1159,8 @@ func (ic *IrqTuningController) emitNicIrqLoadBalance(nic *NicIrqTuningManager, l
 		return
 	}
 
-	sourceIrqCoresStr := util.ConvertLinuxListToString(lb.SourceCores)
-	destIrqCoresStr := util.ConvertLinuxListToString(lb.DestCores)
+	sourceIrqCoresStr := general.ConvertLinuxListToString(lb.SourceCores)
+	destIrqCoresStr := general.ConvertLinuxListToString(lb.DestCores)
 
 	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicIrqLoadBalance, 1, metrics.MetricTypeNameRaw,
 		metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()},
@@ -1193,7 +1193,7 @@ func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error
 		ksoftirqPids = append(ksoftirqPids, pid)
 	}
 
-	ksoftirqdSchedWait, err := util.GetTaskSchedWait(ksoftirqPids)
+	ksoftirqdSchedWait, err := general.GetTaskSchedWait(ksoftirqPids)
 	if err != nil {
 		return nil, fmt.Errorf("failed to GetTaskSchedWait, err %v", err)
 	}
@@ -2433,7 +2433,7 @@ func (ic *IrqTuningController) balanceNicsIrqsInInitTuning() {
 // bool: if is sriov container
 func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerInfo) (bool, []*NicInfo) {
 	// container maybe exited
-	pids, err := util.GetCgroupPids(cnt.CgroupPath)
+	pids, err := general.GetCgroupPids(cnt.CgroupPath)
 	if err != nil {
 		klog.Errorf("failed to GetCgroupPids(%s), err %v", cnt.CgroupPath, err)
 		return false, nil
@@ -2447,7 +2447,7 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 
 	var netnsInode uint64
 	for _, pid := range pids {
-		inode, err := util.GetProcessNameSpaceInode(pid, util.NetNS)
+		inode, err := general.GetProcessNameSpaceInode(pid, general.NetNS)
 		if err == nil {
 			netnsInode = inode
 			break
@@ -2618,7 +2618,7 @@ func (ic *IrqTuningController) fallbackToBalanceFairPolicyByError(nic *NicIrqTun
 
 		irqCores := nic.NicInfo.getIrqCores()
 		totalExclusiveIrqCores = calculateIrqCoresDiff(totalExclusiveIrqCores, irqCores)
-		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(util.ConvertInt64SliceToIntSlice(totalExclusiveIrqCores)...)); err != nil {
+		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(general.ConvertInt64SliceToIntSlice(totalExclusiveIrqCores)...)); err != nil {
 			klog.Errorf("failed to decrease irq cores, err %s", err)
 		}
 	}
@@ -3932,7 +3932,7 @@ func (ic *IrqTuningController) balanceNicIrqsToNewIrqCores(nic *NicIrqTuningMana
 		tmpTotalIrqCores = append(tmpTotalIrqCores, totalIrqCores...)
 		tmpTotalIrqCores = append(tmpTotalIrqCores, stepIncIrqCores...)
 
-		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(util.ConvertInt64SliceToIntSlice(tmpTotalIrqCores)...)); err != nil {
+		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(general.ConvertInt64SliceToIntSlice(tmpTotalIrqCores)...)); err != nil {
 			return fmt.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
 		}
 
@@ -4030,7 +4030,7 @@ func (ic *IrqTuningController) tuneNicIrqAffinityPolicyToIrqCoresExclusive(nic *
 		tmpTotalIrqCores = append(tmpTotalIrqCores, totalIrqCores...)
 		tmpTotalIrqCores = append(tmpTotalIrqCores, stepIncIrqCores...)
 
-		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(util.ConvertInt64SliceToIntSlice(tmpTotalIrqCores)...)); err != nil {
+		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(general.ConvertInt64SliceToIntSlice(tmpTotalIrqCores)...)); err != nil {
 			return fmt.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
 		}
 
@@ -4138,7 +4138,7 @@ func (ic *IrqTuningController) balanceNicsIrqsToNewIrqCores(oldIndicatorsStats *
 	needToDecreasedIrqCores := calculateIrqCoresDiff(totalExclusiveIrqCores, newIrqCores)
 	if len(needToDecreasedIrqCores) > 0 {
 		totalExclusiveIrqCores = calculateIrqCoresDiff(totalExclusiveIrqCores, needToDecreasedIrqCores)
-		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(util.ConvertInt64SliceToIntSlice(totalExclusiveIrqCores)...)); err != nil {
+		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(general.ConvertInt64SliceToIntSlice(totalExclusiveIrqCores)...)); err != nil {
 			klog.Errorf("failed to decrease irq cores, err %s", err)
 			ic.emitErrMetric(irqtuner.SetExclusiveIRQCPUSetFailed, irqtuner.IrqTuningFatal)
 		}
@@ -4188,7 +4188,7 @@ func (ic *IrqTuningController) balanceNicsIrqsToNewIrqCores(oldIndicatorsStats *
 }
 
 func (ic *IrqTuningController) setNicQueuesRPS(nic *NicInfo, queues []int, destCores []int64, oldRPSConf map[int]string) error {
-	newQueueRPSConf, err := util.ConvertIntSliceToBitmapString(destCores)
+	newQueueRPSConf, err := general.ConvertIntSliceToBitmapString(destCores)
 	if err != nil {
 		return fmt.Errorf("failed to ConvertIntSliceToBitmapString(%+v), err %s", destCores, err)
 	}
@@ -4402,7 +4402,7 @@ func (ic *IrqTuningController) nicsRPSCleared() bool {
 func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 	ksoftirqdsNice := make(map[int]int)
 	for _, pid := range ic.Ksoftirqds {
-		nice, err := util.GetProcessNice(pid)
+		nice, err := general.GetProcessNice(pid)
 		if err != nil {
 			klog.Errorf("failed to GetProcessNice, err %s", err)
 			continue
@@ -4417,7 +4417,7 @@ func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 				continue
 			}
 
-			if err := util.SetProcessNice(pid, 0); err != nil {
+			if err := general.SetProcessNice(pid, 0); err != nil {
 				klog.Errorf("failed to SetProcessNice(%d, %d), err %s", pid, ic.conf.IrqCoresKsoftirqdNice, err)
 			}
 		}
@@ -4450,13 +4450,13 @@ func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 
 		if isExclusiveIrqCore {
 			if nice != ic.conf.IrqCoresKsoftirqdNice {
-				if err := util.SetProcessNice(pid, ic.conf.IrqCoresKsoftirqdNice); err != nil {
+				if err := general.SetProcessNice(pid, ic.conf.IrqCoresKsoftirqdNice); err != nil {
 					klog.Errorf("failed to SetProcessNice(%d, %d), err %s", pid, ic.conf.IrqCoresKsoftirqdNice)
 				}
 			}
 		} else {
 			if nice != 0 {
-				if err := util.SetProcessNice(pid, 0); err != nil {
+				if err := general.SetProcessNice(pid, 0); err != nil {
 					klog.Errorf("failed to SetProcessNice(%d, %d), err %s", pid, ic.conf.IrqCoresKsoftirqdNice)
 				}
 			}

@@ -28,7 +28,7 @@ import (
 	"sync"
 
 	"github.com/klauspost/cpuid/v2"
-	"github.com/kubewharf/katalyst-core/pkg/util"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
@@ -278,7 +278,7 @@ func GetNumaPackageID(nodeID int) (int, error) {
 		return -1, fmt.Errorf("%s not exists", nodeCPUListFile)
 	}
 
-	cpuList, err := util.ParseLinuxListFormatFromFile(nodeCPUListFile)
+	cpuList, err := general.ParseLinuxListFormatFromFile(nodeCPUListFile)
 	if err != nil {
 		return -1, fmt.Errorf("failed to ParseLinuxListFormatFromFile(%s), err %v", nodeCPUListFile, err)
 	}
@@ -350,7 +350,7 @@ func GetCPUOnlineStatus(cpuID int64) (bool, error) {
 }
 
 func getLLCDomain(cpuListFile string) (*LLCDomain, error) {
-	cpuList, err := util.ParseLinuxListFormatFromFile(cpuListFile)
+	cpuList, err := general.ParseLinuxListFormatFromFile(cpuListFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ParseLinuxListFormatFromFile(%s), err %v", cpuListFile, err)
 	}
@@ -370,7 +370,7 @@ func getLLCDomain(cpuListFile string) (*LLCDomain, error) {
 			continue
 		}
 
-		cpus, err := util.ParseLinuxListFormatFromFile(coreCPUsFile)
+		cpus, err := general.ParseLinuxListFormatFromFile(coreCPUsFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to getLLCDomain(%s), err %v", coreCPUsFile, err)
 		}
@@ -396,7 +396,7 @@ func getIntelNumaTopo(nodeCPUListFile string) (*LLCDomain, error) {
 }
 
 func getAMDNumaTopo(nodeCPUListFile string) (*AMDNuma, error) {
-	nodeCPUList, err := util.ParseLinuxListFormatFromFile(nodeCPUListFile)
+	nodeCPUList, err := general.ParseLinuxListFormatFromFile(nodeCPUListFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ParseLinuxListFormatFromFile(%s), err %v", nodeCPUListFile, err)
 	}
@@ -450,7 +450,7 @@ func getSocketCPUList(socket *CPUSocket, cpuVendor cpuid.Vendor) []int64 {
 		}
 	}
 
-	util.SortInt64Slice(cpuList)
+	general.SortInt64Slice(cpuList)
 	return cpuList
 }
 
@@ -560,7 +560,7 @@ func GetCPUInfoWithTopo() (*CPUInfo, error) {
 }
 
 func CollectCpuStats() (map[int64]*CPUStat, error) {
-	lines, err := util.ReadLines(cpuStatFile)
+	lines, err := general.ReadLines(cpuStatFile)
 	if err != nil {
 		return nil, err
 	}
@@ -751,7 +751,7 @@ func (c *CPUInfo) GetNodeCPUList(nodeID int) []int64 {
 		}
 	}
 
-	util.SortInt64Slice(cpuList)
+	general.SortInt64Slice(cpuList)
 	return cpuList
 }
 
@@ -791,6 +791,6 @@ func GetLLCDomainCPUList(llcDomain *LLCDomain) []int64 {
 		cpuList = append(cpuList, phyCore.CPUs...)
 	}
 
-	util.SortInt64Slice(cpuList)
+	general.SortInt64Slice(cpuList)
 	return cpuList
 }
