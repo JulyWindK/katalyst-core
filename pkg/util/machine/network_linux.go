@@ -1014,7 +1014,7 @@ func ListBondNetDevSlaves(nicSysPath string) ([]string, error) {
 	return slaves, nil
 }
 
-func ListNetNS(netNSDir string) ([]machine.NetNSInfo, error) {
+func ListNetNS(netNSDir string) ([]NetNSInfo, error) {
 	hostNetNSInode, err := util.GetProcessNameSpaceInode(1, util.NetNS)
 	if err != nil {
 		return nil, fmt.Errorf("failed to GetProcessNameSpaceInode(1, %s), err %v", util.NetNS, err)
@@ -1024,7 +1024,7 @@ func ListNetNS(netNSDir string) ([]machine.NetNSInfo, error) {
 		netNSDir = DefaultNetNSDir
 	}
 
-	nsList := []machine.NetNSInfo{
+	nsList := []NetNSInfo{
 		{
 			NSName:   HostNetNSName,
 			NSInode:  hostNetNSInode,
@@ -1048,7 +1048,7 @@ func ListNetNS(netNSDir string) ([]machine.NetNSInfo, error) {
 				return nil, fmt.Errorf("failed to GetFileInode(%s), err %v", netnsPath, err)
 			}
 
-			nsList = append(nsList, machine.NetNSInfo{
+			nsList = append(nsList, NetNSInfo{
 				NSName:   d.Name(),
 				NSInode:  inode,
 				NSAbsDir: netNSDir,
@@ -1059,7 +1059,7 @@ func ListNetNS(netNSDir string) ([]machine.NetNSInfo, error) {
 	return nsList, nil
 }
 
-func netnsEnter(netnsInfo machine.NetNSInfo) (*netnsSwitchContext, error) {
+func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 	var retErr error
 
 	// need to LockOSThread during switch netns
@@ -1165,7 +1165,7 @@ func (nsc *netnsSwitchContext) netnsExit() {
 	nsc.originalNetNSHdl.Close()
 }
 
-func ListActiveUplinkNicsFromNetNS(netnsInfo machine.NetNSInfo) ([]*NicBasicInfo, error) {
+func ListActiveUplinkNicsFromNetNS(netnsInfo NetNSInfo) ([]*NicBasicInfo, error) {
 	nsc, err := netnsEnter(netnsInfo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to netnsEnter(%s), err %v", netnsInfo.NSName, err)
@@ -1265,7 +1265,7 @@ func ListActiveUplinkNicsFromNetNS(netnsInfo machine.NetNSInfo) ([]*NicBasicInfo
 		}
 
 		nicInfo := &NicBasicInfo{
-			InterfaceInfo: machine.InterfaceInfo{
+			InterfaceInfo: InterfaceInfo{
 				NetNSInfo: netnsInfo,
 				Name:      n,
 				IfIndex:   ifIndex,
