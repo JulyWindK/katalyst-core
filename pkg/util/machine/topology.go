@@ -712,17 +712,35 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, cpuTopology *CPUTopology) (*Al
 		return minSocket
 	}
 
-	// Sort NICs by NUMA node in ascending order, with numaNode=-1 NICs sorted last.
-	// This ensures NUMA-aware NICs are allocated first based on their NUMA node,
-	// while NICs without NUMA affinity are allocated last.
+	// Partition NICs into two distinct groups, one group contains NICs with known NUMA node is
+	// placed in the front, the other group contains NICs without known NUMA node is placed in the back,
+	// then sort each group individually by ifindex.
+	// This ensures sockets allocation for NICs with known NUMA node takes precedence over
+	// those without known numa node.
 	sort.SliceStable(nics, func(i, j int) bool {
-		if nics[i].NumaNode == -1 {
+		iNicSocketBind, ok := cpuTopology.NUMANodeIDToSocketID[nics[i].NumaNode]
+		if !ok {
+			iNicSocketBind = -1
+		}
+
+		jNicSocketBind, ok := cpuTopology.NUMANodeIDToSocketID[nics[j].NumaNode]
+		if !ok {
+			jNicSocketBind = -1
+		}
+
+		if iNicSocketBind == jNicSocketBind {
+			return nics[i].IfIndex < nics[j].IfIndex
+		}
+
+		if iNicSocketBind == -1 {
 			return false
 		}
-		if nics[j].NumaNode == -1 {
+
+		if jNicSocketBind == -1 {
 			return true
 		}
-		return nics[i].NumaNode < nics[j].NumaNode
+
+		return nics[i].IfIndex < nics[j].IfIndex
 	})
 
 	// Assign sockets to each NIC
