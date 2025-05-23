@@ -269,6 +269,12 @@ type NicInfo struct {
 	// IrqCores []int64 // dynamic get by NicInfo.getIrqCores
 }
 
+type NicThroughputClassSwitchStat struct {
+	LastSwitchTime            time.Time
+	LowThroughputSuccCount    int
+	NormalThroughputSuccCount int
+}
+
 type IrqCoresExclusionSwitchStat struct {
 	IrqCoresExclusionLastSwitchTime time.Time // time of last enable/disable irq cores exclusion, interval of successive enable/disable irq cores exclusion MUST >= specified threshold
 	EnableExclusionThreshSuccCount  int       // succssive count of rx pps >= irq cores exclusion enable threshold
@@ -307,6 +313,7 @@ type NicIrqTuningManager struct {
 	FallbackToBalanceFair bool  // if server error happened in IrqCoresExclusive policy, then fallback to balance-fair policy, and cannot be changed back again.
 	AssignedSockets       []int // assigned sockets which nic irqs should affinity to, which are determined by the number of active nics and nic's binded numa in physical topo
 	ExclusiveIrqCoresSelectOrder
+	NicThroughputClassSwitchStat
 	IrqCoresExclusionSwitchStat
 	TuningRecords
 }
@@ -413,6 +420,9 @@ func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *machine.NicBasicI
 		IrqAffinityPolicy:            InitTuning,
 		AssignedSockets:              irqAffSockets,
 		ExclusiveIrqCoresSelectOrder: order,
+		NicThroughputClassSwitchStat: NicThroughputClassSwitchStat{
+			LastSwitchTime: time.Now(),
+		},
 		IrqCoresExclusionSwitchStat: IrqCoresExclusionSwitchStat{
 			IrqCoresExclusionLastSwitchTime: time.Now(),
 		},
@@ -434,10 +444,10 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 		prevNicRxPackets[nic.IfIndex] = rxPackets
 	}
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(30 * time.Second)
 	timeDiff := time.Since(start).Seconds()
 
-	var normalThroughPutNics []*machine.NicBasicInfo
+	var normalThroughputNics []*machine.NicBasicInfo
 	var lowThroughputNics []*machine.NicBasicInfo
 
 	var ppsMaxNic *machine.NicBasicInfo
@@ -446,21 +456,21 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
 			klog.Errorf("failed to collectNicStats, err %v", err)
-			normalThroughPutNics = append(normalThroughPutNics, nic)
+			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
 		oldRxPPS, ok := prevNicRxPackets[nic.IfIndex]
 		if !ok {
 			klog.Errorf("failed to find nic %s in prev nic stats")
-			normalThroughPutNics = append(normalThroughPutNics, nic)
+			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
 		pps := (rxPackets - oldRxPPS) / uint64(timeDiff)
 
-		if pps > conf.LowThroughPutNicCriteria.RxPPSThresh {
-			normalThroughPutNics = append(normalThroughPutNics, nic)
+		if pps >= conf.ThrouputClassSwitchConf.NormalThroughputEnterThresholds.RxPPSThresh {
+			normalThroughputNics = append(normalThroughputNics, nic)
 		} else {
 			lowThroughputNics = append(lowThroughputNics, nic)
 		}
@@ -471,8 +481,8 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 		}
 	}
 
-	if len(normalThroughPutNics) == 0 {
-		normalThroughPutNics = append(normalThroughPutNics, ppsMaxNic)
+	if len(normalThroughputNics) == 0 {
+		normalThroughputNics = append(normalThroughputNics, ppsMaxNic)
 
 		lowThroughputNics = []*machine.NicBasicInfo{}
 		for _, nic := range nics {
@@ -482,7 +492,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 		}
 	}
 
-	nicIrqsAffSockets, err := AssignSocketsForNics(normalThroughPutNics, cpuInfo, conf.NicAffinitySocketsPolicy)
+	nicIrqsAffSockets, err := AssignSocketsForNics(normalThroughputNics, cpuInfo, conf.NicAffinitySocketsPolicy)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
 	}
@@ -1283,7 +1293,54 @@ func (ic *IrqTuningController) updateLatestIndicatorsStats(seconds int) (*Indica
 }
 
 func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *IndicatorsStats) {
+	timeDiff := ic.IndicatorsStats.UpdateTime.Sub(oldIndicatorsStats.UpdateTime).Seconds()
 
+	var normalThroughputNics []*NicIrqTuningManager
+	var lowThroughputNics []*NicIrqTuningManager
+	nicsMoved := false
+
+	oldNicStats := oldIndicatorsStats.NicStats
+	for _, nic := range ic.Nics {
+		// nic with IrqCoresExclusive affinity policy cannot be directly moved to ic.LowTroughputNics
+		if nic.IrqAffinityPolicy == IrqCoresExclusive {
+			continue
+		}
+
+		oldStats, ok := oldNicStats[nic.NicInfo.IfIndex]
+		if !ok {
+			klog.Errorf("impossible, failed to find nic %s in old nic stats", nic.NicInfo)
+			continue
+		}
+
+		stats, ok := ic.NicStats[nic.NicInfo.IfIndex]
+		if !ok {
+			klog.Errorf("impossible, failed to find nic %s in nic stats", nic.NicInfo)
+			continue
+		}
+
+		if stats.TotalRxPackets < oldStats.TotalRxPackets {
+			klog.Errorf("nic %s current rx packets(%d) less than last rx packets(%d)", nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
+			continue
+		}
+
+		pps := (stats.TotalRxPackets - oldStats.TotalRxPackets) / uint64(timeDiff)
+
+		if pps <= ic.conf.ThrouputClassSwitchConf.LowThroughputEnterThresholds.RxPPSThresh {
+			nic.LowThroughputSuccCount++
+			if nic.LowThroughputSuccCount >= ic.conf.ThrouputClassSwitchConf.LowThroughputEnterThresholds.SuccessiveCount {
+				// move nic to ic.LowThroughputNic from ic.Nics
+				lowThroughputNics = append(lowThroughputNics, nic)
+				nicsMoved = true
+			} else {
+				normalThroughputNics = append(normalThroughputNics, nic)
+			}
+		} else {
+			normalThroughputNics = append(normalThroughputNics, nic)
+			if pps >= ic.conf.ThrouputClassSwitchConf.NormalThroughputEnterThresholds.RxPPSThresh {
+				nic.LowThroughputSuccCount = 0
+			}
+		}
+	}
 }
 
 func (c *ContainerInfoWrapper) getContainerCPUs() []int64 {
@@ -1391,6 +1448,15 @@ func (ic *IrqTuningController) syncNics() error {
 	if err != nil {
 		return fmt.Errorf("failed to NewNicIrqTuningManagers, err %v", err)
 	}
+
+	sort.Slice(nicManagers, func(i, j int) bool {
+		return nicManagers[i].NicInfo.IfIndex < nicManagers[j].NicInfo.IfIndex
+	})
+
+	sort.Slice(lowThroughputNicManagers, func(i, j int) bool {
+		return lowThroughputNicManagers[i].NicInfo.IfIndex < lowThroughputNicManagers[j].NicInfo.IfIndex
+	})
+
 	ic.Nics = nicManagers
 	ic.LowThroughputNics = lowThroughputNicManagers
 
