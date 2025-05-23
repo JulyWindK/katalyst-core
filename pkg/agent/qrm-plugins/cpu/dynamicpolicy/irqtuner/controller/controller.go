@@ -419,32 +419,72 @@ func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *machine.NicBasicI
 	}, nil
 }
 
-func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo) ([]*NicIrqTuningManager, error) {
+// return value:
+// first: normal throughput nic managers
+// second: low throughput nic managers
+func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo) ([]*NicIrqTuningManager, []*NicIrqTuningManager, error) {
 	start := time.Now()
-	preNicRxPackets := make(map[int]uint64)
+	prevNicRxPackets := make(map[int]uint64)
 	for _, nic := range nics {
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
-			return nil, fmt.Errorf("failed to collectNicStats, err %v", err)
+			klog.Errorf("failed to collectNicStats, err %v", err)
+			continue
 		}
-		preNicRxPackets[nic.IfIndex] = rxPackets
+		prevNicRxPackets[nic.IfIndex] = rxPackets
 	}
 
 	time.Sleep(10 * time.Second)
 	timeDiff := time.Since(start).Seconds()
 
-	nicRxPackets := make(map[int]uint64)
+	var normalThroughPutNics []*machine.NicBasicInfo
+	var lowThroughputNics []*machine.NicBasicInfo
+
+	var ppsMaxNic *machine.NicBasicInfo
+	var ppsMax uint64
 	for _, nic := range nics {
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
-			return nil, fmt.Errorf("failed to collectNicStats, err %v", err)
+			klog.Errorf("failed to collectNicStats, err %v", err)
+			normalThroughPutNics = append(normalThroughPutNics, nic)
+			continue
 		}
-		nicRxPackets[nic.IfIndex] = rxPackets
+
+		oldRxPPS, ok := prevNicRxPackets[nic.IfIndex]
+		if !ok {
+			klog.Errorf("failed to find nic %s in prev nic stats")
+			normalThroughPutNics = append(normalThroughPutNics, nic)
+			continue
+		}
+
+		pps := (rxPackets - oldRxPPS) / uint64(timeDiff)
+
+		if pps > conf.LowThroughPutNicCriteria.RxPPSThresh {
+			normalThroughPutNics = append(normalThroughPutNics, nic)
+		} else {
+			lowThroughputNics = append(lowThroughputNics, nic)
+		}
+
+		if ppsMaxNic == nil || pps > ppsMax {
+			ppsMaxNic = nic
+			ppsMax = pps
+		}
 	}
 
-	nicIrqsAffSockets, err := AssignSocketsForNics(nics, cpuInfo, conf.NicAffinitySocketsPolicy)
+	if len(normalThroughPutNics) == 0 {
+		normalThroughPutNics = append(normalThroughPutNics, ppsMaxNic)
+
+		lowThroughputNics = []*machine.NicBasicInfo{}
+		for _, nic := range nics {
+			if nic.IfIndex != ppsMaxNic.IfIndex {
+				lowThroughputNics = append(lowThroughputNics, nic)
+			}
+		}
+	}
+
+	nicIrqsAffSockets, err := AssignSocketsForNics(normalThroughPutNics, cpuInfo, conf.NicAffinitySocketsPolicy)
 	if err != nil {
-		return nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
+		return nil, nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
 	}
 
 	var nicsAssignedSockets [][]int
@@ -488,12 +528,28 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 
 		mng, err := NewNicIrqTuningManager(conf, n, nicIrqsAffSockets[n.IfIndex], irqCoresSelectOrder)
 		if err != nil {
-			return nil, fmt.Errorf("failed to NewNicIrqTuningManager for nic %s, err %v", n, err)
+			return nil, nil, fmt.Errorf("failed to NewNicIrqTuningManager for nic %s, err %v", n, err)
 		}
 		nicManagers = append(nicManagers, mng)
 	}
 
-	return nicManagers, nil
+	var lowThroughputNicManagers []*NicIrqTuningManager
+	if len(lowThroughputNics) > 0 {
+		lowThroughputNicIrqsAffSockets := AssignSocketsForLowThroughputNics(lowThroughputNics, cpuInfo, conf.NicAffinitySocketsPolicy)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to AssignSocketsForLowThroughputNics, err %v", err)
+		}
+
+		for _, n := range lowThroughputNics {
+			mng, err := NewNicIrqTuningManager(conf, n, lowThroughputNicIrqsAffSockets[n.IfIndex], Forward)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to NewNicIrqTuningManager for nic %s, err %v", n, err)
+			}
+			lowThroughputNicManagers = append(lowThroughputNicManagers, mng)
+		}
+	}
+
+	return nicManagers, lowThroughputNicManagers, nil
 }
 
 func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter, machineInfo *machine.KatalystMachineInfo) (*IrqTuningController, error) {
@@ -847,6 +903,41 @@ func AssignSocketsForNics(nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo
 	default:
 		return AssignSocketsForNicIrqsForOverallNicsBalance(nics, cpuInfo)
 	}
+}
+
+func AssignSocketsForLowThroughputNics(nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo, nicAffinitySocketsPolicy config.NicAffinitySocketsPolicy) map[int][]int {
+	ifIndex2Sockets := make(map[int][]int)
+
+	allSockets := cpuInfo.GetSocketSlice()
+
+	switch nicAffinitySocketsPolicy {
+	case config.EachNicBalanceAllSockets:
+		for _, nic := range nics {
+			ifIndex2Sockets[nic.IfIndex] = allSockets
+		}
+	case config.OverallNicsBalanceAllSockets:
+		fallthrough
+	case config.NicPhysicalTopoBindNuma:
+		fallthrough
+	default:
+		for _, nic := range nics {
+			if nic.NumaNode == machine.UnknownNumaNode {
+				ifIndex2Sockets[nic.IfIndex] = allSockets
+				continue
+			}
+
+			socketID, err := machine.GetNumaPackageID(nic.NumaNode)
+			if err != nil {
+				klog.Errorf("failed to GetNumaPackageID(%d), err %s", nic.NumaNode, err)
+				ifIndex2Sockets[nic.IfIndex] = allSockets
+				continue
+			}
+
+			ifIndex2Sockets[nic.IfIndex] = []int{socketID}
+		}
+	}
+
+	return ifIndex2Sockets
 }
 
 func irqCoresEqual(a []int64, b []int64) bool {
@@ -1292,11 +1383,12 @@ func (ic *IrqTuningController) syncNics() error {
 		}
 	}
 
-	nicManagers, err := NewNicIrqTuningManagers(ic.conf, nics, ic.CPUInfo)
+	nicManagers, lowThroughputNicManagers, err := NewNicIrqTuningManagers(ic.conf, nics, ic.CPUInfo)
 	if err != nil {
 		return fmt.Errorf("failed to NewNicIrqTuningManagers, err %v", err)
 	}
 	ic.Nics = nicManagers
+	ic.LowThroughputNics = lowThroughputNicManagers
 
 	return nil
 }
