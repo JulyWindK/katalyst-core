@@ -4424,14 +4424,6 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 		ic.IndicatorsStats = nil
 	}
 
-	if time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
-		if err := ic.syncNics(); err != nil {
-			klog.Errorf("failed to syncNics, err %v", err)
-			ic.emitErrMetric(irqtuner.SyncNicFailed, irqtuner.IrqTuningFatal)
-			return
-		}
-	}
-
 	if err := ic.syncContainers(); err != nil {
 		klog.Errorf("failed to syncContainers, err %s", err)
 		ic.emitErrMetric(irqtuner.SyncContainersFailed, irqtuner.IrqTuningError)
@@ -4492,14 +4484,6 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 		// make sure IrqAffinityChanges was cleared after exit periodicTuningIrqCoresExclusive
 		ic.IrqAffinityChanges = make(map[int]*IrqAffinityChange)
 	}()
-
-	if time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
-		if err := ic.syncNics(); err != nil {
-			klog.Errorf("failed to syncNics, err %v", err)
-			ic.emitErrMetric(irqtuner.SyncNicFailed, irqtuner.IrqTuningFatal)
-			return
-		}
-	}
 
 	if !ic.nicsRPSCleared() {
 		if err := ic.clearRPSForNics(); err != nil {
@@ -4671,6 +4655,14 @@ func (ic *IrqTuningController) periodicTuning() {
 	}
 
 	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 1, metrics.MetricTypeNameRaw)
+
+	if time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
+		if err := ic.syncNics(); err != nil {
+			klog.Errorf("failed to syncNics, err %v", err)
+			ic.emitErrMetric(irqtuner.SyncNicFailed, irqtuner.IrqTuningFatal)
+			return
+		}
+	}
 
 	switch ic.conf.IrqTuningPolicy {
 	case config.IrqTuningIrqCoresExclusive:
