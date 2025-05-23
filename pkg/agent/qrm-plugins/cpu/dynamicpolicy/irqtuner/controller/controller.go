@@ -392,9 +392,10 @@ type IrqTuningController struct {
 	Containers           map[string]*ContainerInfoWrapper // container id as map key
 	IrqAffForbiddenCores []int64
 
-	NicSyncInterval int // interval of sync nic interval, periodic sync for active nics change, like nic number changed, nic queue number changed
-	LastNicSyncTime time.Time
-	Nics            []*NicIrqTuningManager // nic level irq tuning manager
+	NicSyncInterval   int // interval of sync nic interval, periodic sync for active nics change, like nic number changed, nic queue number changed
+	LastNicSyncTime   time.Time
+	LowThroughputNics []*NicIrqTuningManager
+	Nics              []*NicIrqTuningManager // nic level irq tuning manager
 	*IndicatorsStats
 
 	IrqAffinityChanges map[int]*IrqAffinityChange // nic ifindex as map key. used to record irq affinity changes in each periodicTuning, and will be reset at the beginning of periodicTuning
@@ -519,16 +520,6 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		}
 	}
 
-	nics, err := listActiveUplinkNicsExcludeSriovVFs(agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
-	if err != nil {
-		return nil, err
-	}
-
-	nicManagers, err := NewNicIrqTuningManagers(conf, nics, cpuInfo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to NewNicIrqTuningManagers, err %v", err)
-	}
-
 	controller := &IrqTuningController{
 		agentConf:          agentConf,
 		conf:               conf,
@@ -538,8 +529,6 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		IrqStateAdapter:    irqStateAdapter,
 		Containers:         make(map[string]*ContainerInfoWrapper),
 		NicSyncInterval:    NicsSyncInterval,
-		LastNicSyncTime:    time.Now(),
-		Nics:               nicManagers,
 		IrqAffinityChanges: make(map[int]*IrqAffinityChange),
 	}
 
@@ -1261,30 +1250,32 @@ func (ic *IrqTuningController) syncNics() error {
 
 	ic.IndicatorsStats = nil
 
-	// if any nics changes happened, it's the simplest way to recalculate sockets assignment for nics's irq affinity and re-new
-	// all nics's controller, regardless of unchanged nics's current configuration about irq affinity and assigned sockets,
-	// just like katalyst restart.
-	// There are the following reasons for handling it in this way,
-	// 1) it's very simple and can keep consistent with irq-tuning manager plugin init
-	// 2) the sockets assginemnts of nics's irq affinity is consistent, it's very important that sockets assginemnts result is consitent,
-	//    because qrm use the same policy to assign nic for container in 2-nics machine to align with irq-tuning manager for best performance.
-	// 3) there is an extremely low probability that any nic will change during node running.
+	if len(ic.Nics) != 0 {
+		// if any nics changes happened, it's the simplest way to recalculate sockets assignment for nics's irq affinity and re-new
+		// all nics's controller, regardless of unchanged nics's current configuration about irq affinity and assigned sockets,
+		// just like katalyst restart.
+		// There are the following reasons for handling it in this way,
+		// 1) it's very simple and can keep consistent with irq-tuning manager plugin init
+		// 2) the sockets assginemnts of nics's irq affinity is consistent, it's very important that sockets assginemnts result is consitent,
+		//    because qrm use the same policy to assign nic for container in 2-nics machine to align with irq-tuning manager for best performance.
+		// 3) there is an extremely low probability that any nic will change during node running.
 
-	// regardless of whether the original nics exists or not, tune original nics irq affintiy to balance-fair
-	for _, nic := range ic.Nics {
-		if nic.IrqAffinityPolicy != IrqBalanceFair {
-			nic.IrqAffinityPolicy = IrqBalanceFair
+		// regardless of whether the original nics exists or not, tune original nics irq affintiy to balance-fair
+		for _, nic := range ic.Nics {
+			if nic.IrqAffinityPolicy != IrqBalanceFair {
+				nic.IrqAffinityPolicy = IrqBalanceFair
+			}
 		}
-	}
 
-	if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
-		klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
-	}
+		if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
+			klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
+		}
 
-	totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
-	if err != nil || len(totalIrqCores) > 0 {
-		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet()); err != nil {
-			klog.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
+		totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
+		if err != nil || len(totalIrqCores) > 0 {
+			if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet()); err != nil {
+				klog.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
+			}
 		}
 	}
 
@@ -4656,7 +4647,7 @@ func (ic *IrqTuningController) periodicTuning() {
 
 	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 1, metrics.MetricTypeNameRaw)
 
-	if time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
+	if (len(ic.Nics) == 0 && len(ic.LowThroughputNics) == 0) || time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
 		if err := ic.syncNics(); err != nil {
 			klog.Errorf("failed to syncNics, err %v", err)
 			ic.emitErrMetric(irqtuner.SyncNicFailed, irqtuner.IrqTuningFatal)
