@@ -1220,13 +1220,17 @@ func (ic *IrqTuningController) syncNics() error {
 	}
 	ic.LastNicSyncTime = time.Now()
 
+	var oldNics []*NicIrqTuningManager
+	oldNics = append(oldNics, ic.Nics...)
+	oldNics = append(oldNics, ic.LowThroughputNics...)
+
 	nicsChanged := false
-	if len(nics) != len(ic.Nics) {
+	if len(nics) != len(oldNics) {
 		nicsChanged = true
 	}
 
 	if !nicsChanged {
-		for _, oldNic := range ic.Nics {
+		for _, oldNic := range oldNics {
 			matched := false
 			for _, newNic := range nics {
 				if newNic.Equal(oldNic.NicInfo.NicBasicInfo) {
@@ -1246,10 +1250,19 @@ func (ic *IrqTuningController) syncNics() error {
 		return nil
 	}
 
-	klog.Infof("%s nics changed", IrqTuningLogPrefix)
+	klog.Infof("%s old nics:", IrqTuningLogPrefix)
+	for _, nic := range oldNics {
+		klog.Infof("  %s, queue number %d", nic, nic.NicInfo.QueueNum)
+	}
+
+	klog.Infof("%s new synced nics:", IrqTuningLogPrefix)
+	for _, nic := range nics {
+		klog.Infof("  %s, queue number %d", nic, nic.QueueNum)
+	}
 
 	ic.IndicatorsStats = nil
 
+	// only handle old nics in ic.Nics, ignore ic.LowThrouputNics
 	if len(ic.Nics) != 0 {
 		// if any nics changes happened, it's the simplest way to recalculate sockets assignment for nics's irq affinity and re-new
 		// all nics's controller, regardless of unchanged nics's current configuration about irq affinity and assigned sockets,
