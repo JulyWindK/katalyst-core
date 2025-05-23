@@ -1282,6 +1282,10 @@ func (ic *IrqTuningController) updateLatestIndicatorsStats(seconds int) (*Indica
 	return oldIndicatorsStats, nil
 }
 
+func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *IndicatorsStats) {
+
+}
+
 func (c *ContainerInfoWrapper) getContainerCPUs() []int64 {
 	var cpus []int64
 
@@ -2384,8 +2388,12 @@ func (ic *IrqTuningController) TuneIrqAffinityForAllNicsWithBalanceFairPolicy() 
 }
 
 func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
+	var nics []*NicIrqTuningManager
+	nics = append(nics, ic.Nics...)
+	nics = append(nics, ic.LowThroughputNics...)
+
 	initTuning := false
-	for _, nic := range ic.Nics {
+	for _, nic := range nics {
 		if nic.IrqAffinityPolicy == InitTuning {
 			initTuning = true
 			break
@@ -2406,7 +2414,7 @@ func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
 		return
 	}
 
-	for _, nic := range ic.Nics {
+	for _, nic := range nics {
 		if nic.IrqAffinityPolicy != InitTuning {
 			continue
 		}
@@ -2435,6 +2443,15 @@ func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
 			ic.emitErrMetric(irqtuner.RestoreNicsOriginalIrqCoresExclusivePolicyFailed, irqtuner.IrqTuningWarning)
 		} else {
 			nic.IrqAffinityPolicy = IrqCoresExclusive
+
+			for _, lowThroughputNic := range ic.LowThroughputNics {
+				if nic.NicInfo.IfIndex == lowThroughputNic.NicInfo.IfIndex {
+					if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
+						klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+					}
+					break
+				}
+			}
 		}
 	}
 }
@@ -4614,8 +4631,17 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 
 	ic.emitNicsExclusiveIrqCoresCpuUsage(oldStats)
 
+	///////////////////////////////////////////////////////////////////////////////////////
+	// [4] move nics between ic.Nics and ic.LowThroughputNics according to nic's throughput
+	// if nic's irq affinity policy is IrqCoresExclusive, it cannot be directly move to ic.LowThroughputNics,
+	// change nic.IrqAffinityPolicy to balance-fair according to IrqCoresExclusion policy first, then move to
+	// ic.LowThroughputNics conditionally.
+	// N.B., moving nics to ic.Nics from ic.LowThroughputNics will influence ic.Nics sockets assignments.
+	///////////////////////////////////////////////////////////////////////////////////////
+	ic.classifyNicsByThroughput(oldStats)
+
 	//////////////////////////////////////////
-	//[4] syncContainers for later possible irq cores selection, and specical containers process
+	// [5] syncContainers for later possible irq cores selection, and specical containers process
 	/////////////////////////////////////////
 
 	// after collect stats then syncContainers
@@ -4626,12 +4652,12 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	}
 
 	///////////////////////////////////////////////////////////
-	// [5] evaluate and decide each inic's irq affinity policy
+	// [6] evaluate and decide each inic's irq affinity policy
 	///////////////////////////////////////////////////////////
 	ic.adaptIrqAffinityPolicy(oldStats)
 
 	///////////////////////////////////////////////////////////////////////////////////////
-	// [6] caculate if need to do irq balance or irq cores adjustment.
+	// [7] caculate if need to do irq balance or irq cores adjustment.
 	//
 	// irq balance is performed in this step if need,
 	// and exclusive irq cores decrease is performed in this step too, exclusive irq cores decrease MUST before SetExclusiveIrqCores to qrm,
@@ -4665,7 +4691,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	ic.balanceNicsIrqsAwayFromDecreasedCores(oldStats)
 
 	///////////////////////////////////////////////////////////////////////////////////
-	// [7] we should tuning irqs affinity of nics(include ic.Nics and SRIOV VFs) with balance-fair policy here, before balance irqs to new allocated
+	// [8] we should tuning irqs affinity of nics(include ic.Nics and SRIOV VFs) with balance-fair policy here, before balance irqs to new allocated
 	// exclusive irq cores for other nics with IrqCoresExclusive policy, and after all nics's exclusive irq cores has completed calculation and has balanced
 	// decreased irq cores affinitied irqs away from original exclusive irq cores.
 	// irq affinity tuning for balance-fair policy must before practically perfrom new irq cores exclusion, but should after ic.Nics irq cores's exclusion
@@ -4676,20 +4702,25 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 		ic.emitErrMetric(irqtuner.TuneIrqAffinityForAllNicsWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 	}
 
+	//  tunine irq affinity for low throughput nics
+	if err := ic.TuneIrqAffinityForLowThroughputNics(); err != nil {
+		klog.Errorf("failed to TuneIrqAffinityForLowThroughputNics, err %v", err)
+		ic.emitErrMetric(irqtuner.TuneIrqAffinityForAllNicsWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
+	}
+
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	// [8] if adjust exclusive irq cores, then need to notify qrm state-manager,
+	// [9] if adjust exclusive irq cores, then need to notify qrm state-manager,
 	// if add some new exclusive irq cores, then need to wait for completion by retry syncContainers and check if all container's cpuset exclude irqcores
 	// if nic.IrqAffinityPolicy changed from InitTuning to IrqCoresExclusive, MUST tune all exclusive irq cores and irqs in one time, because we cannot infer nic's
 	// old IrqAffinityPolicy before katalyst restart, maybe old IrqAffinityPolicy is IrqCoresExclusive, if we notify all exclusive irq cores to qrm-stage, qrm-stage may
 	// move containers's cpuset to part of nic's exclusive irq cores.
 	// so if nic.IrqAffinityPolicy changed from InitTuning to IrqCoresExclusive, cannot call SetExclusiveIrqCores multiple times to set this nic's exclusive irq cores.
 	//
-	// [9] update nic.IrqAffinityPolicy and nic's exclusive irq cores if irq affinity policy changed or exclusive irq cores changed,
+	//  update nic.IrqAffinityPolicy and nic's exclusive irq cores if irq affinity policy changed or exclusive irq cores changed,
 	// because need to filter out exclusive irq cores when TuneIrqAffinityForAllNicsWithBalanceFairPolicy later.
 	// N.B., this update dose not really set sysfs irq affinity, just update NicIrqTuningManager structure.
 	// after later practically update exclusive irq cores failed, need to update truly exclusive irq cores by read from sysfs.
-
-	// merge [8] and [9]
+	//
 	// because there is exclusive irq cores increase limit in each SetExclusiveIRQCPUSet, so we cannot completely split irq cores increase operation and operation of
 	// balance irqs to increased irq cores. We have to split to multiple steps to complete irq cores increase, and each step include increase exclusive cores and
 	// then balance irqs to new increased irq cores.
