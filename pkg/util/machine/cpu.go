@@ -708,6 +708,9 @@ func (c *CPUInfo) GetSocketSlice() []int {
 	for socket, _ := range c.Sockets {
 		sockets = append(sockets, socket)
 	}
+
+	sort.Ints(sockets)
+
 	return sockets
 }
 

@@ -413,6 +413,8 @@ func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *machine.NicBasicI
 		return nil, fmt.Errorf("failed to GetNicInfo for nic %s, err %v", nic, err)
 	}
 
+	sort.Ints(irqAffSockets)
+
 	return &NicIrqTuningManager{
 		Conf:                         conf,
 		NicInfo:                      nicInfo,
@@ -465,7 +467,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 
 		pps := (rxPackets - oldRxPPS) / uint64(timeDiff)
 
-		if pps >= conf.ThrouputClassSwitchConf.NormalThroughputEnterThresholds.RxPPSThresh {
+		if pps >= conf.ThrouputClassSwitchConf.NormalThroughputThresholds.RxPPSThresh {
 			normalThroughputNics = append(normalThroughputNics, nic)
 		} else {
 			lowThroughputNics = append(lowThroughputNics, nic)
@@ -894,13 +896,9 @@ func AssignSocketsForNics(nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo
 			return ifIndex2Sockets, nil
 		}
 	case config.EachNicBalanceAllSockets:
-		var sockets []int
-		for socket, _ := range cpuInfo.Sockets {
-			sockets = append(sockets, socket)
-		}
-
+		allSockets := cpuInfo.GetSocketSlice()
 		for _, nic := range nics {
-			ifIndex2Sockets[nic.IfIndex] = sockets
+			ifIndex2Sockets[nic.IfIndex] = allSockets
 		}
 
 		return ifIndex2Sockets, nil
@@ -1326,17 +1324,111 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 			if nic.LowThroughputSuccCount >= ic.conf.ThrouputClassSwitchConf.LowThroughputThresholds.SuccessiveCount {
 				// move nic to ic.LowThroughputNic from ic.Nics
 				lowThroughputNics = append(lowThroughputNics, nic)
+				nic.LowThroughputSuccCount = 0
+				nic.NormalThroughputSuccCount = 0
 				nicsMoved = true
 			} else {
 				normalThroughputNics = append(normalThroughputNics, nic)
 			}
 		} else {
 			normalThroughputNics = append(normalThroughputNics, nic)
-			if pps >= ic.conf.ThrouputClassSwitchConf.NormalThroughputEnterThresholds.RxPPSThresh {
+			if pps >= ic.conf.ThrouputClassSwitchConf.NormalThroughputThresholds.RxPPSThresh {
 				nic.LowThroughputSuccCount = 0
 			}
 		}
 	}
+
+	for _, nic := range ic.LowThroughputNics {
+		oldStats, ok := oldNicStats[nic.NicInfo.IfIndex]
+		if !ok {
+			klog.Errorf("impossible, failed to find nic %s in old nic stats", nic.NicInfo)
+			continue
+		}
+
+		stats, ok := ic.NicStats[nic.NicInfo.IfIndex]
+		if !ok {
+			klog.Errorf("impossible, failed to find nic %s in nic stats", nic.NicInfo)
+			continue
+		}
+
+		if stats.TotalRxPackets < oldStats.TotalRxPackets {
+			klog.Errorf("nic %s current rx packets(%d) less than last rx packets(%d)", nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
+			continue
+		}
+
+		pps := (stats.TotalRxPackets - oldStats.TotalRxPackets) / uint64(timeDiff)
+
+		if pps >= ic.conf.ThrouputClassSwitchConf.NormalThroughputThresholds.RxPPSThresh {
+			nic.NormalThroughputSuccCount++
+			if nic.NormalThroughputSuccCount >= ic.conf.ThrouputClassSwitchConf.NormalThroughputThresholds.SuccessiveCount {
+				// move nic to ic.Nics from ic.LowThroughputNics
+				normalThroughputNics = append(normalThroughputNics, nic)
+				nic.LowThroughputSuccCount = 0
+				nic.NormalThroughputSuccCount = 0
+				nicsMoved = true
+			} else {
+				lowThroughputNics = append(lowThroughputNics, nic)
+			}
+		} else {
+			lowThroughputNics = append(lowThroughputNics, nic)
+			if pps <= ic.conf.ThrouputClassSwitchConf.LowThroughputThresholds.RxPPSThresh {
+				nic.NormalThroughputSuccCount = 0
+			}
+		}
+	}
+
+	if !nicsMoved {
+		return
+	}
+
+	sort.Slice(normalThroughputNics, func(i, j int) bool {
+		return normalThroughputNics[i].NicInfo.IfIndex < normalThroughputNics[j].NicInfo.IfIndex
+	})
+
+	var normalThroughputBasicNics []*machine.NicBasicInfo
+	for _, nm := range normalThroughputNics {
+		normalThroughputBasicNics = append(normalThroughputBasicNics, nm.NicInfo.NicBasicInfo)
+	}
+
+	nicIrqsAffSockets, err := AssignSocketsForNics(normalThroughputBasicNics, ic.CPUInfo, ic.conf.NicAffinitySocketsPolicy)
+	if err != nil {
+		klog.Errorf("failed to AssignSocketsForNics, err %s", err)
+		return
+	}
+
+	for _, nic := range ic.Nics {
+		if nic.IrqAffinityPolicy == IrqCoresExclusive {
+			var newAffSockets []int
+			for ifIndex, sockets := range nicIrqsAffSockets {
+				if nic.NicInfo.IfIndex == ifIndex {
+					newAffSockets = append(newAffSockets, sockets...)
+					break
+				}
+			}
+			if len(newAffSockets) == 0 {
+				klog.Errorf("it's impossible that nic %s assigned sockets is empty", nic.NicInfo)
+				continue
+			}
+
+			assingedSocketsChanged = false
+			if len(nic.AssignedSockets) != len(newAffSockets) {
+				assingedSocketsChanged = true
+			}
+			if !assingedSocketsChanged {
+				sort.Ints(newAffSockets)
+
+				for i, _ := range nic.AssignedSockets {
+					if newAffSockets[i] != nic.AssignedSockets[i] {
+
+					}
+				}
+			}
+		}
+	}
+
+	sort.Slice(lowThroughputNics, func(i, j int) bool {
+		return lowThroughputNics[i].NicInfo.IfIndex < lowThroughputNics[j].NicInfo.IfIndex
+	})
 }
 
 func (c *ContainerInfoWrapper) getContainerCPUs() []int64 {

@@ -40,8 +40,8 @@ type NormalThroughputThresholds struct {
 }
 
 type ThroughputClassSwitchConfig struct {
-	LowThroughputThresholds         LowThroughputThresholds
-	NormalThroughputEnterThresholds NormalThroughputThresholds
+	LowThroughputThresholds    LowThroughputThresholds
+	NormalThroughputThresholds NormalThroughputThresholds
 }
 
 // when there are one or more irq cores's ratio of softnet_stat 3rd col time_squeeze packets / 1st col processed packets
@@ -156,7 +156,7 @@ func NewConfiguration() *IrqTuningConfig {
 				RxPPSThresh:     3000,
 				SuccessiveCount: 10,
 			},
-			NormalThroughputEnterThresholds: NormalThroughputThresholds{
+			NormalThroughputThresholds: NormalThroughputThresholds{
 				RxPPSThresh:     6000,
 				SuccessiveCount: 10,
 			},
