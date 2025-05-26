@@ -490,57 +490,38 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 		}
 	}
 
-	nicIrqsAffSockets, err := AssignSocketsForNics(normalThroughputNics, cpuInfo, conf.NicAffinitySocketsPolicy)
+	klog.Infof("normal throughput nics:")
+	for _, nic := range normalThroughputNics {
+		klog.Infof(" %s", nic)
+	}
+
+	klog.Infof("low throughput nics:")
+	for _, nic := range lowThroughputNics {
+		klog.Infof(" %s", nic)
+	}
+
+	nicsAssignedSockets, err := AssignSocketsForNics(normalThroughputNics, cpuInfo, conf.NicAffinitySocketsPolicy)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to AssignSocketsForNicIrqs, err %v", err)
 	}
 
-	var nicsAssignedSockets [][]int
-	for _, sockets := range nicIrqsAffSockets {
-		nicsAssignedSockets = append(nicsAssignedSockets, sockets)
-	}
+	nicsExclusiveIrqCoresSelectOrder := CalculateNicExclusiveIrqCoresSelectOrdrer(nicsAssignedSockets)
 
-	var nicsAssignedSocketsHasOverlap bool
-	for i, sockets := range nicsAssignedSockets {
-		if i == len(nicsAssignedSockets)-1 {
-			break
-		}
-
-		for _, skts := range nicsAssignedSockets[i+1:] {
-			for _, s1 := range sockets {
-				for _, s2 := range skts {
-					if s1 == s2 {
-						nicsAssignedSocketsHasOverlap = true
-						break
-					}
-				}
-			}
-		}
-	}
-
-	// when multiple nics's assigned sockets has overlaps, then one nic's exclusive irq cores change may cause another nic with
-	// overlapped assigned sockets to change exclusive irq cores accordingly. In order to avoid this situation, two nics with overlapped
-	// assgined sockets can select exlcusive irq cores from different part of overlapped socket, for exmaple, one nic select exclusive irq
-	// cores from head part of numa cpus, and another nic select exclusive irq cores from tail part of numa cpus.
-
-	prevNicExclusiveIrqCoresSelectOrder := None
 	var nicManagers []*NicIrqTuningManager
 	for _, n := range normalThroughputNics {
-		irqCoresSelectOrder := Forward
-		if nicsAssignedSocketsHasOverlap {
-			if prevNicExclusiveIrqCoresSelectOrder == Forward {
-				irqCoresSelectOrder = Backward
-			}
-			prevNicExclusiveIrqCoresSelectOrder = irqCoresSelectOrder
+		irqCoresSelectOrder, ok := nicsExclusiveIrqCoresSelectOrder[n.IfIndex]
+		if !ok {
+			klog.Errorf("failed to find nic %s in nicsExclusiveIrqCoresSelectOrder %+v", n, nicsExclusiveIrqCoresSelectOrder)
+			irqCoresSelectOrder = Forward
 		}
 
-		assignedSockets := nicIrqsAffSockets[n.IfIndex]
+		assignedSockets := nicsAssignedSockets[n.IfIndex]
 		if len(assignedSockets) == 0 {
 			klog.Errorf("nic %s assigned empty sockets", n)
 			assignedSockets = cpuInfo.GetSocketSlice()
 		}
 
-		mng, err := NewNicIrqTuningManager(conf, n, nicIrqsAffSockets[n.IfIndex], irqCoresSelectOrder)
+		mng, err := NewNicIrqTuningManager(conf, n, nicsAssignedSockets[n.IfIndex], irqCoresSelectOrder)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to NewNicIrqTuningManager for nic %s, err %v", n, err)
 		}
@@ -559,6 +540,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to NewNicIrqTuningManager for nic %s, err %v", n, err)
 			}
+			mng.IrqAffinityPolicy = IrqBalanceFair
 			lowThroughputNicManagers = append(lowThroughputNicManagers, mng)
 		}
 	}
@@ -955,7 +937,7 @@ func AssignSocketsForLowThroughputNics(nics []*machine.NicBasicInfo, cpuInfo *ma
 	return ifIndex2Sockets
 }
 
-func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSocket map[int][]int, nics []*machine.NicBasicInfo) map[int]ExclusiveIrqCoresSelectOrder {
+func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSocket map[int][]int) map[int]ExclusiveIrqCoresSelectOrder {
 	var nicsAssignedSockets [][]int
 	for _, sockets := range nicAssignedSocket {
 		nicsAssignedSockets = append(nicsAssignedSockets, sockets)
@@ -983,10 +965,16 @@ func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSocket map[int][]int, 
 	// overlapped assigned sockets to change exclusive irq cores accordingly. In order to avoid this situation, two nics with overlapped
 	// assgined sockets can select exlcusive irq cores from different part of overlapped socket, for exmaple, one nic select exclusive irq
 	// cores from head part of numa cpus, and another nic select exclusive irq cores from tail part of numa cpus.
+	var nicIfindexes []int
+	for ifIndex, _ := range nicAssignedSocket {
+		nicIfindexes = append(nicIfindexes, ifIndex)
+	}
+	sort.Ints(nicIfindexes)
+
 	nicsExclusiveIrqCoresSelectOrder := make(map[int]ExclusiveIrqCoresSelectOrder)
 
 	prevNicExclusiveIrqCoresSelectOrder := None
-	for _, n := range nics {
+	for _, ifIndex := range nicIfindexes {
 		irqCoresSelectOrder := Forward
 		if nicsAssignedSocketsHasOverlap {
 			if prevNicExclusiveIrqCoresSelectOrder == Forward {
@@ -995,7 +983,7 @@ func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSocket map[int][]int, 
 			prevNicExclusiveIrqCoresSelectOrder = irqCoresSelectOrder
 		}
 
-		nicsExclusiveIrqCoresSelectOrder[n.IfIndex] = irqCoresSelectOrder
+		nicsExclusiveIrqCoresSelectOrder[ifIndex] = irqCoresSelectOrder
 	}
 	return nicsExclusiveIrqCoresSelectOrder
 }
@@ -1353,23 +1341,27 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 	for _, nic := range ic.Nics {
 		// nic with IrqCoresExclusive affinity policy cannot be directly moved to ic.LowTroughputNics
 		if nic.IrqAffinityPolicy == IrqCoresExclusive {
+			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
 		oldStats, ok := oldNicStats[nic.NicInfo.IfIndex]
 		if !ok {
 			klog.Errorf("impossible, failed to find nic %s in old nic stats", nic.NicInfo)
+			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
 		stats, ok := ic.NicStats[nic.NicInfo.IfIndex]
 		if !ok {
 			klog.Errorf("impossible, failed to find nic %s in nic stats", nic.NicInfo)
+			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
 		if stats.TotalRxPackets < oldStats.TotalRxPackets {
 			klog.Errorf("nic %s current rx packets(%d) less than last rx packets(%d)", nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
+			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
@@ -1398,17 +1390,20 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		oldStats, ok := oldNicStats[nic.NicInfo.IfIndex]
 		if !ok {
 			klog.Errorf("impossible, failed to find nic %s in old nic stats", nic.NicInfo)
+			lowThroughputNics = append(lowThroughputNics, nic)
 			continue
 		}
 
 		stats, ok := ic.NicStats[nic.NicInfo.IfIndex]
 		if !ok {
 			klog.Errorf("impossible, failed to find nic %s in nic stats", nic.NicInfo)
+			lowThroughputNics = append(lowThroughputNics, nic)
 			continue
 		}
 
 		if stats.TotalRxPackets < oldStats.TotalRxPackets {
 			klog.Errorf("nic %s current rx packets(%d) less than last rx packets(%d)", nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
+			lowThroughputNics = append(lowThroughputNics, nic)
 			continue
 		}
 
@@ -1433,6 +1428,11 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		}
 	}
 
+	if len(ic.LowThroughputNics)+len(ic.Nics) != len(lowThroughputNics)+len(normalThroughputNics) {
+		klog.Errorf("some nics are dropped by mistake")
+		return
+	}
+
 	if !nicsMoved {
 		return
 	}
@@ -1440,6 +1440,16 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 	// if no normal throughput Nics, donot move nics, because maybe no containers in the machine
 	if len(normalThroughputNics) == 0 {
 		return
+	}
+
+	klog.Infof("normal throughput nics:")
+	for _, nic := range normalThroughputNics {
+		klog.Infof(" %s", nic.NicInfo)
+	}
+
+	klog.Infof("low throughput nics:")
+	for _, nic := range lowThroughputNics {
+		klog.Infof(" %s", nic.NicInfo)
 	}
 
 	sort.Slice(normalThroughputNics, func(i, j int) bool {
@@ -1451,47 +1461,65 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		normalThroughputBasicNics = append(normalThroughputBasicNics, nm.NicInfo.NicBasicInfo)
 	}
 
-	nicIrqsAffSockets, err := AssignSocketsForNics(normalThroughputBasicNics, ic.CPUInfo, ic.conf.NicAffinitySocketsPolicy)
+	nicsAssignedSockets, err := AssignSocketsForNics(normalThroughputBasicNics, ic.CPUInfo, ic.conf.NicAffinitySocketsPolicy)
 	if err != nil {
 		klog.Errorf("failed to AssignSocketsForNics, err %s", err)
 		return
 	}
 
+	nicsExclusiveIrqCoresSelectOrder := CalculateNicExclusiveIrqCoresSelectOrdrer(nicsAssignedSockets)
+
 	// clear ic.Nics
 	ic.Nics = []*NicIrqTuningManager{}
 
 	for _, nic := range normalThroughputNics {
-		newAffSockets, ok := nicIrqsAffSockets[nic.NicInfo.IfIndex]
+		newAssingedSockets, ok := nicsAssignedSockets[nic.NicInfo.IfIndex]
 		if !ok {
 			klog.Errorf("failed to find %s in nics new assigned sockets", nic.NicInfo)
-			newAffSockets = nic.AssignedSockets
+			newAssingedSockets = nic.AssignedSockets
 		}
 
-		if len(newAffSockets) == 0 {
+		if len(newAssingedSockets) == 0 {
 			klog.Errorf("it's impossible that nic %s assigned sockets is empty", nic.NicInfo)
-			newAffSockets = nic.AssignedSockets
+			newAssingedSockets = nic.AssignedSockets
 		}
 
-		sort.Ints(newAffSockets)
+		irqCoresSelectOrder, ok := nicsExclusiveIrqCoresSelectOrder[nic.NicInfo.IfIndex]
+		if !ok {
+			klog.Errorf("failed to find nic %s in nicsExclusiveIrqCoresSelectOrder %+v", nic.NicInfo, nicsExclusiveIrqCoresSelectOrder)
+			irqCoresSelectOrder = Forward
+		}
+
+		sort.Ints(newAssingedSockets)
+
 		oldAssignedSockets := nic.AssignedSockets
-		nic.AssignedSockets = newAffSockets
+		nic.AssignedSockets = newAssingedSockets
+		oldExclusiveIrqCoresSelectOrder := nic.ExclusiveIrqCoresSelectOrder
+		nic.ExclusiveIrqCoresSelectOrder = irqCoresSelectOrder
+
 		ic.Nics = append(ic.Nics, nic)
 
 		if nic.IrqAffinityPolicy == IrqCoresExclusive {
-			assingedSocketsChanged := false
-			if len(oldAssignedSockets) != len(newAffSockets) {
-				assingedSocketsChanged = true
+			change := false
+			if len(oldAssignedSockets) != len(newAssingedSockets) {
+				change = true
 			}
-			if !assingedSocketsChanged {
+
+			if oldExclusiveIrqCoresSelectOrder != irqCoresSelectOrder {
+				change = true
+			}
+
+			if !change {
+				// oldAssignedSockets is sorted
 				for i, _ := range oldAssignedSockets {
-					if newAffSockets[i] != oldAssignedSockets[i] {
-						assingedSocketsChanged = true
+					if newAssingedSockets[i] != oldAssignedSockets[i] {
+						change = true
 						break
 					}
 				}
 			}
 
-			if assingedSocketsChanged {
+			if change {
 				if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
 					klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
 					ic.emitErrMetric(irqtuner.TuneNicIrqAffinityWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
@@ -1500,9 +1528,39 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		}
 	}
 
-	sort.Slice(lowThroughputNics, func(i, j int) bool {
-		return lowThroughputNics[i].NicInfo.IfIndex < lowThroughputNics[j].NicInfo.IfIndex
-	})
+	// clear ic.Nics
+	ic.LowThroughputNics = []*NicIrqTuningManager{}
+
+	if len(lowThroughputNics) > 0 {
+		sort.Slice(lowThroughputNics, func(i, j int) bool {
+			return lowThroughputNics[i].NicInfo.IfIndex < lowThroughputNics[j].NicInfo.IfIndex
+		})
+
+		var lowThroughputBasicNics []*machine.NicBasicInfo
+		for _, nm := range lowThroughputNics {
+			lowThroughputBasicNics = append(lowThroughputBasicNics, nm.NicInfo.NicBasicInfo)
+		}
+
+		lowThroughputNicAssignedffSockets := AssignSocketsForLowThroughputNics(lowThroughputBasicNics, ic.CPUInfo, ic.conf.NicAffinitySocketsPolicy)
+		if err != nil {
+			klog.Errorf("failed to AssignSocketsForLowThroughputNics, err %v", err)
+		}
+
+		for _, nic := range lowThroughputNics {
+			assignedSockets, ok := lowThroughputNicAssignedffSockets[nic.NicInfo.IfIndex]
+			if !ok {
+				klog.Errorf("failed to find nic %s in lowThroughputNicAssignedffSockets %+v", nic, lowThroughputNicAssignedffSockets)
+				assignedSockets = ic.CPUInfo.GetSocketSlice()
+			}
+			nic.AssignedSockets = assignedSockets
+			nic.ExclusiveIrqCoresSelectOrder = Forward
+			if nic.IrqAffinityPolicy != IrqBalanceFair {
+				klog.Errorf("it's impossible low throughput nic's irq affinity policy is %s, should be IrqBalanceFair", nic.IrqAffinityPolicy)
+				nic.IrqAffinityPolicy = IrqBalanceFair
+			}
+			ic.LowThroughputNics = append(ic.LowThroughputNics, nic)
+		}
+	}
 }
 
 func (c *ContainerInfoWrapper) getContainerCPUs() []int64 {
@@ -1851,6 +1909,7 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 func (ic *IrqTuningController) getCoresIrqCount(includeSriovContainersNics bool) map[int64]int {
 	coresIrqCount := make(map[int64]int)
 
+	// only account normal throughput nics, ignore low throughput nics
 	for _, nic := range ic.Nics {
 		// need to filter irqs of nics whose irq affinity policy is IrqCoresExclusive,
 		// because if a nic's irq affinity policy is changind from others to IrqCoresExclusive,
@@ -2539,6 +2598,12 @@ func (ic *IrqTuningController) TuneNicsIrqsAffinityQualifiedCoresFairly() error 
 		}
 	}
 
+	for _, nic := range ic.LowThroughputNics {
+		if err := ic.tuneNicIrqsAffinityNumasFairly(nic.NicInfo, nic.AssignedSockets, false); err != nil {
+			klog.Errorf("failed to tuneNicIrqsAffinityNumasFairly for nic %s, err %s", nic.NicInfo, err)
+		}
+	}
+
 	for _, cnt := range ic.Containers {
 		if !cnt.IsSriovContainer {
 			continue
@@ -2581,6 +2646,12 @@ func (ic *IrqTuningController) BalanceNicsIrqsInQualifiedCoresFairly() error {
 			if err := ic.balanceNicIrqsFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
 				klog.Errorf("failed to balanceNicIrqsFairly for nic %s, err %s", nic.NicInfo, err)
 			}
+		}
+	}
+
+	for _, nic := range ic.LowThroughputNics {
+		if err := ic.balanceNicIrqsInNumaFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
+			klog.Errorf("failed to balanceNicIrqsInNumaFairly for nic %s, err %s", nic.NicInfo, err)
 		}
 	}
 
@@ -4763,6 +4834,15 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 		ic.IndicatorsStats = nil
 	}
 
+	oldStats, err := ic.updateIndicatorsStats()
+	if err != nil {
+		klog.Errorf("failed to updateIndicatorsStats, err %v", err)
+		ic.emitErrMetric(irqtuner.UpdateIndicatorsStatsFailed, irqtuner.IrqTuningFatal)
+		return
+	}
+
+	ic.classifyNicsByThroughput(oldStats)
+
 	if err := ic.syncContainers(); err != nil {
 		klog.Errorf("failed to syncContainers, err %s", err)
 		ic.emitErrMetric(irqtuner.SyncContainersFailed, irqtuner.IrqTuningError)
@@ -4925,12 +5005,6 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 
 	if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
 		klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
-		ic.emitErrMetric(irqtuner.TuneIrqAffinityForAllNicsWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
-	}
-
-	//  tunine irq affinity for low throughput nics
-	if err := ic.TuneIrqAffinityForLowThroughputNics(); err != nil {
-		klog.Errorf("failed to TuneIrqAffinityForLowThroughputNics, err %v", err)
 		ic.emitErrMetric(irqtuner.TuneIrqAffinityForAllNicsWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 	}
 
