@@ -805,6 +805,7 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, sockets []int) (*AllocatableIn
 
 			targetIfIndex := socket2IfIndexes[targetSocket][targetSocketNicsCount-1]
 
+			ifIndex2Sockets[targetIfIndex] = []int{socket}
 			socket2IfIndexes[targetSocket] = socket2IfIndexes[targetSocket][:targetSocketNicsCount-1]
 			socket2IfIndexes[socket] = append(socket2IfIndexes[socket], targetIfIndex)
 		}
