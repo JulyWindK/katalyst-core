@@ -1151,8 +1151,6 @@ func (ic *IrqTuningController) emitIrqTuningPolicy() {
 }
 
 func (ic *IrqTuningController) emitNicsIrqAffinityPolicy() {
-	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicsCount, int64(len(ic.Nics)), metrics.MetricTypeNameRaw)
-
 	for _, nic := range ic.Nics {
 		val := int64(-1)
 		if nic.IrqAffinityPolicy == IrqBalanceFair {
@@ -1162,6 +1160,24 @@ func (ic *IrqTuningController) emitNicsIrqAffinityPolicy() {
 		}
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicIrqAffinityPolicy, val, metrics.MetricTypeNameRaw,
 			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()})
+	}
+}
+
+func (ic *IrqTuningController) emitNics() {
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicsCount, int64(len(ic.Nics)+len(ic.LowThroughputNics)), metrics.MetricTypeNameRaw)
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningLowThroughputNicsCount, int64(len(ic.LowThroughputNics)), metrics.MetricTypeNameRaw)
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNormalThroughputNicsCount, int64(len(ic.Nics)), metrics.MetricTypeNameRaw)
+
+	for _, nic := range ic.Nics {
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicThroughputClass, 1, metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()},
+			metrics.MetricTag{Key: "throughput", Val: "normal"})
+	}
+
+	for _, nic := range ic.LowThroughputNics {
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningNicThroughputClass, 0, metrics.MetricTypeNameRaw,
+			metrics.MetricTag{Key: "nic", Val: nic.NicInfo.UniqName()},
+			metrics.MetricTag{Key: "throughput", Val: "low"})
 	}
 }
 
@@ -4897,7 +4913,7 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	klog.Infof("periodic irq tuning for periodicTuningIrqCoresExclusive")
 
-	ic.emitExclusiveIrqCores()
+	defer ic.emitExclusiveIrqCores()
 
 	defer func() {
 		// make sure IrqAffinityChanges was cleared after exit periodicTuningIrqCoresExclusive
@@ -5104,6 +5120,7 @@ func (ic *IrqTuningController) periodicTuning() {
 
 	ic.emitIrqTuningPolicy()
 	ic.emitNicsIrqAffinityPolicy()
+	ic.emitNics()
 }
 
 func (ic *IrqTuningController) Run(stopCh <-chan struct{}) {
