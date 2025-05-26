@@ -131,7 +131,8 @@ type IrqTuningConfig struct {
 	Interval                 int
 	EnableIrqTuning          bool
 	IrqTuningPolicy          IrqTuningPolicy
-	EnableRPS                bool                     // only balance-fair policy support enable rps
+	EnableRPS                bool                     // enable rps according to machine specifications configured by kcc, only balance-fair policy support enable rps
+	EnableRPSCPUVSNicsQueue  float64                  // enable rps when (cpus count)/(nics queue count) greater than this config
 	NicAffinitySocketsPolicy NicAffinitySocketsPolicy // nics's irqs affinity sockets policy
 	IrqCoresExpectedCpuUtil  int
 	ThrouputClassSwitchConf  ThroughputClassSwitchConfig
@@ -149,6 +150,7 @@ func NewConfiguration() *IrqTuningConfig {
 		EnableIrqTuning:          false,
 		IrqTuningPolicy:          IrqTuningBalanceFair,
 		EnableRPS:                false,
+		EnableRPSCPUVSNicsQueue:  0,
 		NicAffinitySocketsPolicy: EachNicBalanceAllSockets,
 		IrqCoresExpectedCpuUtil:  50,
 		ThrouputClassSwitchConf: ThroughputClassSwitchConfig{

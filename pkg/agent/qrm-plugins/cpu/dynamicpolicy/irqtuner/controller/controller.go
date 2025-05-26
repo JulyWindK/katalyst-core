@@ -4889,8 +4889,22 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 		}
 	}
 
+	// ic.conf.EnableRPS enalbe rps according to machine specifications configured by kcc
+	enableRPS := ic.conf.EnableRPS
+	if !enableRPS && ic.conf.EnableRPSCPUVSNicsQueue > 0 && len(ic.Nics) <= 2 {
+		queueCount := 0
+		for _, nic := range ic.Nics {
+			queueCount += nic.NicInfo.QueueNum
+		}
+		cpuVSNicQueueRatio := float64(len(ic.CPUInfo.CPUOnline)) / float64(queueCount)
+
+		if cpuVSNicQueueRatio >= ic.conf.EnableRPSCPUVSNicsQueue {
+			enableRPS = true
+		}
+	}
+
 	// rps reconcile
-	if ic.conf.EnableRPS {
+	if enableRPS {
 		if err := ic.setRPSForNics(); err != nil {
 			klog.Errorf("failed to setRPSForNics, err %s", err)
 		}
