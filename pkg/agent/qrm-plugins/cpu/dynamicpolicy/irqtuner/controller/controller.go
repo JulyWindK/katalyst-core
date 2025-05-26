@@ -5089,14 +5089,11 @@ func (ic *IrqTuningController) syncDynamicConfig() {
 }
 
 func (ic *IrqTuningController) periodicTuning() {
-	ic.syncDynamicConfig()
-
 	if !ic.conf.EnableIrqTuning {
 		ic.disableIrqTuning()
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 0, metrics.MetricTypeNameRaw)
 		return
 	}
-
 	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 1, metrics.MetricTypeNameRaw)
 
 	if (len(ic.Nics) == 0 && len(ic.LowThroughputNics) == 0) || time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
@@ -5123,10 +5120,22 @@ func (ic *IrqTuningController) periodicTuning() {
 	ic.emitNics()
 }
 
-func (ic *IrqTuningController) Run(stopCh <-chan struct{}) {
+func (ic *IrqTuningController) Run(stopCh chan struct{}) {
 	klog.Infof("Irq tuning controller run")
 
-	go wait.Until(ic.periodicTuning, time.Second*time.Duration(ic.conf.Interval), stopCh)
+	for {
+		wait.Until(func() {
+			oldConf := ic.conf
+			ic.syncDynamicConfig()
+
+			if ic.conf.Interval != oldConf.Interval {
+				close(stopCh)
+				return
+			}
+
+			ic.periodicTuning()
+		}, time.Second*time.Duration(ic.conf.Interval), stopCh)
+	}
 }
 
 func (ic *IrqTuningController) Stop() {

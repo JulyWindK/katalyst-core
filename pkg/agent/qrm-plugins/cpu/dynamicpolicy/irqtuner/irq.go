@@ -57,6 +57,6 @@ type StateAdapter interface {
 }
 
 type Tuner interface {
-	Run(stopCh <-chan struct{})
+	Run(stopCh chan struct{})
 	Stop()
 }
