@@ -154,7 +154,7 @@ func NewConfiguration() *IrqTuningConfig {
 		ThrouputClassSwitchConf: ThroughputClassSwitchConfig{
 			LowThroughputThresholds: LowThroughputThresholds{
 				RxPPSThresh:     3000,
-				SuccessiveCount: 10,
+				SuccessiveCount: 30,
 			},
 			NormalThroughputThresholds: NormalThroughputThresholds{
 				RxPPSThresh:     6000,

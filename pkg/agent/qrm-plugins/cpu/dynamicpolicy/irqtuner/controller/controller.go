@@ -525,13 +525,19 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 
 	prevNicExclusiveIrqCoresSelectOrder := None
 	var nicManagers []*NicIrqTuningManager
-	for _, n := range nics {
+	for _, n := range normalThroughputNics {
 		irqCoresSelectOrder := Forward
 		if nicsAssignedSocketsHasOverlap {
 			if prevNicExclusiveIrqCoresSelectOrder == Forward {
 				irqCoresSelectOrder = Backward
 			}
 			prevNicExclusiveIrqCoresSelectOrder = irqCoresSelectOrder
+		}
+
+		assignedSockets := nicIrqsAffSockets[n.IfIndex]
+		if len(assignedSockets) == 0 {
+			klog.Errorf("nic %s assigned empty sockets", n)
+			assignedSockets = cpuInfo.GetSocketSlice()
 		}
 
 		mng, err := NewNicIrqTuningManager(conf, n, nicIrqsAffSockets[n.IfIndex], irqCoresSelectOrder)
@@ -850,6 +856,11 @@ func listActiveUplinkNicsExcludeSriovVFs(netNSDir string) ([]*machine.NicBasicIn
 		return nil, fmt.Errorf("no active uplink nics after filtering out sriov nics, it's impossible")
 	}
 
+	// sort nics by ifindex
+	sort.Slice(nics, func(i, j int) bool {
+		return nics[i].IfIndex < nics[j].IfIndex
+	})
+
 	return nics, nil
 }
 
@@ -942,6 +953,51 @@ func AssignSocketsForLowThroughputNics(nics []*machine.NicBasicInfo, cpuInfo *ma
 	}
 
 	return ifIndex2Sockets
+}
+
+func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSocket map[int][]int, nics []*machine.NicBasicInfo) map[int]ExclusiveIrqCoresSelectOrder {
+	var nicsAssignedSockets [][]int
+	for _, sockets := range nicAssignedSocket {
+		nicsAssignedSockets = append(nicsAssignedSockets, sockets)
+	}
+
+	var nicsAssignedSocketsHasOverlap bool
+	for i, sockets := range nicsAssignedSockets {
+		if i == len(nicsAssignedSockets)-1 {
+			break
+		}
+
+		for _, skts := range nicsAssignedSockets[i+1:] {
+			for _, s1 := range sockets {
+				for _, s2 := range skts {
+					if s1 == s2 {
+						nicsAssignedSocketsHasOverlap = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	// when multiple nics's assigned sockets has overlaps, then one nic's exclusive irq cores change may cause another nic with
+	// overlapped assigned sockets to change exclusive irq cores accordingly. In order to avoid this situation, two nics with overlapped
+	// assgined sockets can select exlcusive irq cores from different part of overlapped socket, for exmaple, one nic select exclusive irq
+	// cores from head part of numa cpus, and another nic select exclusive irq cores from tail part of numa cpus.
+	nicsExclusiveIrqCoresSelectOrder := make(map[int]ExclusiveIrqCoresSelectOrder)
+
+	prevNicExclusiveIrqCoresSelectOrder := None
+	for _, n := range nics {
+		irqCoresSelectOrder := Forward
+		if nicsAssignedSocketsHasOverlap {
+			if prevNicExclusiveIrqCoresSelectOrder == Forward {
+				irqCoresSelectOrder = Backward
+			}
+			prevNicExclusiveIrqCoresSelectOrder = irqCoresSelectOrder
+		}
+
+		nicsExclusiveIrqCoresSelectOrder[n.IfIndex] = irqCoresSelectOrder
+	}
+	return nicsExclusiveIrqCoresSelectOrder
 }
 
 func irqCoresEqual(a []int64, b []int64) bool {
@@ -1381,6 +1437,11 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		return
 	}
 
+	// if no normal throughput Nics, donot move nics, because maybe no containers in the machine
+	if len(normalThroughputNics) == 0 {
+		return
+	}
+
 	sort.Slice(normalThroughputNics, func(i, j int) bool {
 		return normalThroughputNics[i].NicInfo.IfIndex < normalThroughputNics[j].NicInfo.IfIndex
 	})
@@ -1396,31 +1457,44 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		return
 	}
 
-	for _, nic := range ic.Nics {
-		if nic.IrqAffinityPolicy == IrqCoresExclusive {
-			var newAffSockets []int
-			for ifIndex, sockets := range nicIrqsAffSockets {
-				if nic.NicInfo.IfIndex == ifIndex {
-					newAffSockets = append(newAffSockets, sockets...)
-					break
-				}
-			}
-			if len(newAffSockets) == 0 {
-				klog.Errorf("it's impossible that nic %s assigned sockets is empty", nic.NicInfo)
-				continue
-			}
+	// clear ic.Nics
+	ic.Nics = []*NicIrqTuningManager{}
 
-			assingedSocketsChanged = false
-			if len(nic.AssignedSockets) != len(newAffSockets) {
+	for _, nic := range normalThroughputNics {
+		newAffSockets, ok := nicIrqsAffSockets[nic.NicInfo.IfIndex]
+		if !ok {
+			klog.Errorf("failed to find %s in nics new assigned sockets", nic.NicInfo)
+			newAffSockets = nic.AssignedSockets
+		}
+
+		if len(newAffSockets) == 0 {
+			klog.Errorf("it's impossible that nic %s assigned sockets is empty", nic.NicInfo)
+			newAffSockets = nic.AssignedSockets
+		}
+
+		sort.Ints(newAffSockets)
+		oldAssignedSockets := nic.AssignedSockets
+		nic.AssignedSockets = newAffSockets
+		ic.Nics = append(ic.Nics, nic)
+
+		if nic.IrqAffinityPolicy == IrqCoresExclusive {
+			assingedSocketsChanged := false
+			if len(oldAssignedSockets) != len(newAffSockets) {
 				assingedSocketsChanged = true
 			}
 			if !assingedSocketsChanged {
-				sort.Ints(newAffSockets)
-
-				for i, _ := range nic.AssignedSockets {
-					if newAffSockets[i] != nic.AssignedSockets[i] {
-
+				for i, _ := range oldAssignedSockets {
+					if newAffSockets[i] != oldAssignedSockets[i] {
+						assingedSocketsChanged = true
+						break
 					}
+				}
+			}
+
+			if assingedSocketsChanged {
+				if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
+					klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+					ic.emitErrMetric(irqtuner.TuneNicIrqAffinityWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 				}
 			}
 		}
@@ -1464,21 +1538,19 @@ func (ic *IrqTuningController) syncNics() error {
 	oldNics = append(oldNics, ic.Nics...)
 	oldNics = append(oldNics, ic.LowThroughputNics...)
 
+	sort.Slice(oldNics, func(i, j int) bool {
+		return oldNics[i].NicInfo.IfIndex < oldNics[j].NicInfo.IfIndex
+	})
+
 	nicsChanged := false
 	if len(nics) != len(oldNics) {
 		nicsChanged = true
 	}
 
 	if !nicsChanged {
-		for _, oldNic := range oldNics {
-			matched := false
-			for _, newNic := range nics {
-				if newNic.Equal(oldNic.NicInfo.NicBasicInfo) {
-					matched = true
-					break
-				}
-			}
-			if !matched {
+		// nics has been sorted by ifindex in listActiveUplinkNicsExcludeSriovVFs
+		for i, _ := range oldNics {
+			if !nics[i].Equal(oldNics[i].NicInfo.NicBasicInfo) {
 				nicsChanged = true
 				break
 			}
