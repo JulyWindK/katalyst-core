@@ -460,6 +460,11 @@ func Discover(machineInfo *info.MachineInfo) (*CPUTopology, *MemoryTopology, err
 		}
 	}
 
+	cpuInfo, err := GetCPUInfoWithTopo()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to GetCPUInfoWithTopo, err %s", err)
+	}
+
 	return &CPUTopology{
 		NumCPUs:              machineInfo.NumCores,
 		NumSockets:           machineInfo.NumSockets,
@@ -467,22 +472,8 @@ func Discover(machineInfo *info.MachineInfo) (*CPUTopology, *MemoryTopology, err
 		NumNUMANodes:         CPUDetails.NUMANodes().Size(),
 		NUMANodeIDToSocketID: numaNodeIDToSocketID,
 		CPUDetails:           CPUDetails,
+		CPUInfo:              cpuInfo,
 	}, &memoryTopology, nil
-}
-
-func ConstructCPUTopology(machineInfo *info.MachineInfo) (*CPUTopology, error) {
-	cpuTopo, _, err := Discover(machineInfo)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ExtractCPUTopologyFromMachineInfo, err %s", err)
-	}
-
-	cpuInfo, err := GetCPUInfoWithTopo()
-	if err != nil {
-		return nil, fmt.Errorf("failed to GetCPUInfoWithTopo, err %s", err)
-	}
-
-	cpuTopo.CPUInfo = cpuInfo
-	return cpuTopo, nil
 }
 
 // getUniqueCoreID computes coreId as the lowest cpuID
