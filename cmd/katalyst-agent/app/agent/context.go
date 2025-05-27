@@ -34,6 +34,7 @@ import (
 	katalystbase "github.com/kubewharf/katalyst-core/cmd/base"
 	katalystconfig "github.com/kubewharf/katalyst-core/pkg/config"
 	"github.com/kubewharf/katalyst-core/pkg/metaserver"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 )
 
 // InitFunc is used to construct the framework of agent component; all components
@@ -96,6 +97,12 @@ func NewGenericContext(base *katalystbase.GenericContext, conf *katalystconfig.C
 	pluginMgr, err := newPluginManager(conf)
 	if err != nil {
 		return nil, fmt.Errorf("failed init plugin manager: %s", err)
+	}
+
+	if metaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: NewGenericContext metaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: NewGenericContext metaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
 	}
 
 	return &GenericContext{

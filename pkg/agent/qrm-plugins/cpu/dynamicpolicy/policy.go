@@ -139,6 +139,13 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	_ interface{}, agentName string,
 ) (bool, agent.Component, error) {
 	general.Infof("irq-tuning: NewDynamicPolicy in")
+
+	if agentCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: NewDynamicPolicy genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: NewDynamicPolicy genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
+	}
+
 	reservedCPUs, reserveErr := cpuutil.GetCoresReservedForSystem(conf, agentCtx.MetaServer, agentCtx.KatalystMachineInfo, agentCtx.CPUDetails.CPUs().Clone())
 	if reserveErr != nil {
 		return false, agent.ComponentStub{}, fmt.Errorf("GetCoresReservedForSystem for reservedCPUsNum: %d failed with error: %v",

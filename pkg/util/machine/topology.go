@@ -478,7 +478,14 @@ func ConstructCPUTopology(machineInfo *info.MachineInfo) (*CPUTopology, error) {
 
 	cpuInfo, err := GetCPUInfoWithTopo()
 	if err != nil {
+		general.Errorf("irq-tuning: failed to GetCPUInfoWithTopo, err %s", err)
 		return nil, fmt.Errorf("failed to GetCPUInfoWithTopo, err %s", err)
+	}
+
+	if cpuInfo == nil {
+		general.Errorf("irq-tuning: ConstructCPUTopology cpuInfo is nil")
+	} else {
+		general.Infof("irq-tuning: ConstructCPUTopology cpuInfo is NOT nil")
 	}
 
 	cpuTopo.CPUInfo = cpuInfo

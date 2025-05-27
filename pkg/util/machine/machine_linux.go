@@ -28,6 +28,7 @@ import (
 	"github.com/google/cadvisor/utils/sysfs"
 
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/global"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 )
 
 // GetKatalystMachineInfo returns KatalystMachineInfo by collecting machine info
@@ -61,6 +62,12 @@ func GetKatalystMachineInfo(conf *global.MachineInfoConfiguration) (*KatalystMac
 	extraTopologyInfo, err := GetExtraTopologyInfo(conf, cpuTopology, extraNetworkInfo)
 	if err != nil {
 		return nil, err
+	}
+
+	if cpuTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: GetKatalystMachineInfo cpuTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: GetKatalystMachineInfo cpuTopology.CPUInfo is NOT nil")
 	}
 
 	return &KatalystMachineInfo{

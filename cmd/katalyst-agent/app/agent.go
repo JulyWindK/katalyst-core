@@ -60,10 +60,21 @@ func Run(conf *config.Configuration, clientSet *client.GenericClientSet, generic
 		return err
 	}
 
+	if genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: Run 1 genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: Run 1 genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
+	}
+
 	for _, genericOption := range genericOptions {
 		genericOption(genericCtx)
 	}
 
+	if genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: Run 2 genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: Run 2 genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
+	}
 	lock := acquireLock(genericCtx, conf)
 	defer func() {
 		// if the process panic in other place and the defer function isn't executed,
@@ -74,6 +85,12 @@ func Run(conf *config.Configuration, clientSet *client.GenericClientSet, generic
 		time.Sleep(1 * time.Second)
 	}()
 
+	if genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: Run 3 genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: Run 3 genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
+	}
+
 	return startAgent(ctx, genericCtx, conf, GetAgentInitializers())
 }
 
@@ -83,6 +100,13 @@ func startAgent(ctx context.Context, genericCtx *agent.GenericContext,
 ) error {
 	componentMap := make(map[string]agent.Component)
 	monitorAgentStart(genericCtx)
+
+	if genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: startAgent genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: startAgent genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
+	}
+
 	for agentName, starter := range agents {
 		if !genericCtx.IsEnabled(agentName, conf.Agents) {
 			klog.Warningf("%q is disabled", agentName)
