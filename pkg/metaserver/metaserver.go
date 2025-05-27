@@ -32,6 +32,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/metaserver/kcc"
 	"github.com/kubewharf/katalyst-core/pkg/metaserver/spd"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 )
 
 // MetaServer is used to fetch metadata that other components may need to obtain,
@@ -73,6 +74,12 @@ func NewMetaServer(clientSet *client.GenericClientSet, emitter metrics.MetricEmi
 	spdFetcher, err := spd.NewSPDFetcher(clientSet, emitter, metaAgent.CNCFetcher, conf)
 	if err != nil {
 		return nil, fmt.Errorf("initializes spd fetcher failed: %s", err)
+	}
+
+	if metaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: NewMetaServer metaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: NewMetaServer metaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
 	}
 
 	return &MetaServer{
