@@ -24,7 +24,7 @@ import (
 const (
 	NicsSyncInterval      = 600 // seconds
 	IrqBalanceNGProcComm  = "irqbalance-ng"
-	IrqTuningLogPrefix    = "irq-tuning controller"
+	IrqTuningLogPrefix    = "irq-tuning:"
 	KataRuntimeClassName  = "kata-clh"
 	KataBMAnnotationName  = "bytedance.com/kata-bm"
 	KataBMAnnotationValue = "true"
@@ -146,13 +146,13 @@ func calculateCpuUtils(oldCpuStats, newCpuStats map[int64]*machine.CPUStat, cpus
 	for _, cpu := range cpus {
 		oldStat, ok := oldCpuStats[cpu]
 		if !ok {
-			klog.Warningf("cpu not in old cpu stats")
+			klog.Warningf("%s cpu not in old cpu stats", IrqTuningLogPrefix)
 			continue
 		}
 
 		newStat, ok := newCpuStats[cpu]
 		if !ok {
-			klog.Warningf("cpu not in new cpu stats")
+			klog.Warningf("%s cpu not in new cpu stats", IrqTuningLogPrefix)
 			continue
 		}
 
@@ -233,18 +233,18 @@ func calculateQueuePPS(oldNicStats, newNicStats *NicStats, timeDiff float64) []*
 	for i := 0; i < queueCount; i++ {
 		oldPackets, ok := oldNicStats.RxQueuePackets[i]
 		if !ok {
-			klog.Warningf("impossible, failed to find queue %d in nic old stats", i)
+			klog.Warningf("%s impossible, failed to find queue %d in nic old stats", IrqTuningLogPrefix, i)
 			continue
 		}
 
 		newPackets, ok := newNicStats.RxQueuePackets[i]
 		if !ok {
-			klog.Warningf("impossible, failed to find queue %d in nic new stats", i)
+			klog.Warningf("%s impossible, failed to find queue %d in nic new stats", IrqTuningLogPrefix, i)
 			continue
 		}
 
 		if newPackets < oldPackets {
-			klog.Warningf("impossible, queue %d new packets less than old packets", i)
+			klog.Warningf("%s impossible, queue %d new packets less than old packets", IrqTuningLogPrefix, i)
 			continue
 		}
 
@@ -436,7 +436,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 	for _, nic := range nics {
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
-			klog.Errorf("failed to collectNicStats, err %v", err)
+			klog.Errorf("%s failed to collectNicStats, err %v", IrqTuningLogPrefix, err)
 			continue
 		}
 		prevNicRxPackets[nic.IfIndex] = rxPackets
@@ -453,14 +453,14 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 	for _, nic := range nics {
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
-			klog.Errorf("failed to collectNicStats, err %v", err)
+			klog.Errorf("%s failed to collectNicStats for nic %s, err %v", IrqTuningLogPrefix, nic, err)
 			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
 		oldRxPPS, ok := prevNicRxPackets[nic.IfIndex]
 		if !ok {
-			klog.Errorf("failed to find nic %s in prev nic stats")
+			klog.Errorf("%s failed to find nic %s in prev nic stats", IrqTuningLogPrefix, nic)
 			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
@@ -490,12 +490,12 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 		}
 	}
 
-	klog.Infof("normal throughput nics:")
+	klog.Infof("%s normal throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range normalThroughputNics {
 		klog.Infof(" %s", nic)
 	}
 
-	klog.Infof("low throughput nics:")
+	klog.Infof("%s low throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range lowThroughputNics {
 		klog.Infof(" %s", nic)
 	}
@@ -511,13 +511,13 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 	for _, n := range normalThroughputNics {
 		irqCoresSelectOrder, ok := nicsExclusiveIrqCoresSelectOrder[n.IfIndex]
 		if !ok {
-			klog.Errorf("failed to find nic %s in nicsExclusiveIrqCoresSelectOrder %+v", n, nicsExclusiveIrqCoresSelectOrder)
+			klog.Errorf("%s failed to find nic %s in nicsExclusiveIrqCoresSelectOrder %+v", IrqTuningLogPrefix, n, nicsExclusiveIrqCoresSelectOrder)
 			irqCoresSelectOrder = Forward
 		}
 
 		assignedSockets := nicsAssignedSockets[n.IfIndex]
 		if len(assignedSockets) == 0 {
-			klog.Errorf("nic %s assigned empty sockets", n)
+			klog.Errorf("%s nic %s assigned empty sockets", IrqTuningLogPrefix, n)
 			assignedSockets = cpuInfo.GetSocketSlice()
 		}
 
@@ -586,7 +586,7 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 
 	controllerBytes, err := json.Marshal(controller)
 	if err != nil {
-		klog.ErrorS(err, "%s failed to marshal controller", IrqTuningLogPrefix)
+		klog.Errorf("%s failed to marshal controller, err %v", IrqTuningLogPrefix, err)
 	} else {
 		klog.Infof("%s controller: %s", IrqTuningLogPrefix, string(controllerBytes))
 	}
@@ -603,6 +603,8 @@ func isIrqBalanceNGServiceRuning() bool {
 }
 
 func getIrqsAffinityCPUs(nic *machine.NicBasicInfo, irqs []int) (map[int]int64, error) {
+	retries := 0
+retry:
 	irq2CPUs, err := machine.GetIrqsAffinityCPUs(irqs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to GetIrqsAffinityCPUs(%+v), err %v", irqs, err)
@@ -620,10 +622,28 @@ func getIrqsAffinityCPUs(nic *machine.NicBasicInfo, irqs []int) (map[int]int64, 
 	}
 
 	if hasIrqAffinityMultiCPUs {
+		if retries > 3 {
+			return nil, fmt.Errorf("failed to TidyUpIrqsAffinityCPUs")
+		}
+		retries++
+
+		klog.Infof("%s nic %s before tidy irqs affinitys", IrqTuningLogPrefix, nic)
+		for irq, cpus := range irq2CPUs {
+			cpuStr, _ := general.ConvertIntSliceToBitmapString(cpus)
+			klog.Infof("  irq %d: cpu %s", irq, cpuStr)
+		}
+
 		irq2Core, err = machine.TidyUpNicIrqsAffinityCPUs(irq2CPUs)
 		if err != nil {
-			return nil, fmt.Errorf("failed to TidyUpIrqsAffinityCPUs, err %v", err)
+			klog.Errorf("%s nic %s failed to TidyUpIrqsAffinityCPUs, err %v", IrqTuningLogPrefix, nic, err)
+		} else {
+			klog.Infof("%s nic %s after tidy irqs affinitys", IrqTuningLogPrefix, nic)
+			for irq, core := range irq2Core {
+				klog.Infof("  irq %d: cpu %d", irq, core)
+			}
 		}
+
+		goto retry
 	}
 	return irq2Core, nil
 }
@@ -658,6 +678,11 @@ func GetNicInfo(nic *machine.NicBasicInfo) (*NicInfo, error) {
 	irq2Core, err := getIrqsAffinityCPUs(nic, irqs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to getIrqsAffinityCPUs(%+v), err %v", irqs, err)
+	}
+
+	klog.Infof("%s nic %s irq affinity", IrqTuningLogPrefix, nic)
+	for irq, core := range irq2Core {
+		klog.Infof("  irq %d: cpu %d", irq, core)
 	}
 
 	socketIrqCores, err := getSocketIrqCores(irq2Core)
@@ -736,7 +761,7 @@ func (n *NicInfo) filterCoresAffinitiedQueues(coreList []int64) []int {
 	for _, irq := range irqs {
 		queue, ok := n.Irq2Queue[irq]
 		if !ok {
-			klog.Warningf("failed to find irq %d in nic %s Irq2Queue", irq, n)
+			klog.Warningf("%s failed to find irq %d in nic %s Irq2Queue", IrqTuningLogPrefix, irq, n)
 			continue
 		}
 		queues = append(queues, queue)
@@ -758,7 +783,7 @@ func (n *NicInfo) getSocketAffinitiedIrqs(socket int) []int {
 	for _, core := range cores {
 		irqs, ok := coreIrqs[core]
 		if !ok {
-			klog.Errorf("failed to find core %d in getIrqCoreAffinitiedIrqs return value", core)
+			klog.Errorf("%s failed to find core %d in getIrqCoreAffinitiedIrqs return value", IrqTuningLogPrefix, core)
 			continue
 		}
 		socketAffinitiedIrqs = append(socketAffinitiedIrqs, irqs...)
@@ -875,7 +900,7 @@ func AssignSocketsForNics(nics []*machine.NicBasicInfo, cpuInfo *machine.CPUInfo
 
 			socketID, err := machine.GetNumaPackageID(nic.NumaNode)
 			if err != nil {
-				klog.Errorf("failed to GetNumaPackageID(%d), err %s", nic.NumaNode, err)
+				klog.Errorf("%s nic %s failed to GetNumaPackageID(%d), err %s", IrqTuningLogPrefix, nic, nic.NumaNode, err)
 				hasUnknownSocketBindNic = true
 				break
 			}
@@ -925,7 +950,7 @@ func AssignSocketsForLowThroughputNics(nics []*machine.NicBasicInfo, cpuInfo *ma
 
 			socketID, err := machine.GetNumaPackageID(nic.NumaNode)
 			if err != nil {
-				klog.Errorf("failed to GetNumaPackageID(%d), err %s", nic.NumaNode, err)
+				klog.Errorf("%s nic %s failed to GetNumaPackageID(%d), err %s", IrqTuningLogPrefix, nic, nic.NumaNode, err)
 				ifIndex2Sockets[nic.IfIndex] = allSockets
 				continue
 			}
@@ -1100,7 +1125,7 @@ func (nm *NicIrqTuningManager) getRxQueuesPPSInDecOrder(queues []int, oldStats *
 			}
 		}
 		if !find {
-			klog.Warningf("failed to find queue %d in nic %s rx queue pps", queue, nm.NicInfo)
+			klog.Warningf("%s failed to find queue %d in nic %s rx queue pps", IrqTuningLogPrefix, queue, nm.NicInfo)
 		}
 	}
 
@@ -1119,7 +1144,7 @@ func (nm *NicIrqTuningManager) getIrqsCorrespondingRxQueuesPPSInDecOrder(irqs []
 	for _, irq := range irqs {
 		queue, ok := nm.NicInfo.Irq2Queue[irq]
 		if !ok {
-			klog.Warningf("failed to find irq in nic %s Irq2Queue %+v", nm.NicInfo, nm.NicInfo.Irq2Queue)
+			klog.Warningf("%s failed to find irq in nic %s Irq2Queue %+v", IrqTuningLogPrefix, nm.NicInfo, nm.NicInfo.Irq2Queue)
 			continue
 		}
 		queues = append(queues, queue)
@@ -1363,20 +1388,20 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 
 		oldStats, ok := oldNicStats[nic.NicInfo.IfIndex]
 		if !ok {
-			klog.Errorf("impossible, failed to find nic %s in old nic stats", nic.NicInfo)
+			klog.Errorf("%s impossible, failed to find nic %s in old nic stats", IrqTuningLogPrefix, nic.NicInfo)
 			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
 		stats, ok := ic.NicStats[nic.NicInfo.IfIndex]
 		if !ok {
-			klog.Errorf("impossible, failed to find nic %s in nic stats", nic.NicInfo)
+			klog.Errorf("%s impossible, failed to find nic %s in nic stats", IrqTuningLogPrefix, nic.NicInfo)
 			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
 
 		if stats.TotalRxPackets < oldStats.TotalRxPackets {
-			klog.Errorf("nic %s current rx packets(%d) less than last rx packets(%d)", nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
+			klog.Errorf("%s nic %s current rx packets(%d) less than last rx packets(%d)", IrqTuningLogPrefix, nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
 			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
@@ -1405,20 +1430,20 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 	for _, nic := range ic.LowThroughputNics {
 		oldStats, ok := oldNicStats[nic.NicInfo.IfIndex]
 		if !ok {
-			klog.Errorf("impossible, failed to find nic %s in old nic stats", nic.NicInfo)
+			klog.Errorf("%s impossible, failed to find nic %s in old nic stats", IrqTuningLogPrefix, nic.NicInfo)
 			lowThroughputNics = append(lowThroughputNics, nic)
 			continue
 		}
 
 		stats, ok := ic.NicStats[nic.NicInfo.IfIndex]
 		if !ok {
-			klog.Errorf("impossible, failed to find nic %s in nic stats", nic.NicInfo)
+			klog.Errorf("%s impossible, failed to find nic %s in nic stats", IrqTuningLogPrefix, nic.NicInfo)
 			lowThroughputNics = append(lowThroughputNics, nic)
 			continue
 		}
 
 		if stats.TotalRxPackets < oldStats.TotalRxPackets {
-			klog.Errorf("nic %s current rx packets(%d) less than last rx packets(%d)", nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
+			klog.Errorf("%s nic %s current rx packets(%d) less than last rx packets(%d)", IrqTuningLogPrefix, nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
 			lowThroughputNics = append(lowThroughputNics, nic)
 			continue
 		}
@@ -1445,7 +1470,7 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 	}
 
 	if len(ic.LowThroughputNics)+len(ic.Nics) != len(lowThroughputNics)+len(normalThroughputNics) {
-		klog.Errorf("some nics are dropped by mistake")
+		klog.Errorf("%s some nics are dropped by mistake", IrqTuningLogPrefix)
 		return
 	}
 
@@ -1458,12 +1483,12 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		return
 	}
 
-	klog.Infof("normal throughput nics:")
+	klog.Infof("%s normal throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range normalThroughputNics {
 		klog.Infof(" %s", nic.NicInfo)
 	}
 
-	klog.Infof("low throughput nics:")
+	klog.Infof("%s low throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range lowThroughputNics {
 		klog.Infof(" %s", nic.NicInfo)
 	}
@@ -1479,7 +1504,7 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 
 	nicsAssignedSockets, err := AssignSocketsForNics(normalThroughputBasicNics, ic.CPUInfo, ic.conf.NicAffinitySocketsPolicy)
 	if err != nil {
-		klog.Errorf("failed to AssignSocketsForNics, err %s", err)
+		klog.Errorf("%s failed to AssignSocketsForNics, err %s", IrqTuningLogPrefix, err)
 		return
 	}
 
@@ -1491,18 +1516,18 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 	for _, nic := range normalThroughputNics {
 		newAssingedSockets, ok := nicsAssignedSockets[nic.NicInfo.IfIndex]
 		if !ok {
-			klog.Errorf("failed to find %s in nics new assigned sockets", nic.NicInfo)
+			klog.Errorf("%s failed to find %s in nics new assigned sockets", IrqTuningLogPrefix, nic.NicInfo)
 			newAssingedSockets = nic.AssignedSockets
 		}
 
 		if len(newAssingedSockets) == 0 {
-			klog.Errorf("it's impossible that nic %s assigned sockets is empty", nic.NicInfo)
+			klog.Errorf("%s it's impossible that nic %s assigned sockets is empty", IrqTuningLogPrefix, nic.NicInfo)
 			newAssingedSockets = nic.AssignedSockets
 		}
 
 		irqCoresSelectOrder, ok := nicsExclusiveIrqCoresSelectOrder[nic.NicInfo.IfIndex]
 		if !ok {
-			klog.Errorf("failed to find nic %s in nicsExclusiveIrqCoresSelectOrder %+v", nic.NicInfo, nicsExclusiveIrqCoresSelectOrder)
+			klog.Errorf("%s failed to find nic %s in nicsExclusiveIrqCoresSelectOrder %+v", IrqTuningLogPrefix, nic.NicInfo, nicsExclusiveIrqCoresSelectOrder)
 			irqCoresSelectOrder = Forward
 		}
 
@@ -1537,7 +1562,7 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 
 			if change {
 				if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
-					klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+					klog.Errorf("%s failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 					ic.emitErrMetric(irqtuner.TuneNicIrqAffinityWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 				}
 			}
@@ -1559,19 +1584,19 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 
 		lowThroughputNicAssignedffSockets := AssignSocketsForLowThroughputNics(lowThroughputBasicNics, ic.CPUInfo, ic.conf.NicAffinitySocketsPolicy)
 		if err != nil {
-			klog.Errorf("failed to AssignSocketsForLowThroughputNics, err %v", err)
+			klog.Errorf("%s failed to AssignSocketsForLowThroughputNics, err %v", IrqTuningLogPrefix, err)
 		}
 
 		for _, nic := range lowThroughputNics {
 			assignedSockets, ok := lowThroughputNicAssignedffSockets[nic.NicInfo.IfIndex]
 			if !ok {
-				klog.Errorf("failed to find nic %s in lowThroughputNicAssignedffSockets %+v", nic, lowThroughputNicAssignedffSockets)
+				klog.Errorf("%s failed to find nic %s in lowThroughputNicAssignedffSockets %+v", IrqTuningLogPrefix, nic, lowThroughputNicAssignedffSockets)
 				assignedSockets = ic.CPUInfo.GetSocketSlice()
 			}
 			nic.AssignedSockets = assignedSockets
 			nic.ExclusiveIrqCoresSelectOrder = Forward
 			if nic.IrqAffinityPolicy != IrqBalanceFair {
-				klog.Errorf("it's impossible low throughput nic's irq affinity policy is %s, should be IrqBalanceFair", nic.IrqAffinityPolicy)
+				klog.Errorf("%s it's impossible low throughput nic %s irq affinity policy is %s, should be IrqBalanceFair", IrqTuningLogPrefix, nic, nic.IrqAffinityPolicy)
 				nic.IrqAffinityPolicy = IrqBalanceFair
 			}
 			ic.LowThroughputNics = append(ic.LowThroughputNics, nic)
@@ -1632,7 +1657,7 @@ func (ic *IrqTuningController) syncNics() error {
 	}
 
 	if !nicsChanged {
-		klog.Infof("no nic changed")
+		klog.Infof("%s no nic changed", IrqTuningLogPrefix)
 		return nil
 	}
 
@@ -1667,20 +1692,20 @@ func (ic *IrqTuningController) syncNics() error {
 		}
 
 		if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
-			klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
+			klog.Errorf("%s failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", IrqTuningLogPrefix, err)
 		}
 
 		totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
 		if err != nil || len(totalIrqCores) > 0 {
 			if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet()); err != nil {
-				klog.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
+				klog.Errorf("%s failed to SetExclusiveIRQCPUSet, err %s", IrqTuningLogPrefix, err)
 			}
 		}
 	}
 
 	nicManagers, lowThroughputNicManagers, err := NewNicIrqTuningManagers(ic.conf, nics, ic.CPUInfo)
 	if err != nil {
-		return fmt.Errorf("failed to NewNicIrqTuningManagers, err %v", err)
+		return fmt.Errorf("%s failed to NewNicIrqTuningManagers, err %v", IrqTuningLogPrefix, err)
 	}
 
 	sort.Slice(nicManagers, func(i, j int) bool {
@@ -1848,7 +1873,7 @@ func (ic *IrqTuningController) getQualifiedCoresMap(destDomainCoresList []int64,
 	qualifiedCoresMap := make(map[int64]interface{})
 
 	if len(unqualifiedCoresMap) > len(ic.CPUInfo.CPUOnline) {
-		klog.Warningf("unqualified cores count %d > total online cpus count %d", len(unqualifiedCoresMap), len(ic.CPUInfo.CPUOnline))
+		klog.Warningf("%s unqualified cores count %d > total online cpus count %d", IrqTuningLogPrefix, len(unqualifiedCoresMap), len(ic.CPUInfo.CPUOnline))
 		return qualifiedCoresMap
 	}
 
@@ -1899,7 +1924,7 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 
 	ccds, err := ic.CPUInfo.GetAMDNumaCCDs(numa)
 	if err != nil {
-		klog.Errorf("failed to GetAMDNumaCCDs(%d), err %s", numa, err)
+		klog.Errorf("%s failed to GetAMDNumaCCDs(%d), err %s", IrqTuningLogPrefix, numa, err)
 		return nil
 	}
 
@@ -1933,7 +1958,7 @@ func (ic *IrqTuningController) getCoresIrqCount(includeSriovContainersNics bool)
 		// or it will have impact on calculate avg core irq count in non-exclusive irq cores.
 		exclusive, err := ic.isExclusiveIrqCoresNic(nic.NicInfo.IfIndex)
 		if err != nil {
-			klog.Errorf("failed to isExclusiveIrqCoresNic check for nic %s, err %s", nic.NicInfo, err)
+			klog.Errorf("%s failed to isExclusiveIrqCoresNic check for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 			continue
 		}
 
@@ -2080,7 +2105,7 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 	for _, irq := range irqs {
 		core, ok := nic.Irq2Core[irq]
 		if !ok {
-			klog.Errorf("failed to find irq %d in nic %s Irq2Core", irq, nic)
+			klog.Errorf("%s failed to find irq %d in nic %s Irq2Core", IrqTuningLogPrefix, irq, nic)
 			continue
 		}
 
@@ -2091,15 +2116,16 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 
 		targetCore, err := ic.selectPhysicalCoreWithLeastIrqs(coresIrqCount, qualifiedCoresMap)
 		if err != nil {
-			klog.Errorf("failed to selectPhysicalCoreWithLeastIrqs, err %v", err)
+			klog.Errorf("%s failed to selectPhysicalCoreWithLeastIrqs, err %v", IrqTuningLogPrefix, err)
 			continue
 		}
 
 		if err := machine.SetIrqAffinity(irq, targetCore); err != nil {
-			klog.Errorf("failed to SetIrqAffinity(%d, %d) for nic %s, err %v",
-				irq, targetCore, nic, err)
+			klog.Errorf("%s failed to SetIrqAffinity(%d, %d) for nic %s, err %v",
+				IrqTuningLogPrefix, irq, targetCore, nic, err)
 			continue
 		}
+		klog.Infof("%s nic %s set irq %d affinity cpu %d", IrqTuningLogPrefix, nic, irq, targetCore)
 
 		coresIrqCount[core]--
 		coresIrqCount[targetCore]++
@@ -2111,7 +2137,7 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 	///////////////////////////////////////////////
 	if hasIrqTuned {
 		if err := nic.sync(); err != nil {
-			klog.Errorf("failed to sync for nic %s, err %s", nic, err)
+			klog.Errorf("%s failed to sync for nic %s, err %s", IrqTuningLogPrefix, nic, err)
 		}
 	}
 
@@ -2168,12 +2194,12 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityNumasFairly_deprecated(nic *Ni
 
 			qualifiedCoresMap := ic.getNumaQualifiedCoresMapForBalanceFairPolicy(numa)
 			if len(qualifiedCoresMap) == 0 {
-				klog.Errorf("failed to find qualified cores in numa %d for nic %s", numa, nic)
+				klog.Errorf("%s failed to find qualified cores in numa %d for nic %s", IrqTuningLogPrefix, numa, nic)
 				continue
 			}
 
 			if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, numaAssignedIrqs, qualifiedCoresMap); err != nil {
-				klog.Errorf("failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", nic, err)
+				klog.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic, err)
 			}
 		}
 	}
@@ -2260,23 +2286,23 @@ retry:
 		if ic.CPUInfo.CPUVendor == cpuid.AMD && ccdsBalance {
 			qualifiedCCDs := ic.getNumaQualifiedCCDsForBalanceFairPolicy(numa)
 			if len(qualifiedCCDs) == 0 {
-				klog.Warningf("failed to find qualified ccds in numa %d for nic %s", numa, nic)
+				klog.Warningf("%s failed to find qualified ccds in numa %d for nic %s", IrqTuningLogPrefix, numa, nic)
 				numasWithNotEnoughQualifiedResource = append(numasWithNotEnoughQualifiedResource, numa)
 				goto retry
 			}
 			if err := ic.tuneNicIrqsAffinityCCDsFairly(nic, numaAssignedIrqs, qualifiedCCDs); err != nil {
-				klog.Errorf("failed to tuneIrqsAffinityNumaCCDsFairly for nic %s in numa %d ccds, err %s", nic, numa, err)
+				klog.Errorf("%s failed to tuneIrqsAffinityNumaCCDsFairly for nic %s in numa %d ccds, err %s", IrqTuningLogPrefix, nic, numa, err)
 			}
 		} else {
 			qualifiedCoresMap := ic.getNumaQualifiedCoresMapForBalanceFairPolicy(numa)
 			if len(qualifiedCoresMap) == 0 {
-				klog.Warningf("failed to find qualified cores in numa %d for nic %s", numa, nic)
+				klog.Warningf("%s failed to find qualified cores in numa %d for nic %s", IrqTuningLogPrefix, numa, nic)
 				numasWithNotEnoughQualifiedResource = append(numasWithNotEnoughQualifiedResource, numa)
 				goto retry
 			}
 
 			if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, numaAssignedIrqs, qualifiedCoresMap); err != nil {
-				klog.Errorf("failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", nic, err)
+				klog.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic, err)
 			}
 		}
 	}
@@ -2305,12 +2331,12 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityCCDsFairly(nic *NicInfo, irqs 
 
 		qualifiedCoresMap := ic.getCCDQualifiedCoresMapForBalanceFairPolicy(ccd)
 		if len(qualifiedCoresMap) == 0 {
-			klog.Errorf("failed to find qualified cores in ccd for nic %s", nic)
+			klog.Errorf("%s failed to find qualified cores in ccd for nic %s", IrqTuningLogPrefix, nic)
 			continue
 		}
 
 		if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, ccdAssignedIrqs, qualifiedCoresMap); err != nil {
-			klog.Errorf("failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", nic, err)
+			klog.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic, err)
 		}
 	}
 
@@ -2328,6 +2354,10 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityLLCDomainsFairly(nic *NicInfo,
 }
 
 func (ic *IrqTuningController) tuneNicIrqsAffinityFairly(nic *NicInfo, assingedSockets []int) error {
+	// only enable ccd balance when static config IrqTuningBalanceFair, disable ccd balance when
+	// IrqTuningPolicy is IrqTuningAuto, because if ic.conf.IrqTuningPolicy is IrqTuningAuto, which means
+	// there may have both IrqBalanceFair nic and IrqCoresExclusive nic, IrqCoresExclusive nic's irq cores
+	// will be changed dynamically, which will introduce significant challenges for IrqBalanceFair nic's irqs affinity.
 	if ic.conf.IrqTuningPolicy == config.IrqTuningBalanceFair {
 		return ic.tuneNicIrqsAffinityLLCDomainsFairly(nic, assingedSockets)
 	} else {
@@ -2374,20 +2404,20 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 				continue
 			}
 		} else {
-			klog.Warningf("nic %s irq %d affinitied core %d is not qualified core, generally here nic's all irqs affinitied cores should be qualified",
-				nic, irq, oriCore)
+			klog.Warningf("%s nic %s irq %d affinitied core %d is not qualified core, generally here nic's all irqs affinitied cores should be qualified",
+				IrqTuningLogPrefix, nic, irq, oriCore)
 		}
 
 		targetCore, err := ic.selectPhysicalCoreWithLeastIrqs(coresIrqCount, qualifiedCoresMap)
 		if err != nil {
-			klog.Errorf("failed to selectPhysicalCoreWithLeastIrqs, err %v", err)
+			klog.Errorf("%s nic %s failed to selectPhysicalCoreWithLeastIrqs, err %v", IrqTuningLogPrefix, nic, err)
 			continue
 		}
 
 		// if irqs count diff of source core and dst core <= 1, then needless to change irq's affinity,
 		// because if irq affinity change from source core to dst core, then dst core's irqs count >= source core's irq count.
 		if oriCoreQualified && coresIrqCount[oriCore]-coresIrqCount[targetCore] <= 1 {
-			klog.Warningf("irq count diff original irq core and selected target irq core is less-equal 1")
+			klog.Warningf("%s nic %s irq count diff original irq core and selected target irq core is less-equal 1", IrqTuningLogPrefix, nic)
 			continue
 		}
 
@@ -2396,9 +2426,10 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 		}
 
 		if err := machine.SetIrqAffinity(irq, targetCore); err != nil {
-			klog.Errorf("failed to SetIrqAffinity(%d, %d), err %v", irq, targetCore, err)
+			klog.Errorf("%s nic %s failed to SetIrqAffinity(%d, %d), err %v", IrqTuningLogPrefix, nic, irq, targetCore, err)
 			continue
 		}
+		klog.Infof("%s nic %s set irq %d affinity cpu %d", IrqTuningLogPrefix, nic, irq, targetCore)
 
 		coresIrqCount[oriCore]--
 		coresIrqCount[targetCore]++
@@ -2418,7 +2449,7 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 	for _, irq := range irqs {
 		core, ok := nic.Irq2Core[irq]
 		if !ok {
-			klog.Warningf("nic %s irq %d not in Irq2Core %+v", nic, irq, nic.Irq2Core)
+			klog.Warningf("%s nic %s irq %d not in Irq2Core %+v", IrqTuningLogPrefix, nic, irq, nic.Irq2Core)
 			continue
 		}
 		irqCoresMap[core] = nil
@@ -2434,14 +2465,14 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 
 		srcCore, err := ic.selectPhysicalCoreWithMostIrqs(coresIrqCount, irqCoresMap)
 		if err != nil {
-			klog.Errorf("failed to selectPhysicalCoreWithMostIrqs, err %v", err)
+			klog.Errorf("%s failed to selectPhysicalCoreWithMostIrqs, err %v", IrqTuningLogPrefix, err)
 			continue
 		}
 
 		// if irqs count diff of source core and dst core <= 1, then needless to change irq's affinity,
 		// because if irq affinity change from source core to dst core, then dst core's irqs count >= source core's irq count.
 		if coresIrqCount[srcCore]-coreIrqCount <= 1 {
-			klog.Warningf("irq count diff of selected target irq core and current core is less-equal 1")
+			klog.Warningf("%s irq count diff of selected target irq core and current core is less-equal 1", IrqTuningLogPrefix)
 			continue
 		}
 
@@ -2452,7 +2483,7 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 		coresIrqsMap := nic.getIrqCoreAffinitiedIrqs()
 		srcCoreIrqs, ok := coresIrqsMap[srcCore]
 		if !ok {
-			klog.Warningf("failed to find target core %d in nic %s coresIrqsMap", srcCore, nic)
+			klog.Warningf("%s failed to find target core %d in nic %s coresIrqsMap", IrqTuningLogPrefix, srcCore, nic)
 			continue
 		}
 
@@ -2467,19 +2498,20 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 				}
 			}
 			if !matched {
-				klog.Warningf("nic %s core %d irq %d is not in irqs %+v", nic, srcCore, irqs)
+				klog.Warningf("%s nic %s core %d irq %d is not in irqs %+v", IrqTuningLogPrefix, nic, srcCore, irqs)
 			}
 		}
 
 		if targetIrq == -1 {
-			klog.Warningf("nic %s core %d affinitied no irq", nic, srcCore)
+			klog.Warningf("%s nic %s core %d affinitied no irq", IrqTuningLogPrefix, nic, srcCore)
 			continue
 		}
 
 		if err := machine.SetIrqAffinity(targetIrq, core); err != nil {
-			klog.Errorf("failed to SetIrqAffinity(%d, %d), err %v", targetIrq, core, err)
+			klog.Errorf("%s failed to SetIrqAffinity(%d, %d), err %v", IrqTuningLogPrefix, targetIrq, core, err)
 			continue
 		}
+		klog.Infof("%s nic %s set irq %d affinity cpu %d", IrqTuningLogPrefix, nic, targetIrq, core)
 
 		coresIrqCount[srcCore]--
 		coresIrqCount[core]++
@@ -2499,14 +2531,14 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 
 	socketIrqCores, err := getSocketIrqCores(nic.Irq2Core)
 	if err != nil {
-		klog.Errorf("failed to getSocketIrqCores, err %s", err)
+		klog.Errorf("%s nic %sfailed to getSocketIrqCores, err %s", IrqTuningLogPrefix, nic, err)
 	} else {
 		nic.SocketIrqCores = socketIrqCores
 	}
 
 	// update nic info
 	if err := nic.sync(); err != nil {
-		klog.Errorf("failed to sync nic %s, err %v", nic, err)
+		klog.Errorf("%s failed to sync nic %s, err %v", IrqTuningLogPrefix, nic, err)
 	}
 
 	return nil
@@ -2522,12 +2554,12 @@ func (ic *IrqTuningController) balanceNicIrqsInNumaFairly(nic *NicInfo, assinged
 
 			qualifiedCoresMap := ic.getNumaQualifiedCoresMapForBalanceFairPolicy(numa)
 			if len(qualifiedCoresMap) == 0 {
-				klog.Errorf("found zero qualified core in numa %d for nic %s irq affinity", numa, nic)
+				klog.Errorf("%s found zero qualified core in numa %d for nic %s irq affinity", IrqTuningLogPrefix, numa, nic)
 				continue
 			}
 
 			if err := ic.balanceNicIrqsInCoresFairly(nic, numaAffinitiedIrqs, qualifiedCoresMap); err != nil {
-				klog.Errorf("failed to balanceNicIrqsInCoresFairly for nic %s in numa %d, err %s", nic, numa, err)
+				klog.Errorf("%s failed to balanceNicIrqsInCoresFairly for nic %s in numa %d, err %s", IrqTuningLogPrefix, nic, numa, err)
 			}
 		}
 	}
@@ -2550,12 +2582,12 @@ func (ic *IrqTuningController) balanceNicIrqsInCCDFairly(nic *NicInfo, assingedS
 
 				qualifiedCoresMap := ic.getCCDQualifiedCoresMapForBalanceFairPolicy(ccd)
 				if len(qualifiedCoresMap) == 0 {
-					klog.Errorf("found zero qualified core in numa %d ccd for nic %s irq affinity", numaID, nic)
+					klog.Errorf("%s found zero qualified core in numa %d ccd for nic %s irq affinity", IrqTuningLogPrefix, numaID, nic)
 					continue
 				}
 
 				if err := ic.balanceNicIrqsInCoresFairly(nic, ccdAffinitiedIrqs, qualifiedCoresMap); err != nil {
-					klog.Errorf("failed to balanceNicIrqsInCoresFairly for nic %s in numa %d ccd, err %s", nic, numaID, err)
+					klog.Errorf("%s failed to balanceNicIrqsInCoresFairly for nic %s in numa %d ccd, err %s", IrqTuningLogPrefix, nic, numaID, err)
 				}
 			}
 		}
@@ -2597,8 +2629,8 @@ func (ic *IrqTuningController) tuneSriovContainerNicsIrqsAffinitySelfCores(cnt *
 
 	for _, nic := range cnt.Nics {
 		if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, nic.getIrqs(), qualifiedCoresMap); err != nil {
-			klog.Errorf("failed to tuneNicIrqsAffinityQualifiedCores for container %s nic %s, err %v",
-				cnt.ContainerID, nic, err)
+			klog.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for container %s nic %s, err %v",
+				IrqTuningLogPrefix, cnt.ContainerID, nic, err)
 		}
 	}
 
@@ -2616,7 +2648,7 @@ func (ic *IrqTuningController) TuneNicsIrqsAffinityQualifiedCoresFairly() error 
 
 	for _, nic := range ic.LowThroughputNics {
 		if err := ic.tuneNicIrqsAffinityNumasFairly(nic.NicInfo, nic.AssignedSockets, false); err != nil {
-			klog.Errorf("failed to tuneNicIrqsAffinityNumasFairly for nic %s, err %s", nic.NicInfo, err)
+			klog.Errorf("%s failed to tuneNicIrqsAffinityNumasFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 		}
 	}
 
@@ -2626,7 +2658,7 @@ func (ic *IrqTuningController) TuneNicsIrqsAffinityQualifiedCoresFairly() error 
 		}
 
 		if err := ic.tuneSriovContainerNicsIrqsAffinitySelfCores(cnt); err != nil {
-			klog.Errorf("failed to tuneSriovContainerNicsIrqsAffinitySelfCores for container %s, err %v", cnt.ContainerID, err)
+			klog.Errorf("%s failed to tuneSriovContainerNicsIrqsAffinitySelfCores for container %s, err %v", IrqTuningLogPrefix, cnt.ContainerID, err)
 		}
 	}
 
@@ -2648,8 +2680,8 @@ func (ic *IrqTuningController) balanceSriovContainerNicsIrqsInSelfCores(cnt *Con
 
 	for _, nic := range cnt.Nics {
 		if err := ic.balanceNicIrqsInCoresFairly(nic, nic.getIrqs(), qualifiedCoresMap); err != nil {
-			klog.Errorf("failed to balanceNicIrqsInCoresFairly for container %s nic %s, err %v",
-				cnt.ContainerID, nic, err)
+			klog.Errorf("%s failed to balanceNicIrqsInCoresFairly for container %s nic %s, err %v",
+				IrqTuningLogPrefix, cnt.ContainerID, nic, err)
 		}
 	}
 
@@ -2660,14 +2692,14 @@ func (ic *IrqTuningController) BalanceNicsIrqsInQualifiedCoresFairly() error {
 	for _, nic := range ic.Nics {
 		if nic.IrqAffinityPolicy != IrqCoresExclusive {
 			if err := ic.balanceNicIrqsFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-				klog.Errorf("failed to balanceNicIrqsFairly for nic %s, err %s", nic.NicInfo, err)
+				klog.Errorf("%s failed to balanceNicIrqsFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 			}
 		}
 	}
 
 	for _, nic := range ic.LowThroughputNics {
 		if err := ic.balanceNicIrqsInNumaFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-			klog.Errorf("failed to balanceNicIrqsInNumaFairly for nic %s, err %s", nic.NicInfo, err)
+			klog.Errorf("%s failed to balanceNicIrqsInNumaFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 		}
 	}
 
@@ -2677,7 +2709,7 @@ func (ic *IrqTuningController) BalanceNicsIrqsInQualifiedCoresFairly() error {
 		}
 
 		if err := ic.balanceSriovContainerNicsIrqsInSelfCores(cnt); err != nil {
-			klog.Errorf("failed to balanceSriovContainerNicsIrqsInSelfCores for container %s, err %v", cnt.ContainerID, err)
+			klog.Errorf("%s failed to balanceSriovContainerNicsIrqsInSelfCores for container %s, err %v", IrqTuningLogPrefix, cnt.ContainerID, err)
 		}
 	}
 
@@ -2719,7 +2751,7 @@ func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
 
 	totalExclusiveIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
 	if err != nil {
-		klog.Errorf("failed to getCurrentTotalExclusiveIrqCores, err %s", err)
+		klog.Errorf("%s failed to getCurrentTotalExclusiveIrqCores, err %s", IrqTuningLogPrefix, err)
 		return
 	}
 
@@ -2760,7 +2792,7 @@ func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
 			for _, lowThroughputNic := range ic.LowThroughputNics {
 				if nic.NicInfo.IfIndex == lowThroughputNic.NicInfo.IfIndex {
 					if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
-						klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+						klog.Errorf("%s failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 					}
 					break
 				}
@@ -2786,7 +2818,7 @@ func (ic *IrqTuningController) balanceNicsIrqsInInitTuning() {
 
 	// syncContainers here is for excluding unqualified cores, like katambm cpus
 	if err := ic.syncContainers(); err != nil {
-		klog.Errorf("failed to syncContainers, err %v", err)
+		klog.Errorf("%s failed to syncContainers, err %v", IrqTuningLogPrefix, err)
 	}
 
 	for _, nic := range ic.Nics {
@@ -2795,7 +2827,7 @@ func (ic *IrqTuningController) balanceNicsIrqsInInitTuning() {
 		}
 
 		if err := ic.tuneNicIrqsAffinityFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-			klog.Errorf("[irq tuning] failed to tuneNicIrqsAffinityFairly for nic %s, socket: %+v, err %s", nic.NicInfo, nic.AssignedSockets, err)
+			klog.Errorf("%s failed to tuneNicIrqsAffinityFairly for nic %s, socket: %+v, err %s", IrqTuningLogPrefix, nic.NicInfo, nic.AssignedSockets, err)
 		}
 	}
 
@@ -2809,13 +2841,13 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 	// container maybe exited
 	pids, err := general.GetCgroupPids(cnt.CgroupPath)
 	if err != nil {
-		klog.Errorf("failed to GetCgroupPids(%s), err %v", cnt.CgroupPath, err)
+		klog.Errorf("%s failed to GetCgroupPids(%s), err %v", IrqTuningLogPrefix, cnt.CgroupPath, err)
 		return false, nil
 	}
 
 	// container maybe exited
 	if len(pids) == 0 {
-		klog.Warningf("container with id: %s, cgrouppath: %s has no pid", cnt.ContainerID, cnt.CgroupPath)
+		klog.Warningf("%s container with id: %s, cgrouppath: %s has no pid", IrqTuningLogPrefix, cnt.ContainerID, cnt.CgroupPath)
 		return false, nil
 	}
 
@@ -2830,7 +2862,7 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 
 	// container maybe exited
 	if netnsInode == 0 {
-		klog.Warningf("failed to GetProcessNameSpaceInode for container with id: %s, cgrouppath: %s has ", cnt.ContainerID, cnt.CgroupPath)
+		klog.Warningf("%s failed to GetProcessNameSpaceInode for container with id: %s, cgrouppath: %s has ", IrqTuningLogPrefix, cnt.ContainerID, cnt.CgroupPath)
 		return false, nil
 	}
 
@@ -2846,7 +2878,7 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 
 	netnsList, err := machine.ListNetNS(ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
 	if err != nil {
-		klog.Errorf("failed to ListNetNS, err %v", err)
+		klog.Errorf("%s failed to ListNetNS, err %v", IrqTuningLogPrefix, err)
 		return false, nil
 	}
 
@@ -2870,7 +2902,7 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 
 	activeUplinkNics, err := machine.ListActiveUplinkNicsFromNetNS(containerNetNSInfo)
 	if err != nil {
-		klog.Errorf("failed to ListActiveUplinkNicsFromNetNS for netns %s, err %v", containerNetNSInfo.NSName, err)
+		klog.Errorf("%s failed to ListActiveUplinkNicsFromNetNS for netns %s, err %v", IrqTuningLogPrefix, containerNetNSInfo.NSName, err)
 		return false, nil
 	}
 
@@ -2880,7 +2912,7 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 	}
 
 	if len(activeUplinkNics) > 1 {
-		klog.Warningf("sriov container %s has %d nics, sriov container should has only 1 nic", cnt.ContainerID, len(activeUplinkNics))
+		klog.Warningf("%s sriov container %s has %d nics, sriov container should has only 1 nic", IrqTuningLogPrefix, cnt.ContainerID, len(activeUplinkNics))
 	}
 
 	var nics []*NicInfo
@@ -2888,7 +2920,7 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 	for _, nic := range activeUplinkNics {
 		nicInfo, err := GetNicInfo(nic)
 		if err != nil {
-			klog.Errorf("failed to GetNicInfo for nic %s, err %v", nic, err)
+			klog.Errorf("%s failed to GetNicInfo for nic %s, err %v", IrqTuningLogPrefix, nic, err)
 			continue
 		}
 		nics = append(nics, nicInfo)
@@ -2925,7 +2957,7 @@ func (ic *IrqTuningController) syncContainers() error {
 retry:
 	containers, err := ic.IrqStateAdapter.ListContainers()
 	if err != nil {
-		klog.Errorf("failed to ListContainers, err %v", err)
+		klog.Errorf("%s failed to ListContainers, err %v", IrqTuningLogPrefix, err)
 		if syncContainersRetryCount < 2 {
 			syncContainersRetryCount++
 			time.Sleep(time.Second)
@@ -2968,7 +3000,7 @@ retry:
 }
 
 func (ic *IrqTuningController) fallbackToBalanceFairPolicyByError(nic *NicIrqTuningManager, err error) {
-	klog.Infof("fallback to balance-fair policy for nic %s, by err %s", nic.NicInfo, err)
+	klog.Infof("%s fallback to balance-fair policy for nic %s, by err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 
 	nic.FallbackToBalanceFair = true
 
@@ -2976,7 +3008,7 @@ func (ic *IrqTuningController) fallbackToBalanceFairPolicyByError(nic *NicIrqTun
 	irqAffinityPolicy := nic.IrqAffinityPolicy
 
 	if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
-		klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+		klog.Errorf("%s failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 	}
 
 	if _, ok := ic.IrqAffinityChanges[nic.NicInfo.IfIndex]; ok {
@@ -2986,14 +3018,14 @@ func (ic *IrqTuningController) fallbackToBalanceFairPolicyByError(nic *NicIrqTun
 	if irqAffinityPolicy == IrqCoresExclusive {
 		totalExclusiveIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
 		if err != nil {
-			klog.Errorf("failed to getCurrentTotalExclusiveIrqCores, err %s", err)
+			klog.Errorf("%s failed to getCurrentTotalExclusiveIrqCores, err %s", IrqTuningLogPrefix, err)
 			return
 		}
 
 		irqCores := nic.NicInfo.getIrqCores()
 		totalExclusiveIrqCores = calculateIrqCoresDiff(totalExclusiveIrqCores, irqCores)
 		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(general.ConvertInt64SliceToIntSlice(totalExclusiveIrqCores)...)); err != nil {
-			klog.Errorf("failed to decrease irq cores, err %s", err)
+			klog.Errorf("%s failed to decrease irq cores, err %s", IrqTuningLogPrefix, err)
 		}
 	}
 }
@@ -3050,18 +3082,18 @@ func (ic *IrqTuningController) adaptIrqAffinityPolicy(oldIndicatorsStats *Indica
 
 		oldStats, ok := oldNicStats[nic.NicInfo.IfIndex]
 		if !ok {
-			klog.Errorf("impossible, failed to find nic %s in old nic stats", nic.NicInfo)
+			klog.Errorf("%s impossible, failed to find nic %s in old nic stats", IrqTuningLogPrefix, nic.NicInfo)
 			continue
 		}
 
 		stats, ok := ic.NicStats[nic.NicInfo.IfIndex]
 		if !ok {
-			klog.Errorf("impossible, failed to find nic %s in nic stats", nic.NicInfo)
+			klog.Errorf("%s impossible, failed to find nic %s in nic stats", IrqTuningLogPrefix, nic.NicInfo)
 			continue
 		}
 
 		if stats.TotalRxPackets < oldStats.TotalRxPackets {
-			klog.Errorf("nic %s current rx packets(%d) less than last rx packets(%d)", nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
+			klog.Errorf("%s nic %s current rx packets(%d) less than last rx packets(%d)", IrqTuningLogPrefix, nic.NicInfo, stats.TotalRxPackets, oldStats.TotalRxPackets)
 			continue
 		}
 
@@ -3185,7 +3217,7 @@ func (ic *IrqTuningController) calculateExclusiveIrqCores(nic *NicIrqTuningManag
 
 	exclusiveIrqCoresMax := ic.getNicExclusiveIrqCoresMax(nic)
 	if expectedIrqCoresCount > exclusiveIrqCoresMax {
-		klog.Warningf("nic %s expected exclusive irq cores count %d is greater-than max limit %d", nic.NicInfo, expectedIrqCoresCount, exclusiveIrqCoresMax)
+		klog.Warningf("%s nic %s expected exclusive irq cores count %d is greater-than max limit %d", IrqTuningLogPrefix, nic.NicInfo, expectedIrqCoresCount, exclusiveIrqCoresMax)
 		expectedIrqCoresCount = exclusiveIrqCoresMax
 	}
 
@@ -3343,8 +3375,8 @@ func (ic *IrqTuningController) allocExclusiveIrqCoresForNic_deprecated(nic *NicI
 		}
 
 		if socketIrqCoresCount < len(nic.NicInfo.SocketIrqCores[socket]) {
-			klog.Warningf("socket %d new calculated irq cores count %d less-than original irq cores count %d",
-				socket, socketIrqCoresCount, len(nic.NicInfo.SocketIrqCores[socket]))
+			klog.Warningf("%s socket %d new calculated irq cores count %d less-than original irq cores count %d",
+				IrqTuningLogPrefix, socket, socketIrqCoresCount, len(nic.NicInfo.SocketIrqCores[socket]))
 			continue
 		}
 
@@ -3372,8 +3404,8 @@ func (ic *IrqTuningController) allocExclusiveIrqCoresForNic_deprecated(nic *NicI
 			}
 
 			if numaIrqCoresCount < len(oriNumaIrqCores) {
-				klog.Warningf("numa %d new calculated irq cores count %d less-than original irq cores count %d",
-					numa, numaIrqCoresCount, len(oriNumaIrqCores))
+				klog.Warningf("%s numa %d new calculated irq cores count %d less-than original irq cores count %d",
+					IrqTuningLogPrefix, numa, numaIrqCoresCount, len(oriNumaIrqCores))
 				continue
 			}
 			numaIncIrqCoresCount := numaIrqCoresCount - len(oriNumaIrqCores)
@@ -3396,15 +3428,15 @@ func (ic *IrqTuningController) calculateNicExclusiveIrqCoresIncrease(nic *NicIrq
 	lastInc := nic.LastExclusiveIrqCoresInc
 
 	if lastInc != nil && time.Since(lastInc.TimeStamp).Seconds() < float64(incConf.SuccessiveIncInterval) {
-		klog.Infof("two successive exclusive irq cores increase interval %d less than configured interval threshold %d",
-			int(time.Since(lastInc.TimeStamp).Seconds()), incConf.SuccessiveIncInterval)
+		klog.Infof("%s two successive exclusive irq cores increase interval %d less than configured interval threshold %d",
+			IrqTuningLogPrefix, int(time.Since(lastInc.TimeStamp).Seconds()), incConf.SuccessiveIncInterval)
 		return nil, nil
 	}
 
 	exclusiveIrqCoresMax := ic.getNicExclusiveIrqCoresMax(nic)
 	if len(nic.NicInfo.getIrqCores()) >= exclusiveIrqCoresMax {
-		klog.Warningf("nic %s exclusive irq cores count %d has already reached max limit %d, cannot increase any more",
-			nic.NicInfo, len(nic.NicInfo.getIrqCores()), exclusiveIrqCoresMax)
+		klog.Warningf("%s nic %s exclusive irq cores count %d has already reached max limit %d, cannot increase any more",
+			IrqTuningLogPrefix, nic.NicInfo, len(nic.NicInfo.getIrqCores()), exclusiveIrqCoresMax)
 		return nil, nil
 	}
 
@@ -3418,7 +3450,7 @@ func (ic *IrqTuningController) calculateNicExclusiveIrqCoresIncrease(nic *NicIrq
 		// fallback to balance-fair policy
 		ic.IrqAffinityChanges[nic.NicInfo.IfIndex] = buildNicIrqAffinityChange(nic, IrqBalanceFair, nil)
 		if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
-			klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+			klog.Errorf("%s failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 		}
 
 		return nil, nil
@@ -3430,8 +3462,8 @@ func (ic *IrqTuningController) calculateNicExclusiveIrqCoresIncrease(nic *NicIrq
 
 	oriIrqCoresCount := len(nic.NicInfo.getIrqCores())
 	if expectedIrqCoresCount <= oriIrqCoresCount {
-		klog.Warningf("needless to increase irq cores, new calculated irq cores count is %d, original irq cores count %d",
-			expectedIrqCoresCount, oriIrqCoresCount)
+		klog.Warningf("%s nic %s needless to increase irq cores, new calculated irq cores count is %d, original irq cores count %d",
+			IrqTuningLogPrefix, nic.NicInfo, expectedIrqCoresCount, oriIrqCoresCount)
 		return nil, nil
 	}
 
@@ -3579,7 +3611,7 @@ func (ic *IrqTuningController) selectIrqsToBalance(nic *NicIrqTuningManager, src
 	for _, queuePPS := range srcCoreQueuesPPSInDecOrder {
 		irq, ok := nic.NicInfo.Queue2Irq[queuePPS.QueueID]
 		if !ok {
-			klog.Warningf("failed to find queue %d in nic %s Queue2Irq", queuePPS.QueueID, nic.NicInfo)
+			klog.Warningf("%s failed to find queue %d in nic %s Queue2Irq", IrqTuningLogPrefix, queuePPS.QueueID, nic.NicInfo)
 			continue
 		}
 
@@ -3640,7 +3672,7 @@ func (ic *IrqTuningController) balanceIrqs(nic *NicIrqTuningManager, srcIrqCore 
 
 	irqs, err := ic.selectIrqsToBalance(nic, srcIrqCore, destIrqCore, irqsTunedMax, oldIndicatorsStats)
 	if err != nil {
-		klog.Warningf("failed to selectIrqsToBalance, err %s", err)
+		klog.Warningf("%s nic %s failed to selectIrqsToBalance, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 		return nil, err
 	}
 
@@ -3651,19 +3683,21 @@ func (ic *IrqTuningController) balanceIrqs(nic *NicIrqTuningManager, srcIrqCore 
 	irqsAffinityTuning := make(map[int]*IrqAffinityTuning)
 	for _, irq := range irqs {
 		if err := machine.SetIrqAffinity(irq, destIrqCore.CpuID); err != nil {
-			klog.Errorf("failed to SetIrqAffinity(%d, %d), err %v", irq, destIrqCore.CpuID, err)
+			klog.Errorf("%s nic %s failed to SetIrqAffinity(%d, %d), err %v", IrqTuningLogPrefix, nic.NicInfo, irq, destIrqCore.CpuID, err)
 			continue
 		}
+		klog.Infof("%s nic %s set irq %d affinity cpu %d", IrqTuningLogPrefix, nic.NicInfo, irq, destIrqCore.CpuID)
+
 		nic.NicInfo.Irq2Core[irq] = destIrqCore.CpuID
 		irqsAffinityTuning[irq] = &IrqAffinityTuning{
 			SourceCore: srcIrqCore.CpuID,
 			DestCore:   destIrqCore.CpuID,
 		}
-		klog.Infof("[irq load balance] tuning irq %d affinity from cpu %d to cpu %d", irq, srcIrqCore.CpuID, destIrqCore.CpuID)
+		klog.Infof("%s nic %s tuning irq %d affinity from cpu %d to cpu %d", IrqTuningLogPrefix, nic.NicInfo, irq, srcIrqCore.CpuID, destIrqCore.CpuID)
 	}
 
 	if err := nic.NicInfo.sync(); err != nil {
-		klog.Errorf("failed to sync for nic %s, err %s", nic.NicInfo, err)
+		klog.Errorf("%s failed to sync for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 	}
 
 	return irqsAffinityTuning, nil
@@ -3735,7 +3769,7 @@ func (ic *IrqTuningController) balanceIrqLoadBasedOnIrqUtil(nic *NicIrqTuningMan
 				// need to reset IrqLoadBalancePingPongCount ???
 				break // remainer needless to balance
 			} else {
-				klog.Errorf("failed to balanceIrqs for nic %s, err %s", nic.NicInfo, err)
+				klog.Errorf("%s failed to balanceIrqs for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 				continue
 			}
 		}
@@ -3829,22 +3863,22 @@ func (ic *IrqTuningController) calculateNicExclusiveIrqCoresDecrease(nic *NicIrq
 
 	lastDec := nic.LastExclusiveIrqCoresDec
 	if lastDec != nil && time.Since(lastDec.TimeStamp).Seconds() < float64(decConf.SuccessiveDecInterval) {
-		klog.Infof("two successive exclusive irq cores decrease interval %d less than configured interval threshold %d",
-			int(time.Since(lastDec.TimeStamp).Seconds()), decConf.SuccessiveDecInterval)
+		klog.Infof("%s nic %s two successive exclusive irq cores decrease interval %d less than configured interval threshold %d",
+			IrqTuningLogPrefix, nic.NicInfo, int(time.Since(lastDec.TimeStamp).Seconds()), decConf.SuccessiveDecInterval)
 		return nil, nil
 	}
 
 	lastInc := nic.LastExclusiveIrqCoresInc
 	if lastInc != nil && time.Since(lastInc.TimeStamp).Seconds() < float64(decConf.PingPongAdjustInterval) {
-		klog.Infof("since last exclusive irq cores increase interval %d less than configured pingpong interval threshold %d",
-			int(time.Since(lastInc.TimeStamp).Seconds()), decConf.PingPongAdjustInterval)
+		klog.Infof("%s nic %s since last exclusive irq cores increase interval %d less than configured pingpong interval threshold %d",
+			IrqTuningLogPrefix, nic.NicInfo, int(time.Since(lastInc.TimeStamp).Seconds()), decConf.PingPongAdjustInterval)
 		return nil, nil
 	}
 
 	lastBalance := nic.LastIrqLoadBalance
 	if lastBalance != nil && time.Since(lastBalance.TimeStamp).Seconds() < float64(decConf.SinceLastBalanceInterval) {
-		klog.Infof("since last irq balance interval %d less than configured SinceLastBalanceInterval threshold %d",
-			int(time.Since(lastBalance.TimeStamp).Seconds()), decConf.SinceLastBalanceInterval)
+		klog.Infof("%s nic %s since last irq balance interval %d less than configured SinceLastBalanceInterval threshold %d",
+			IrqTuningLogPrefix, nic.NicInfo, int(time.Since(lastBalance.TimeStamp).Seconds()), decConf.SinceLastBalanceInterval)
 		return nil, nil
 	}
 
@@ -3860,8 +3894,8 @@ func (ic *IrqTuningController) calculateNicExclusiveIrqCoresDecrease(nic *NicIrq
 
 	oriIrqCoresCount := len(nic.NicInfo.getIrqCores())
 	if expectedIrqCoresCount >= oriIrqCoresCount {
-		klog.Warningf("needless to decrease irq cores, new calculated irq cores count is %d, original irq cores count %d",
-			expectedIrqCoresCount, oriIrqCoresCount)
+		klog.Warningf("%s nic %s needless to decrease irq cores, new calculated irq cores count is %d, original irq cores count %d",
+			IrqTuningLogPrefix, nic.NicInfo, expectedIrqCoresCount, oriIrqCoresCount)
 		return nil, nil
 	}
 
@@ -4017,7 +4051,7 @@ func (ic *IrqTuningController) TuneNicIrqAffinityWithBalanceFairPolicy(nic *NicI
 	}
 
 	if err := ic.balanceNicIrqsFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-		klog.Errorf("failed to balanceNicIrqsFairly for nic %s, err %s", nic.NicInfo, err)
+		klog.Errorf("%s failed to balanceNicIrqsFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 	}
 
 	nic.IrqAffinityPolicy = IrqBalanceFair
@@ -4084,7 +4118,7 @@ func (ic *IrqTuningController) balanceIrqsToOtherExclusiveIrqCores(nic *NicIrqTu
 	for _, queuePPS := range srcCoresQueuesPPSInDecOrder {
 		irq, ok := nic.NicInfo.Queue2Irq[queuePPS.QueueID]
 		if !ok {
-			klog.Warningf("failed to find queue %d in nic %s Queue2Irq", queuePPS.QueueID, nic.NicInfo)
+			klog.Warningf("%s failed to find queue %d in nic %s Queue2Irq", IrqTuningLogPrefix, queuePPS.QueueID, nic.NicInfo)
 			continue
 		}
 
@@ -4098,19 +4132,20 @@ func (ic *IrqTuningController) balanceIrqsToOtherExclusiveIrqCores(nic *NicIrqTu
 		}
 
 		if queuePPS.PPS > maxPSSBuffer*13/10 {
-			klog.Warningf("irq %d with pps %d will be affinitied to core %d with pps buffer %d multiply 1.3", irq, queuePPS.PPS, maxPPSBufferCore, maxPSSBuffer)
+			klog.Warningf("%s nic %s irq %d with pps %d will be affinitied to core %d with pps buffer %d multiply 1.3", IrqTuningLogPrefix, nic.NicInfo, irq, queuePPS.PPS, maxPPSBufferCore, maxPSSBuffer)
 		}
 
 		if err := machine.SetIrqAffinity(irq, maxPPSBufferCore); err != nil {
-			klog.Errorf("failed to SetIrqAffinity(%d, %d), err %v", irq, maxPPSBufferCore, err)
+			klog.Errorf("%s nic %s failed to SetIrqAffinity(%d, %d), err %v", IrqTuningLogPrefix, nic.NicInfo, irq, maxPPSBufferCore, err)
 			continue
 		}
+		klog.Infof("%s nic %s set irq %d affinity cpu %d", IrqTuningLogPrefix, nic.NicInfo, irq, maxPPSBufferCore)
 
 		cpusPPSBuffer[maxPPSBufferCore] = maxPSSBuffer - queuePPS.PPS
 	}
 
 	if err := nic.NicInfo.sync(); err != nil {
-		klog.Errorf("failed to sync for nic %s, err %s", nic.NicInfo, err)
+		klog.Errorf("%s failed to sync for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 	}
 
 	return nil
@@ -4125,7 +4160,7 @@ func (ic *IrqTuningController) balanceNicsIrqsAwayFromDecreasedCores(oldIndicato
 
 		if irqAffinityChange.OldIrqAffinityPolicy == IrqCoresExclusive && irqAffinityChange.NewIrqAffinityPolicy != IrqCoresExclusive {
 			if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
-				klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+				klog.Errorf("%s failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 				ic.emitErrMetric(irqtuner.TuneNicIrqAffinityWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 				continue
 			}
@@ -4141,7 +4176,7 @@ func (ic *IrqTuningController) balanceNicsIrqsAwayFromDecreasedCores(oldIndicato
 			// if has decreased irq cores and no increased irq cores, directly balance irqs in decreased irq cores to other exclusive irq cores
 			if len(incIrqCores) == 0 {
 				if err := ic.balanceIrqsToOtherExclusiveIrqCores(nic, decCoresAffinitiedIrqs, irqAffinityChange.NewIrqCores, oldIndicatorsStats); err != nil {
-					klog.Errorf("failed balanceIrqsToOtherExclusiveIrqCores for nic %s, err %s", nic.NicInfo, err)
+					klog.Errorf("%s failed balanceIrqsToOtherExclusiveIrqCores for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 					ic.emitErrMetric(irqtuner.BalanceIrqsToOtherExclusiveIrqCoresFailed, irqtuner.IrqTuningError)
 				}
 			} else {
@@ -4150,12 +4185,12 @@ func (ic *IrqTuningController) balanceNicsIrqsAwayFromDecreasedCores(oldIndicato
 
 				qualifiedCoresMap := ic.getSocketsQualifiedCoresMapForBalanceFairPolicy(nic.AssignedSockets)
 				if len(qualifiedCoresMap) == 0 {
-					klog.Errorf("failed to find qualified cores in sockets %+v for nic %s", nic.AssignedSockets, nic.NicInfo)
+					klog.Errorf("%s failed to find qualified cores in sockets %+v for nic %s", IrqTuningLogPrefix, nic.AssignedSockets, nic.NicInfo)
 					continue
 				}
 
 				if err := ic.tuneNicIrqsAffinityQualifiedCores(nic.NicInfo, decCoresAffinitiedIrqs, qualifiedCoresMap); err != nil {
-					klog.Errorf("failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", nic.NicInfo, err)
+					klog.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 					ic.emitErrMetric(irqtuner.TuneNicIrqsAffinityQualifiedCoresFailed, irqtuner.IrqTuningError)
 				}
 			}
@@ -4169,7 +4204,7 @@ retry:
 	exclusiveIrqCPUSet, err := ic.IrqStateAdapter.GetExclusiveIRQCPUSet()
 	if err != nil {
 		if retryCount < 3 {
-			klog.Errorf("failed to GetExclusiveIRQCPUSet, err %s", err)
+			klog.Errorf("%s failed to GetExclusiveIRQCPUSet, err %s", IrqTuningLogPrefix, err)
 			time.Sleep(time.Millisecond)
 			goto retry
 		}
@@ -4223,7 +4258,7 @@ func (ic *IrqTuningController) waitContainersCpusetExcludeIrqCores(irqCores []in
 	for i := 0; i < 600; i++ {
 		containers, err := ic.IrqStateAdapter.ListContainers()
 		if err != nil {
-			klog.Errorf("failed to ListContainers, err %s", err)
+			klog.Errorf("%s failed to ListContainers, err %s", IrqTuningLogPrefix, err)
 			time.Sleep(time.Second)
 			continue
 		}
@@ -4282,7 +4317,7 @@ func (ic *IrqTuningController) balanceNicIrqCoresLoad(nic *NicIrqTuningManager, 
 		}
 
 		if _, err := ic.balanceIrqs(nic, srcCPUUtil, destCPUUtil, 10, len(srcCoreIrqs)-1, oldIndicatorsStats); err != nil {
-			klog.Errorf("failed to balanceIrqs for nic %s from cpu %d to cpu %d, err", nic.NicInfo, srcCPUUtil.CpuID, destCPUUtil.CpuID)
+			klog.Errorf("%s failed to balanceIrqs for nic %s from cpu %d to cpu %d, err", IrqTuningLogPrefix, nic.NicInfo, srcCPUUtil.CpuID, destCPUUtil.CpuID)
 		}
 	}
 
@@ -4322,14 +4357,14 @@ func (ic *IrqTuningController) balanceNicIrqsToNewIrqCores(nic *NicIrqTuningMana
 		nicCurrentIrqCores := calculateOverlappedIrqCores(totalIrqCores, newIrqCores)
 
 		if err := ic.balanceNicIrqCoresLoad(nic, nicCurrentIrqCores, oldIndicatorsStats); err != nil {
-			klog.Errorf("failed to balanceNicIrqCoresLoad for nic %s, err %s", nic.NicInfo, err)
+			klog.Errorf("%s failed to balanceNicIrqCoresLoad for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 			continue
 		}
 
 		// update indicators stats for latest 10s seconds
 		oldStats, err := ic.updateLatestIndicatorsStats(10)
 		if err != nil {
-			klog.Errorf("failed to updateIndicatorsStats, err %s", err)
+			klog.Errorf("%s failed to updateIndicatorsStats, err %s", IrqTuningLogPrefix, err)
 		} else {
 			oldIndicatorsStats = oldStats
 		}
@@ -4337,7 +4372,7 @@ func (ic *IrqTuningController) balanceNicIrqsToNewIrqCores(nic *NicIrqTuningMana
 
 	// final overall balance in all irq cores
 	if err := ic.balanceNicIrqCoresLoad(nic, newIrqCores, oldIndicatorsStats); err != nil {
-		klog.Errorf("failed to balanceNicIrqCoresLoad for nic %s, err %s", nic.NicInfo, err)
+		klog.Errorf("%s failed to balanceNicIrqCoresLoad for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 	}
 
 	// if this nic has decreased exclusive irq cores before, decreased cores affinitied irqs has been tune to other non-exclusive cores with
@@ -4360,7 +4395,7 @@ func (ic *IrqTuningController) balanceNicIrqsToNewIrqCores(nic *NicIrqTuningMana
 		// update indicators stats for latest 10s seconds
 		oldStats, err := ic.updateLatestIndicatorsStats(10)
 		if err != nil {
-			klog.Errorf("failed to updateIndicatorsStats, err %s", err)
+			klog.Errorf("%s failed to updateIndicatorsStats, err %s", IrqTuningLogPrefix, err)
 		} else {
 			oldIndicatorsStats = oldStats
 		}
@@ -4381,7 +4416,7 @@ func (ic *IrqTuningController) tuneNicIrqAffinityPolicyToIrqCoresExclusive(nic *
 	}
 
 	if len(steps) == 0 {
-		klog.Errorf("nic %s new irq cores length is zero", nic.NicInfo)
+		klog.Errorf("%s nic %s new irq cores length is zero", IrqTuningLogPrefix, nic.NicInfo)
 		return nil
 	}
 
@@ -4432,7 +4467,7 @@ func (ic *IrqTuningController) tuneNicIrqAffinityPolicyToIrqCoresExclusive(nic *
 			for _, queuePPS := range rxQueuesPPS {
 				irq, ok := nic.NicInfo.Queue2Irq[queuePPS.QueueID]
 				if !ok {
-					klog.Warningf("failed to find queue %d in nic %s Queue2Irq", queuePPS.QueueID, nic.NicInfo)
+					klog.Warningf("%s nic %s failed to find queue %d in nic %s Queue2Irq", IrqTuningLogPrefix, nic.NicInfo, queuePPS.QueueID, nic.NicInfo)
 					continue
 				}
 
@@ -4449,12 +4484,12 @@ func (ic *IrqTuningController) tuneNicIrqAffinityPolicyToIrqCoresExclusive(nic *
 		}
 
 		if len(stepBalanceIrqs) == 0 {
-			klog.Warningf("stepBalanceIrqs is empty")
+			klog.Warningf("%s nic %s stepBalanceIrqs is empty", IrqTuningLogPrefix, nic.NicInfo)
 			continue
 		}
 
 		if err := ic.balanceIrqsToOtherExclusiveIrqCores(nic, stepBalanceIrqs, stepIncIrqCores, oldIndicatorsStats); err != nil {
-			klog.Errorf("failed to balanceIrqsToOtherExclusiveIrqCores for nic %s, err %s", nic.NicInfo, err)
+			klog.Errorf("%s failed to balanceIrqsToOtherExclusiveIrqCores for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 			continue
 		}
 	}
@@ -4463,13 +4498,13 @@ func (ic *IrqTuningController) tuneNicIrqAffinityPolicyToIrqCoresExclusive(nic *
 	// update indicators stats for latest 10s seconds
 	oldStats, err := ic.updateLatestIndicatorsStats(10)
 	if err != nil {
-		klog.Errorf("failed to updateIndicatorsStats, err %s", err)
+		klog.Errorf("%s failed to updateIndicatorsStats, err %s", IrqTuningLogPrefix, err)
 	} else {
 		oldIndicatorsStats = oldStats
 	}
 
 	if err := ic.balanceNicIrqCoresLoad(nic, newIrqCores, oldIndicatorsStats); err != nil {
-		klog.Errorf("failed to balanceNicIrqCoresLoad for nic %s, err %s", nic.NicInfo, err)
+		klog.Errorf("%s failed to balanceNicIrqCoresLoad for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 	}
 
 	nic.IrqAffinityPolicy = IrqCoresExclusive
@@ -4504,7 +4539,7 @@ func (ic *IrqTuningController) balanceNicsIrqsToNewIrqCores(oldIndicatorsStats *
 	}
 
 	if !irqCoresEqual(oldIrqCores, totalExclusiveIrqCores) {
-		klog.Errorf("old irq cores %+v not equal to irq cores %+v get by GetExclusiveIRQCPUSet", oldIrqCores, totalExclusiveIrqCores)
+		klog.Errorf("%s old irq cores %+v not equal to irq cores %+v get by GetExclusiveIRQCPUSet", IrqTuningLogPrefix, oldIrqCores, totalExclusiveIrqCores)
 	}
 
 	if irqCoresEqual(newIrqCores, oldIrqCores) && irqCoresEqual(oldIrqCores, totalExclusiveIrqCores) {
@@ -4516,7 +4551,7 @@ func (ic *IrqTuningController) balanceNicsIrqsToNewIrqCores(oldIndicatorsStats *
 	if len(needToDecreasedIrqCores) > 0 {
 		totalExclusiveIrqCores = calculateIrqCoresDiff(totalExclusiveIrqCores, needToDecreasedIrqCores)
 		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet(general.ConvertInt64SliceToIntSlice(totalExclusiveIrqCores)...)); err != nil {
-			klog.Errorf("failed to decrease irq cores, err %s", err)
+			klog.Errorf("%s failed to decrease irq cores, err %s", IrqTuningLogPrefix, err)
 			ic.emitErrMetric(irqtuner.SetExclusiveIRQCPUSetFailed, irqtuner.IrqTuningFatal)
 		}
 	}
@@ -4573,7 +4608,7 @@ func (ic *IrqTuningController) setNicQueuesRPS(nic *NicInfo, queues []int, destC
 	for _, queue := range queues {
 		oldQueueRPSConf, ok := oldRPSConf[queue]
 		if !ok {
-			klog.Warningf("failed to find queue %d in nic %s rps conf", queue, nic)
+			klog.Warningf("%s failed to find queue %d in nic %s rps conf", IrqTuningLogPrefix, queue, nic)
 		}
 
 		if ok {
@@ -4583,9 +4618,10 @@ func (ic *IrqTuningController) setNicQueuesRPS(nic *NicInfo, queues []int, destC
 		}
 
 		if err := machine.SetNicRxQueueRPS(nic.NicBasicInfo, queue, destCores); err != nil {
-			klog.Errorf("failed to SetNicRxQueueRPS for nic %s queue %d, err %v", nic, queue, err)
+			klog.Errorf("%s failed to SetNicRxQueueRPS for nic %s queue %d, err %v", IrqTuningLogPrefix, nic, queue, err)
 			continue
 		}
+		klog.Infof("%s nic %s set queue %d rps_cpus %s", IrqTuningLogPrefix, nic, queue, newQueueRPSConf)
 	}
 
 	return nil
@@ -4607,7 +4643,7 @@ func (ic *IrqTuningController) setRPSInNumaForNic(nic *NicIrqTuningManager, assi
 
 			qualifiedCoresMap := ic.getNumaQualifiedCoresMapForBalanceFairPolicy(numa)
 			if len(qualifiedCoresMap) == 0 {
-				klog.Errorf("found zero qualified core in numa %d for nic %s rps balance", numa, nic.NicInfo)
+				klog.Errorf("%s found zero qualified core in numa %d for nic %s rps balance", IrqTuningLogPrefix, numa, nic.NicInfo)
 				continue
 			}
 
@@ -4627,7 +4663,7 @@ func (ic *IrqTuningController) setRPSInNumaForNic(nic *NicIrqTuningManager, assi
 			}
 
 			if err := ic.setNicQueuesRPS(nic.NicInfo, numaAffinitiedQueues, destCores, oldRPSConf); err != nil {
-				klog.Errorf("failed to setNicQueuesRPS, err %s", err)
+				klog.Errorf("%s failed to setNicQueuesRPS, err %s", IrqTuningLogPrefix, err)
 				continue
 			}
 		}
@@ -4653,7 +4689,7 @@ func (ic *IrqTuningController) setRPSInCCDForNic(nic *NicIrqTuningManager, assin
 
 				qualifiedCoresMap := ic.getCCDQualifiedCoresMapForBalanceFairPolicy(ccd)
 				if len(qualifiedCoresMap) == 0 {
-					klog.Errorf("found zero qualified core in numa %d ccd for nic %s rps balance", numaID, nic.NicInfo)
+					klog.Errorf("%s found zero qualified core in numa %d ccd for nic %s rps balance", IrqTuningLogPrefix, numaID, nic.NicInfo)
 					continue
 				}
 
@@ -4673,7 +4709,7 @@ func (ic *IrqTuningController) setRPSInCCDForNic(nic *NicIrqTuningManager, assin
 				}
 
 				if err := ic.setNicQueuesRPS(nic.NicInfo, ccdAffinitiedQueues, destCores, oldNicRPSConf); err != nil {
-					klog.Errorf("failed to setNicQueuesRPS, err %s", err)
+					klog.Errorf("%s nic %s failed to setNicQueuesRPS, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 					continue
 				}
 			}
@@ -4700,7 +4736,7 @@ func (ic *IrqTuningController) setRPSForNics() error {
 
 	for _, nic := range ic.Nics {
 		if err := ic.setRPSForNic(nic); err != nil {
-			klog.Errorf("failed to setRPSForNic for nic %s, err %s", nic.NicInfo, err)
+			klog.Errorf("%s failed to setRPSForNic for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 			ic.emitErrMetric(irqtuner.SetRPSForNicFailed, irqtuner.IrqTuningError)
 		}
 	}
@@ -4725,8 +4761,9 @@ func (ic *IrqTuningController) clearRPSForNic(nic *NicIrqTuningManager) error {
 		}
 
 		if err := machine.ClearNicRxQueueRPS(nic.NicInfo.NicBasicInfo, queue); err != nil {
-			klog.Errorf("failed to ClearNicRxQueueRPS for nic %s, queue: %d, err %s", nic.NicInfo, queue, err)
+			klog.Errorf("%s failed to ClearNicRxQueueRPS for nic %s, queue: %d, err %s", IrqTuningLogPrefix, nic.NicInfo, queue, err)
 		}
+		klog.Infof("%s nic %s clear queue %d rps", IrqTuningLogPrefix, nic.NicInfo, queue)
 	}
 
 	return nil
@@ -4735,7 +4772,7 @@ func (ic *IrqTuningController) clearRPSForNic(nic *NicIrqTuningManager) error {
 func (ic *IrqTuningController) clearRPSForNics() error {
 	for _, nic := range ic.Nics {
 		if err := ic.clearRPSForNic(nic); err != nil {
-			klog.Errorf("failed to clearRPSForNic for nic %s, err %s", nic.NicInfo, err)
+			klog.Errorf("%s failed to clearRPSForNic for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 			ic.emitErrMetric(irqtuner.ClearRPSForNicFailed, irqtuner.IrqTuningError)
 		}
 	}
@@ -4746,7 +4783,7 @@ func (ic *IrqTuningController) clearRPSForNics() error {
 func (ic *IrqTuningController) nicRPSCleared(nic *NicInfo) bool {
 	rpsConf, err := machine.GetNicRxQueuesRpsConf(nic.NicBasicInfo)
 	if err != nil {
-		klog.Errorf("failed to GetNicRxQueuesRpsConf for nic %s, err %s", nic, err)
+		klog.Errorf("%s failed to GetNicRxQueuesRpsConf for nic %s, err %s", IrqTuningLogPrefix, nic, err)
 		return false
 	}
 
@@ -4754,7 +4791,7 @@ func (ic *IrqTuningController) nicRPSCleared(nic *NicInfo) bool {
 	for _, queue := range queues {
 		queueRPSConf, ok := rpsConf[queue]
 		if !ok {
-			klog.Warningf("failed to find queue %d in nic %s rpc conf", queue, nic)
+			klog.Warningf("%s failed to find queue %d in nic %s rpc conf", IrqTuningLogPrefix, queue, nic)
 			return false
 		}
 
@@ -4781,7 +4818,7 @@ func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 	for _, pid := range ic.Ksoftirqds {
 		nice, err := general.GetProcessNice(pid)
 		if err != nil {
-			klog.Errorf("failed to GetProcessNice, err %s", err)
+			klog.Errorf("%s failed to GetProcessNice, err %s", IrqTuningLogPrefix, err)
 			continue
 		}
 		ksoftirqdsNice[pid] = nice
@@ -4795,7 +4832,7 @@ func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 			}
 
 			if err := general.SetProcessNice(pid, 0); err != nil {
-				klog.Errorf("failed to SetProcessNice(%d, %d), err %s", pid, ic.conf.IrqCoresKsoftirqdNice, err)
+				klog.Errorf("%s failed to SetProcessNice(%d, %d), err %s", IrqTuningLogPrefix, pid, ic.conf.IrqCoresKsoftirqdNice, err)
 			}
 		}
 
@@ -4828,13 +4865,13 @@ func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 		if isExclusiveIrqCore {
 			if nice != ic.conf.IrqCoresKsoftirqdNice {
 				if err := general.SetProcessNice(pid, ic.conf.IrqCoresKsoftirqdNice); err != nil {
-					klog.Errorf("failed to SetProcessNice(%d, %d), err %s", pid, ic.conf.IrqCoresKsoftirqdNice)
+					klog.Errorf("%s failed to SetProcessNice(%d, %d), err %s", IrqTuningLogPrefix, pid, ic.conf.IrqCoresKsoftirqdNice)
 				}
 			}
 		} else {
 			if nice != 0 {
 				if err := general.SetProcessNice(pid, 0); err != nil {
-					klog.Errorf("failed to SetProcessNice(%d, %d), err %s", pid, ic.conf.IrqCoresKsoftirqdNice)
+					klog.Errorf("%s failed to SetProcessNice(%d, %d), err %s", IrqTuningLogPrefix, pid, ic.conf.IrqCoresKsoftirqdNice)
 				}
 			}
 		}
@@ -4844,7 +4881,7 @@ func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 }
 
 func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
-	klog.Infof("periodic irq tuning for periodicTuningIrqBalanceFair")
+	klog.Infof("%s periodicTuningIrqBalanceFair", IrqTuningLogPrefix)
 
 	if ic.IndicatorsStats != nil {
 		ic.IndicatorsStats = nil
@@ -4852,7 +4889,7 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 
 	oldStats, err := ic.updateIndicatorsStats()
 	if err != nil {
-		klog.Errorf("failed to updateIndicatorsStats, err %v", err)
+		klog.Errorf("%s failed to updateIndicatorsStats, err %v", IrqTuningLogPrefix, err)
 		ic.emitErrMetric(irqtuner.UpdateIndicatorsStatsFailed, irqtuner.IrqTuningFatal)
 		return
 	}
@@ -4860,7 +4897,7 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 	ic.classifyNicsByThroughput(oldStats)
 
 	if err := ic.syncContainers(); err != nil {
-		klog.Errorf("failed to syncContainers, err %s", err)
+		klog.Errorf("%s failed to syncContainers, err %s", IrqTuningLogPrefix, err)
 		ic.emitErrMetric(irqtuner.SyncContainersFailed, irqtuner.IrqTuningError)
 	}
 
@@ -4872,19 +4909,19 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 	}
 
 	if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
-		klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
+		klog.Errorf("%s failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", IrqTuningLogPrefix, err)
 		ic.emitErrMetric(irqtuner.TuneIrqAffinityForAllNicsWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 	}
 
 	totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
 	if err != nil || len(totalIrqCores) > 0 {
 		if err != nil {
-			klog.Errorf("failed to getCurrentTotalExclusiveIrqCores, err %s", err)
+			klog.Errorf("%s failed to getCurrentTotalExclusiveIrqCores, err %s", IrqTuningLogPrefix, err)
 			ic.emitErrMetric(irqtuner.GetCurrentTotalExclusiveIrqCoresFailed, irqtuner.IrqTuningFatal)
 		}
 
 		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet()); err != nil {
-			klog.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
+			klog.Errorf("%s failed to SetExclusiveIRQCPUSet, err %s", IrqTuningLogPrefix, err)
 			ic.emitErrMetric(irqtuner.SetExclusiveIRQCPUSetFailed, irqtuner.IrqTuningFatal)
 		}
 	}
@@ -4906,26 +4943,26 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 	// rps reconcile
 	if enableRPS {
 		if err := ic.setRPSForNics(); err != nil {
-			klog.Errorf("failed to setRPSForNics, err %s", err)
+			klog.Errorf("%s failed to setRPSForNics, err %s", IrqTuningLogPrefix, err)
 		}
 
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningRPSEnabled, 1, metrics.MetricTypeNameRaw)
 	} else {
 		if err := ic.clearRPSForNics(); err != nil {
-			klog.Errorf("failed to clearRPSForNics, err %s", err)
+			klog.Errorf("%s failed to clearRPSForNics, err %s", IrqTuningLogPrefix, err)
 		}
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningRPSEnabled, 0, metrics.MetricTypeNameRaw)
 	}
 
 	// restore ksoftirqd default nice
 	if err := ic.adjustKsoftirqdsNice(); err != nil {
-		klog.Errorf("failed to adjustKsoftirqdsNice, err %s", err)
+		klog.Errorf("%s failed to adjustKsoftirqdsNice, err %s", IrqTuningLogPrefix, err)
 		ic.emitErrMetric(irqtuner.AdjustKsoftirqdsNiceFailed, irqtuner.IrqTuningError)
 	}
 }
 
 func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
-	klog.Infof("periodic irq tuning for periodicTuningIrqCoresExclusive")
+	klog.Infof("%s periodicTuningIrqCoresExclusive", IrqTuningLogPrefix)
 
 	defer ic.emitExclusiveIrqCores()
 
@@ -4936,7 +4973,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 
 	if !ic.nicsRPSCleared() {
 		if err := ic.clearRPSForNics(); err != nil {
-			klog.Errorf("failed to makeSureNicsRPSCleared, err %s", err)
+			klog.Errorf("%s failed to makeSureNicsRPSCleared, err %s", IrqTuningLogPrefix, err)
 			return
 		}
 
@@ -4960,7 +4997,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	///////////////////////////////////////////
 	oldStats, err := ic.updateIndicatorsStats()
 	if err != nil {
-		klog.Errorf("failed to updateIndicatorsStats, err %v", err)
+		klog.Errorf("%s failed to updateIndicatorsStats, err %v", IrqTuningLogPrefix, err)
 		ic.emitErrMetric(irqtuner.UpdateIndicatorsStatsFailed, irqtuner.IrqTuningFatal)
 		return
 	}
@@ -4982,7 +5019,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 
 	// after collect stats then syncContainers
 	if err := ic.syncContainers(); err != nil {
-		klog.Errorf("failed to syncContainers, err %v", err)
+		klog.Errorf("%s failed to syncContainers, err %v", IrqTuningLogPrefix, err)
 		ic.emitErrMetric(irqtuner.SyncContainersFailed, irqtuner.IrqTuningError)
 		return
 	}
@@ -5034,7 +5071,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	// calculation, because original irq cores of nics with balance-fair policy may overlapped with other nics's new exclusive irq cores.
 
 	if err := ic.TuneIrqAffinityForAllNicsWithBalanceFairPolicy(); err != nil {
-		klog.Errorf("failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", err)
+		klog.Errorf("%s failed to TuneIrqAffinityForAllNicsWithBalanceFairPolicy, err %v", IrqTuningLogPrefix, err)
 		ic.emitErrMetric(irqtuner.TuneIrqAffinityForAllNicsWithBalanceFairPolicyFailed, irqtuner.IrqTuningError)
 	}
 
@@ -5057,7 +5094,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	if err := ic.balanceNicsIrqsToNewIrqCores(oldStats); err != nil {
-		klog.Errorf("failed to requestExclusiveIrqCores, err %s", err)
+		klog.Errorf("%s failed to requestExclusiveIrqCores, err %s", IrqTuningLogPrefix, err)
 		return
 	}
 
@@ -5065,7 +5102,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	// [10] set or restore ksoftirqd's nice based on new irqcores, only renice exclusive irq cores's ksoftirqd according to config.
 	/////////////////////////////////////////////////////////////
 	if err := ic.adjustKsoftirqdsNice(); err != nil {
-		klog.Errorf("failed to adjustKsoftirqdsNice, err %s", err)
+		klog.Errorf("%s failed to adjustKsoftirqdsNice, err %s", IrqTuningLogPrefix, err)
 		ic.emitErrMetric(irqtuner.AdjustKsoftirqdsNiceFailed, irqtuner.IrqTuningError)
 	}
 
@@ -5081,7 +5118,7 @@ func (ic *IrqTuningController) disableIrqTuning() {
 	for _, nic := range ic.Nics {
 		if nic.IrqAffinityPolicy != IrqBalanceFair {
 			if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
-				klog.Errorf("failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", nic.NicInfo, err)
+				klog.Errorf("%s failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 				continue
 			}
 		}
@@ -5090,7 +5127,7 @@ func (ic *IrqTuningController) disableIrqTuning() {
 	totalIrqCores, err := ic.getCurrentTotalExclusiveIrqCores()
 	if err != nil || len(totalIrqCores) > 0 {
 		if err := ic.IrqStateAdapter.SetExclusiveIRQCPUSet(machine.NewCPUSet()); err != nil {
-			klog.Errorf("failed to SetExclusiveIRQCPUSet, err %s", err)
+			klog.Errorf("%s failed to SetExclusiveIRQCPUSet, err %s", IrqTuningLogPrefix, err)
 		}
 	}
 }
@@ -5112,7 +5149,7 @@ func (ic *IrqTuningController) periodicTuning() {
 
 	if (len(ic.Nics) == 0 && len(ic.LowThroughputNics) == 0) || time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
 		if err := ic.syncNics(); err != nil {
-			klog.Errorf("failed to syncNics, err %v", err)
+			klog.Errorf("%s failed to syncNics, err %v", IrqTuningLogPrefix, err)
 			ic.emitErrMetric(irqtuner.SyncNicFailed, irqtuner.IrqTuningFatal)
 			return
 		}
@@ -5135,7 +5172,7 @@ func (ic *IrqTuningController) periodicTuning() {
 }
 
 func (ic *IrqTuningController) Run(stopCh <-chan struct{}) {
-	klog.Infof("Irq tuning controller run")
+	klog.Infof("%s Irq tuning controller run", IrqTuningLogPrefix)
 
 	stopped := false
 	for {
@@ -5168,5 +5205,5 @@ func (ic *IrqTuningController) Run(stopCh <-chan struct{}) {
 }
 
 func (ic *IrqTuningController) Stop() {
-	klog.Infof("Irq tuning controller stop")
+	klog.Infof("%s Irq tuning controller stop", IrqTuningLogPrefix)
 }
