@@ -555,6 +555,21 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 
 	conf := config.ConvertDynamicConfigToIrqTuningConfig(agentConf.DynamicAgentConfiguration.GetDynamicConfiguration())
 
+	if machineInfo == nil {
+		klog.Infof("%s machineInfo is nil", IrqTuningLogPrefix)
+		return nil, fmt.Errorf("%s machineInfo is nil", IrqTuningLogPrefix)
+	}
+
+	if machineInfo.CPUTopology == nil {
+		klog.Infof("%s machineInfo.CPUTopology is nil", IrqTuningLogPrefix)
+		return nil, fmt.Errorf("%s machineInfo.CPUTopology is nil", IrqTuningLogPrefix)
+	}
+
+	if machineInfo.CPUTopology.CPUInfo == nil {
+		klog.Infof("%s machineInfo.CPUTopology.CPUInfo is nil", IrqTuningLogPrefix)
+		return nil, fmt.Errorf("%s machineInfo.CPUTopology.CPUInfo is nil", IrqTuningLogPrefix)
+	}
+
 	cpuInfo := machineInfo.CPUTopology.CPUInfo
 
 	if len(cpuInfo.Sockets) == 0 {
@@ -4204,6 +4219,7 @@ retry:
 	exclusiveIrqCPUSet, err := ic.IrqStateAdapter.GetExclusiveIRQCPUSet()
 	if err != nil {
 		if retryCount < 3 {
+			retryCount++
 			klog.Errorf("%s failed to GetExclusiveIRQCPUSet, err %s", IrqTuningLogPrefix, err)
 			time.Sleep(time.Millisecond)
 			goto retry

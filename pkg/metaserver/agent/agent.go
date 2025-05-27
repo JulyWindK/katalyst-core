@@ -40,6 +40,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/metaserver/agent/pod"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
 	"github.com/kubewharf/katalyst-core/pkg/util/cgroup/common"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 )
 
@@ -87,6 +88,12 @@ func NewMetaAgent(conf *config.Configuration, clientSet *client.GenericClientSet
 		emitter, common.GetKubernetesCgroupRootPathWithSubSys(common.DefaultSelectedSubsys))
 	if err != nil {
 		return nil, err
+	}
+
+	if machineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: NewMetaAgent machineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: NewMetaAgent machineInfo.CPUTopology.CPUInfo is NOT nil")
 	}
 
 	metaAgent := &MetaAgent{

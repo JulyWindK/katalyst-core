@@ -74,6 +74,12 @@ func Run(conf *config.Configuration, clientSet *client.GenericClientSet, generic
 		time.Sleep(1 * time.Second)
 	}()
 
+	if genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: Run genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: Run genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
+	}
+
 	return startAgent(ctx, genericCtx, conf, GetAgentInitializers())
 }
 
@@ -83,6 +89,13 @@ func startAgent(ctx context.Context, genericCtx *agent.GenericContext,
 ) error {
 	componentMap := make(map[string]agent.Component)
 	monitorAgentStart(genericCtx)
+
+	if genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo == nil {
+		general.Infof("irq-tuning: startAgent genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is nil")
+	} else {
+		general.Infof("irq-tuning: startAgent genericCtx.MetaServer.MetaAgent.KatalystMachineInfo.CPUTopology.CPUInfo is NOT nil")
+	}
+
 	for agentName, starter := range agents {
 		if !genericCtx.IsEnabled(agentName, conf.Agents) {
 			klog.Warningf("%q is disabled", agentName)
