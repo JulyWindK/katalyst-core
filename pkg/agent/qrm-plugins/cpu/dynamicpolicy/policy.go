@@ -373,12 +373,12 @@ func (p *DynamicPolicy) Start() (err error) {
 	}
 	go p.advisorMonitor.Run(p.stopCh)
 
-	general.Infof("irq-tuning: NewDynamicPolicy before run")
+	general.Infof("irq-tuning: (*DynamicPolicy) Start before run")
 	if p.irqTuner != nil {
-		general.Infof("irq-tuning: NewDynamicPolicy before real run")
+		general.Infof("irq-tuning: (*DynamicPolicy) Start before real run")
 		go p.irqTuner.Run(p.stopCh)
 	}
-	general.Infof("irq-tuning: NewDynamicPolicy after run")
+	general.Infof("irq-tuning: (*DynamicPolicy) Start after run")
 
 	go wait.BackoffUntil(func() { p.serveForAdvisor(p.stopCh) }, wait.NewExponentialBackoffManager(
 		800*time.Millisecond, 30*time.Second, 2*time.Minute, 2.0, 0, &clock.RealClock{}), true, p.stopCh)
