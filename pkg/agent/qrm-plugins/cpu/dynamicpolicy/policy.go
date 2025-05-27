@@ -138,6 +138,7 @@ type DynamicPolicy struct {
 func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration,
 	_ interface{}, agentName string,
 ) (bool, agent.Component, error) {
+	general.Infof("irq-tuning: NewDynamicPolicy in")
 	reservedCPUs, reserveErr := cpuutil.GetCoresReservedForSystem(conf, agentCtx.MetaServer, agentCtx.KatalystMachineInfo, agentCtx.CPUDetails.CPUs().Clone())
 	if reserveErr != nil {
 		return false, agent.ComponentStub{}, fmt.Errorf("GetCoresReservedForSystem for reservedCPUsNum: %d failed with error: %v",
@@ -213,12 +214,14 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	}
 
 	// TODO(KFX): ensure
+	general.Infof("irq-tuning: NewDynamicPolicy before call NewIrqTuningController")
 	irqTuner, err := irqtuingcontroller.NewIrqTuningController(conf.AgentConfiguration, policyImplement, policyImplement.emitter, policyImplement.machineInfo)
 	if err != nil {
 		general.Errorf("failed to NewIrqTuningController, err %s", err)
 	} else {
 		policyImplement.irqTuner = irqTuner
 	}
+	general.Infof("irq-tuning: NewDynamicPolicy after call NewIrqTuningController")
 
 	// register allocation behaviors for pods with different QoS level
 	policyImplement.allocationHandlers = map[string]util.AllocationHandler{
@@ -370,9 +373,12 @@ func (p *DynamicPolicy) Start() (err error) {
 	}
 	go p.advisorMonitor.Run(p.stopCh)
 
+	general.Infof("irq-tuning: NewDynamicPolicy before call NewIrqTuningController")
 	if p.irqTuner != nil {
+		general.Infof("irq-tuning: NewDynamicPolicy before real call NewIrqTuningController")
 		go p.irqTuner.Run(p.stopCh)
 	}
+	general.Infof("irq-tuning: NewDynamicPolicy before call NewIrqTuningController")
 
 	go wait.BackoffUntil(func() { p.serveForAdvisor(p.stopCh) }, wait.NewExponentialBackoffManager(
 		800*time.Millisecond, 30*time.Second, 2*time.Minute, 2.0, 0, &clock.RealClock{}), true, p.stopCh)
