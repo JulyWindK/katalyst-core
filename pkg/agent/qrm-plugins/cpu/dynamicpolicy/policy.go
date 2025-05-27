@@ -305,6 +305,13 @@ func (p *DynamicPolicy) Start() (err error) {
 
 	p.stopCh = make(chan struct{})
 
+	general.Infof("irq-tuning: (*DynamicPolicy) Start before run")
+	if p.irqTuner != nil {
+		general.Infof("irq-tuning: (*DynamicPolicy) Start before real run")
+		go p.irqTuner.Run(p.stopCh)
+	}
+	general.Infof("irq-tuning: (*DynamicPolicy) Start after run")
+
 	go wait.Until(func() {
 		_ = p.emitter.StoreInt64(util.MetricNameHeartBeat, 1, metrics.MetricTypeNameRaw)
 	}, time.Second*30, p.stopCh)
@@ -372,13 +379,6 @@ func (p *DynamicPolicy) Start() (err error) {
 		return
 	}
 	go p.advisorMonitor.Run(p.stopCh)
-
-	general.Infof("irq-tuning: (*DynamicPolicy) Start before run")
-	if p.irqTuner != nil {
-		general.Infof("irq-tuning: (*DynamicPolicy) Start before real run")
-		go p.irqTuner.Run(p.stopCh)
-	}
-	general.Infof("irq-tuning: (*DynamicPolicy) Start after run")
 
 	go wait.BackoffUntil(func() { p.serveForAdvisor(p.stopCh) }, wait.NewExponentialBackoffManager(
 		800*time.Millisecond, 30*time.Second, 2*time.Minute, 2.0, 0, &clock.RealClock{}), true, p.stopCh)
