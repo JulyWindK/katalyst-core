@@ -1216,7 +1216,7 @@ func (ic *IrqTuningController) String() string {
 
 			if ic.CPUInfo.CPUVendor == cpuid.Intel {
 				msg = fmt.Sprintf("%s%s    IntelNumas: %+v\n", msg, indent, socket.IntelNumas)
-				for j := 0; j < len(socket.IntelNumas); j++ {
+				for _, j := range socket.NumaIDs {
 					numa := socket.IntelNumas[j]
 					indent = spaces + spaces + spaces + spaces
 					msg = fmt.Sprintf("%s%s    IntelNumas[%d]:\n", msg, indent, j)
