@@ -1166,6 +1166,10 @@ func (nm *NicIrqTuningManager) getIrqsCorrespondingRxQueuesPPSInDecOrder(irqs []
 	return nm.getRxQueuesPPSInDecOrder(queues, oldStats, newStats)
 }
 
+func (ic *IrqTuningController) String() string {
+
+}
+
 func (ic *IrqTuningController) emitErrMetric(reason string, level int64) {
 	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningErr, level, metrics.MetricTypeNameRaw,
 		metrics.MetricTag{Key: "reason", Val: reason})
