@@ -1222,7 +1222,7 @@ func (ic *IrqTuningController) String() string {
 					msg = fmt.Sprintf("%s%s    IntelNumas[%d]:\n", msg, indent, j)
 
 					indent = spaces + spaces + spaces + spaces + spaces
-					msg = fmt.Sprintf("%s%s    PhyCores\n", msg, indent)
+					msg = fmt.Sprintf("%s%s    PhyCores:\n", msg, indent)
 					for _, phyCore := range numa.PhyCores {
 						indent = spaces + spaces + spaces + spaces + spaces + spaces
 						msg = fmt.Sprintf("%s%s    CPUs: %+v\n", msg, indent, phyCore.CPUs)
