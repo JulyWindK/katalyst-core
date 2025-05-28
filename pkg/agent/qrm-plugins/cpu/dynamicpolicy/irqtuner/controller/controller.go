@@ -1248,6 +1248,8 @@ func (ic *IrqTuningController) String() string {
 				}
 			}
 		}
+	} else {
+		msg = fmt.Sprintf("%s    CPUInfo: nil", msg)
 	}
 
 	return msg
