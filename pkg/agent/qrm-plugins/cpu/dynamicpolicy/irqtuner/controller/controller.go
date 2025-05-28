@@ -1248,6 +1248,15 @@ func (ic *IrqTuningController) String() string {
 				}
 			}
 		}
+
+		indent = spaces
+		msg = fmt.Sprintf("%s%s    SocketCPUs:\n", msg, indent)
+		for i := 0; i < len(ic.CPUInfo.SocketCPUs); i++ {
+			cpus := ic.CPUInfo.SocketCPUs[i]
+			indent = spaces + spaces
+			msg = fmt.Sprintf("%s%s    Sockets[%d]: %+v\n", msg, indent, i, cpus)
+		}
+
 	} else {
 		msg = fmt.Sprintf("%s    CPUInfo: nil", msg)
 	}
