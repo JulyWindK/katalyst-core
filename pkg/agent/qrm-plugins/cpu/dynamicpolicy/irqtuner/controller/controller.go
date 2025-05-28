@@ -1203,7 +1203,7 @@ func (ic *IrqTuningController) String() string {
 		indent := "    "
 		msg = fmt.Sprintf("%s%s    CPUVendor: %s\n", msg, indent, ic.CPUInfo.CPUVendor)
 
-		msg = fmt.Sprintf("%s    Sockets:\n", msg, indent)
+		msg = fmt.Sprintf("%s%s    Sockets:\n", msg, indent)
 		for i := 0; i < len(ic.CPUInfo.Sockets); i++ {
 
 			socket := ic.CPUInfo.Sockets[i]
