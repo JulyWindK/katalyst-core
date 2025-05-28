@@ -1197,6 +1197,31 @@ func (ic *IrqTuningController) String() string {
 		msg = fmt.Sprintf("%s    emitter: nil\n", msg)
 	}
 
+	if ic.CPUInfo != nil {
+		msg = fmt.Sprintf("%s    CPUInfo:\n", msg)
+
+		indent := "    "
+		msg = fmt.Sprintf("%s%s    CPUVendor: %s\n", msg, indent, ic.CPUInfo.CPUVendor)
+
+		msg = fmt.Sprintf("%s    Sockets:\n", msg, indent)
+		for i := 0; i < len(ic.CPUInfo.Sockets); i++ {
+
+			socket := ic.CPUInfo.Sockets[i]
+			msg = fmt.Sprintf("%s            Sockets[%d]:\n", msg, i)
+			msg = fmt.Sprintf("%s                NumaIDs: %+v\n", msg, socket.NumaIDs)
+
+			if ic.CPUInfo.CPUVendor == cpuid.Intel {
+				msg = fmt.Sprintf("%s                IntelNumas:\n", msg)
+				for j := 0; j < len(socket.IntelNumas); j++ {
+					numa := socket.IntelNumas[j]
+					msg = fmt.Sprintf("%s                    IntelNumas[%d]:\n", msg, j)
+					msg = fmt.Sprintf("%s                NumaIDs: %+v\n", msg, socket.NumaIDs)
+				}
+			}
+
+		}
+	}
+
 	return msg
 }
 
