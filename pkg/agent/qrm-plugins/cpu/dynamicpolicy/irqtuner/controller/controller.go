@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -596,12 +595,7 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		IrqAffinityChanges: make(map[int]*IrqAffinityChange),
 	}
 
-	controllerBytes, err := json.Marshal(controller)
-	if err != nil {
-		general.Errorf("%s failed to marshal controller, err %v", IrqTuningLogPrefix, err)
-	} else {
-		general.Infof("%s controller: %s", IrqTuningLogPrefix, string(controllerBytes))
-	}
+	general.Infof("%s %s", IrqTuningLogPrefix, controller)
 
 	return controller, nil
 }
