@@ -1206,30 +1206,32 @@ func (ic *IrqTuningController) String() string {
 		msg = fmt.Sprintf("%s%s    CPUVendor: %s\n", msg, indent, ic.CPUInfo.CPUVendor)
 
 		msg = fmt.Sprintf("%s%s    Sockets:\n", msg, indent)
-		for i := 0; i < len(ic.CPUInfo.Sockets); i++ {
-			socket := ic.CPUInfo.Sockets[i]
-			indent = spaces + spaces
-			msg = fmt.Sprintf("%s%s    Sockets[%d]:\n", msg, indent, i)
+		/*
+			for i := 0; i < len(ic.CPUInfo.Sockets); i++ {
+				socket := ic.CPUInfo.Sockets[i]
+				indent = spaces + spaces
+				msg = fmt.Sprintf("%s%s    Sockets[%d]:\n", msg, indent, i)
 
-			indent = spaces + spaces + spaces
-			msg = fmt.Sprintf("%s%s    NumaIDs: %+v\n", msg, indent, socket.NumaIDs)
+				indent = spaces + spaces + spaces
+				msg = fmt.Sprintf("%s%s    NumaIDs: %+v\n", msg, indent, socket.NumaIDs)
 
-			if ic.CPUInfo.CPUVendor == cpuid.Intel {
-				msg = fmt.Sprintf("%s%s    IntelNumas: %+v\n", msg, indent, socket.IntelNumas)
-				for j := 0; j < len(socket.IntelNumas); j++ {
-					numa := socket.IntelNumas[j]
-					indent = spaces + spaces + spaces + spaces
-					msg = fmt.Sprintf("%s%s    IntelNumas[%d]:\n", msg, indent, j)
+				if ic.CPUInfo.CPUVendor == cpuid.Intel {
+					msg = fmt.Sprintf("%s%s    IntelNumas: %+v\n", msg, indent, socket.IntelNumas)
+					for j := 0; j < len(socket.IntelNumas); j++ {
+						numa := socket.IntelNumas[j]
+						indent = spaces + spaces + spaces + spaces
+						msg = fmt.Sprintf("%s%s    IntelNumas[%d]:\n", msg, indent, j)
 
-					indent = spaces + spaces + spaces + spaces + spaces
-					msg = fmt.Sprintf("%s%s    PhyCores:\n", msg, indent)
-					for _, phyCore := range numa.PhyCores {
-						indent = spaces + spaces + spaces + spaces + spaces + spaces
-						msg = fmt.Sprintf("%s%s    CPUs: %+v\n", msg, indent, phyCore.CPUs)
+						indent = spaces + spaces + spaces + spaces + spaces
+						msg = fmt.Sprintf("%s%s    PhyCores:\n", msg, indent)
+						for _, phyCore := range numa.PhyCores {
+							indent = spaces + spaces + spaces + spaces + spaces + spaces
+							msg = fmt.Sprintf("%s%s    CPUs: %+v\n", msg, indent, phyCore.CPUs)
+						}
 					}
 				}
 			}
-		}
+		*/
 	}
 
 	return msg
