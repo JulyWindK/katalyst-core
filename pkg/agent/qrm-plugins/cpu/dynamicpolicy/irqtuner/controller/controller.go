@@ -4204,6 +4204,7 @@ retry:
 	exclusiveIrqCPUSet, err := ic.IrqStateAdapter.GetExclusiveIRQCPUSet()
 	if err != nil {
 		if retryCount < 3 {
+			retryCount++
 			klog.Errorf("%s failed to GetExclusiveIRQCPUSet, err %s", IrqTuningLogPrefix, err)
 			time.Sleep(time.Millisecond)
 			goto retry
