@@ -561,7 +561,11 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		return nil, retErr
 	}
 
-	conf := config.ConvertDynamicConfigToIrqTuningConfig(agentConf.DynamicAgentConfiguration.GetDynamicConfiguration())
+	dynConf := agentConf.DynamicAgentConfiguration.GetDynamicConfiguration()
+	if dynConf == nil {
+		general.Errorf("%s GetDynamicConfiguration return nil", IrqTuningLogPrefix)
+	}
+	conf := config.ConvertDynamicConfigToIrqTuningConfig(dynConf)
 
 	cpuInfo := machineInfo.CPUTopology.CPUInfo
 
@@ -5180,6 +5184,8 @@ func (ic *IrqTuningController) syncDynamicConfig() {
 	dynConf := ic.agentConf.DynamicAgentConfiguration.GetDynamicConfiguration()
 	if dynConf != nil {
 		ic.conf = config.ConvertDynamicConfigToIrqTuningConfig(dynConf)
+	} else {
+		general.Errorf("%s GetDynamicConfiguration return nil", IrqTuningLogPrefix)
 	}
 }
 
