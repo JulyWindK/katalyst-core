@@ -17,6 +17,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/klog/v2"
 )
 
 const (
@@ -595,7 +596,8 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		IrqAffinityChanges: make(map[int]*IrqAffinityChange),
 	}
 
-	general.Infof("%s %d %s", IrqTuningLogPrefix, len(controller.String()), controller.String())
+	general.Infof("%s %d %s", IrqTuningLogPrefix, len(controller.String()), controller)
+	klog.Infof("%s %d %s", IrqTuningLogPrefix, len(controller.String()), controller)
 
 	return controller, nil
 }
