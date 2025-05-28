@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/kubewharf/katalyst-api/pkg/apis/config/v1alpha1"
 	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
 )
@@ -213,6 +215,64 @@ func NewConfiguration() *IrqTuningConfig {
 			SuccessiveSwitchInterval: 600,
 		},
 	}
+}
+
+func (c *IrqTuningConfig) String() string {
+	msg := "IrqTuningConfig:\n"
+
+	msg = fmt.Sprintf("%s  Interval: %d\n", msg, c.Interval)
+	msg = fmt.Sprintf("%s  EnableIrqTuning: %t\n", msg, c.EnableIrqTuning)
+	msg = fmt.Sprintf("%s  IrqTuningPolicy: %s\n", msg, c.IrqTuningPolicy)
+	msg = fmt.Sprintf("%s  EnableRPS: %t\n", msg, c.EnableRPS)
+	msg = fmt.Sprintf("%s  EnableRPSCPUVSNicsQueue: %f\n", msg, c.EnableRPSCPUVSNicsQueue)
+	msg = fmt.Sprintf("%s  NicAffinitySocketsPolicy: %s\n", msg, c.NicAffinitySocketsPolicy)
+	msg = fmt.Sprintf("%s  IrqCoresExpectedCpuUtil: %d\n", msg, c.IrqCoresExpectedCpuUtil)
+	msg = fmt.Sprintf("%s  ThrouputClassSwitchConf:\n", msg)
+	msg = fmt.Sprintf("%s    LowThroughputThresholds:\n", msg)
+	msg = fmt.Sprintf("%s      RxPPSThresh: %d\n", msg, c.ThrouputClassSwitchConf.LowThroughputThresholds.RxPPSThresh)
+	msg = fmt.Sprintf("%s      SuccessiveCount: %d\n", msg, c.ThrouputClassSwitchConf.LowThroughputThresholds.SuccessiveCount)
+	msg = fmt.Sprintf("%s    NormalThroughputThresholds:\n", msg)
+	msg = fmt.Sprintf("%s      RxPPSThresh: %d\n", msg, c.ThrouputClassSwitchConf.NormalThroughputThresholds.RxPPSThresh)
+	msg = fmt.Sprintf("%s      SuccessiveCount: %d\n", msg, c.ThrouputClassSwitchConf.NormalThroughputThresholds.SuccessiveCount)
+	msg = fmt.Sprintf("%s  ReniceIrqCoresKsoftirqd: %t\n", msg, c.ReniceIrqCoresKsoftirqd)
+	msg = fmt.Sprintf("%s  IrqCoresKsoftirqdNice: %d\n", msg, c.IrqCoresKsoftirqdNice)
+	msg = fmt.Sprintf("%s  IrqCoreNetOverLoadThresh:\n", msg)
+	msg = fmt.Sprintf("%s    IrqCoreSoftNetTimeSqueezeRatio: %f\n", msg, c.IrqCoreNetOverLoadThresh.IrqCoreSoftNetTimeSqueezeRatio)
+	msg = fmt.Sprintf("%s  IrqLoadBalanceConf:\n", msg)
+	msg = fmt.Sprintf("%s    SuccessiveTuningInterval: %d\n", msg, c.IrqLoadBalanceConf.SuccessiveTuningInterval)
+	msg = fmt.Sprintf("%s    Thresholds:\n", msg)
+	msg = fmt.Sprintf("%s      IrqCoreCpuUtilThresh: %d\n", msg, c.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilThresh)
+	msg = fmt.Sprintf("%s      IrqCoreCpuUtilGapThresh: %d\n", msg, c.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilGapThresh)
+	msg = fmt.Sprintf("%s    PingPongIntervalThresh: %d\n", msg, c.IrqLoadBalanceConf.PingPongIntervalThresh)
+	msg = fmt.Sprintf("%s    PingPongCountThresh: %d\n", msg, c.IrqLoadBalanceConf.PingPongCountThresh)
+	msg = fmt.Sprintf("%s    IrqsTunedNumMaxEachTime: %d\n", msg, c.IrqLoadBalanceConf.IrqsTunedNumMaxEachTime)
+	msg = fmt.Sprintf("%s    IrqCoresTunedNumMaxEachTime: %d\n", msg, c.IrqLoadBalanceConf.IrqCoresTunedNumMaxEachTime)
+	msg = fmt.Sprintf("%s  IrqCoresAdjustConf:\n", msg)
+	msg = fmt.Sprintf("%s    IrqCoresPercentMin: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresPercentMin)
+	msg = fmt.Sprintf("%s    IrqCoresPercentMax: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresPercentMax)
+	msg = fmt.Sprintf("%s    IrqCoresIncConf:\n", msg)
+	msg = fmt.Sprintf("%s      SuccessiveIncInterval: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresIncConf.SuccessiveIncInterval)
+	msg = fmt.Sprintf("%s      IrqCoresCpuFullThresh: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresIncConf.IrqCoresCpuFullThresh)
+	msg = fmt.Sprintf("%s      Thresholds\n", msg)
+	msg = fmt.Sprintf("%s        IrqCoresAvgCpuUtilThresh: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresIncConf.Thresholds.IrqCoresAvgCpuUtilThresh)
+	msg = fmt.Sprintf("%s    IrqCoresDecConf:\n", msg)
+	msg = fmt.Sprintf("%s      SuccessiveDecInterval: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresDecConf.SuccessiveDecInterval)
+	msg = fmt.Sprintf("%s      PingPongAdjustInterval: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresDecConf.PingPongAdjustInterval)
+	msg = fmt.Sprintf("%s      SinceLastBalanceInterval: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresDecConf.SinceLastBalanceInterval)
+	msg = fmt.Sprintf("%s      Thresholds\n", msg)
+	msg = fmt.Sprintf("%s        IrqCoresAvgCpuUtilThresh: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresDecConf.Thresholds.IrqCoresAvgCpuUtilThresh)
+	msg = fmt.Sprintf("%s      DecCoresMaxEachTime: %d\n", msg, c.IrqCoresAdjustConf.IrqCoresDecConf.DecCoresMaxEachTime)
+	msg = fmt.Sprintf("%s  IrqCoresExclusionConf:\n", msg)
+	msg = fmt.Sprintf("%s    Thresholds:\n", msg)
+	msg = fmt.Sprintf("%s      EnableThresholds:\n", msg)
+	msg = fmt.Sprintf("%s        RxPPSThresh: %d\n", msg, c.IrqCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh)
+	msg = fmt.Sprintf("%s        SuccessiveCount: %d\n", msg, c.IrqCoresExclusionConf.Thresholds.EnableThresholds.SuccessiveCount)
+	msg = fmt.Sprintf("%s      DisableThresholds:\n", msg)
+	msg = fmt.Sprintf("%s        RxPPSThresh: %d\n", msg, c.IrqCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh)
+	msg = fmt.Sprintf("%s        SuccessiveCount: %d\n", msg, c.IrqCoresExclusionConf.Thresholds.DisableThresholds.SuccessiveCount)
+	msg = fmt.Sprintf("%s    SuccessiveSwitchInterval: %f", msg, c.IrqCoresExclusionConf.SuccessiveSwitchInterval)
+
+	return msg
 }
 
 func (c *IrqTuningConfig) Validate() error {
