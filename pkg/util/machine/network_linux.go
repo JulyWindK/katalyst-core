@@ -1531,9 +1531,9 @@ func GetNicRxQueuePackets(nic *NicBasicInfo) (map[int]uint64, error) {
 
 func (n *NicBasicInfo) String() string {
 	if n.NSName == "" {
-		return fmt.Sprintf("%d: %s", n.IfIndex, n.Name)
+		return fmt.Sprintf("%s(%d)", n.Name, n.IfIndex)
 	} else {
-		return fmt.Sprintf("%s %d: %s", n.NSName, n.IfIndex, n.Name)
+		return fmt.Sprintf("%s:%s(%d)", n.NSName, n.Name, n.IfIndex)
 	}
 }
 

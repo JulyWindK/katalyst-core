@@ -775,9 +775,9 @@ func GetInterfaceSocketInfo(nics []InterfaceInfo, sockets []int) (*AllocatableIn
 
 	for _, socket := range sockets {
 		if len(socket2IfIndexes[socket]) < idealMin {
-			if idealMin-len(socket2IfIndexes[socket]) > 2 {
-				klog.Errorf("it's impossible that socket %d has %d nics, round down socket nics count is %d, diff is greater-than 2",
-					socket, len(socket2IfIndexes[socket]), idealMin)
+			if idealMin-len(socket2IfIndexes[socket]) >= len(sockets) {
+				klog.Errorf("it's impossible that socket %d has %d nics, round down socket nics count is %d, diff is greater-than socket count %d",
+					socket, len(socket2IfIndexes[socket]), idealMin, len(sockets))
 			}
 
 			targetSocket := selectSocketWithMostNics()
