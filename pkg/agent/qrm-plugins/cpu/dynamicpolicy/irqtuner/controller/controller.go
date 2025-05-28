@@ -596,8 +596,8 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		IrqAffinityChanges: make(map[int]*IrqAffinityChange),
 	}
 
-	general.Infof("%s %d %s", IrqTuningLogPrefix, len(controller.String()), controller)
-	klog.Infof("%s %d %s", IrqTuningLogPrefix, len(controller.String()), controller)
+	general.Infof("%s %d %s", IrqTuningLogPrefix, len(controller.String()), controller.String())
+	klog.Infof("%s %d %s", IrqTuningLogPrefix, len(controller.String()), controller.String())
 
 	return controller, nil
 }
