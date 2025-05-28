@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -596,12 +595,7 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		IrqAffinityChanges: make(map[int]*IrqAffinityChange),
 	}
 
-	controllerBytes, err := json.Marshal(controller)
-	if err != nil {
-		general.Errorf("%s failed to marshal controller, err %v", IrqTuningLogPrefix, err)
-	} else {
-		general.Infof("%s controller: %s", IrqTuningLogPrefix, string(controllerBytes))
-	}
+	general.Infof("%s %s", IrqTuningLogPrefix, controller)
 
 	return controller, nil
 }
@@ -1166,7 +1160,22 @@ func (nm *NicIrqTuningManager) getIrqsCorrespondingRxQueuesPPSInDecOrder(irqs []
 }
 
 func (ic *IrqTuningController) String() string {
+	info := "IrqTuningController:\n"
+	if ic.agentConf != nil {
+		info = fmt.Sprintf("%s  agentConf.MachineInfoConfiguration.NetNSDirAbsPath: %s\n", info, ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
+	} else {
+		info = fmt.Sprintf("%s  agentConf: nil\n", info)
+	}
 
+	if ic.conf != nil {
+		info = fmt.Sprintf("%s  conf:\n", info)
+		info = fmt.Sprintf("%s    Interval: %d\n", ic.conf.Interval)
+		info = fmt.Sprintf("%s    EnableIrqTuning: %t\n", ic.conf.EnableIrqTuning)
+		info = fmt.Sprintf("%s    IrqTuningPolicy: %s\n", ic.conf.IrqTuningPolicy)
+		info = fmt.Sprintf("%s    EnableRPS: %t\n", ic.conf.EnableRPS)
+	}
+
+	return info
 }
 
 func (ic *IrqTuningController) emitErrMetric(reason string, level int64) {
