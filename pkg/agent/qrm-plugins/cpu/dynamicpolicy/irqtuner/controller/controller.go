@@ -1257,6 +1257,19 @@ func (ic *IrqTuningController) String() string {
 			msg = fmt.Sprintf("%s%s    Sockets[%d]: %+v\n", msg, indent, i, cpus)
 		}
 
+		indent = spaces
+		msg = fmt.Sprintf("%s%s    CPU2Socket:\n", msg, indent)
+		var cpus []int64
+		for cpu, _ := range ic.CPUInfo.CPU2Socket {
+			cpus = append(cpus, cpu)
+		}
+
+		indent = spaces + spaces
+		general.SortInt64Slice(cpus)
+		for _, cpu := range cpus {
+			msg = fmt.Sprintf("%s%s    %d: %d\n", msg, indent, cpu, ic.CPUInfo.CPU2Socket[cpu])
+		}
+
 	} else {
 		msg = fmt.Sprintf("%s    CPUInfo: nil", msg)
 	}
