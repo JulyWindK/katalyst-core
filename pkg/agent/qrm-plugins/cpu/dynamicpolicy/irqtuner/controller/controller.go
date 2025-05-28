@@ -1181,7 +1181,7 @@ func (ic *IrqTuningController) String() string {
 				continue
 			}
 
-			msg = fmt.Sprintf("%s %s\n", line)
+			msg = fmt.Sprintf("%s %s\n", msg, line)
 		}
 	} else {
 		msg = fmt.Sprintf("%s  conf: nil\n", msg)
