@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/kubewharf/katalyst-api/pkg/apis/config/v1alpha1"
 	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
 )
@@ -213,6 +215,17 @@ func NewConfiguration() *IrqTuningConfig {
 			SuccessiveSwitchInterval: 600,
 		},
 	}
+}
+
+func (c *IrqTuningConfig) String() string {
+	msg := "IrqTuningConfig:\n"
+
+	msg = fmt.Sprintf("%s  Interval: %d\n", msg, c.Interval)
+	msg = fmt.Sprintf("%s  EnableIrqTuning: %t\n", msg, c.EnableIrqTuning)
+	msg = fmt.Sprintf("%s  IrqTuningPolicy: %s\n", msg, c.IrqTuningPolicy)
+	msg = fmt.Sprintf("%s  EnableRPS: %t\n", msg, c.EnableRPS)
+
+	return msg
 }
 
 func (c *IrqTuningConfig) Validate() error {

@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -596,12 +595,7 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 		IrqAffinityChanges: make(map[int]*IrqAffinityChange),
 	}
 
-	controllerBytes, err := json.Marshal(controller)
-	if err != nil {
-		general.Errorf("%s failed to marshal controller, err %v", IrqTuningLogPrefix, err)
-	} else {
-		general.Infof("%s controller: %s", IrqTuningLogPrefix, string(controllerBytes))
-	}
+	general.Infof("%s %s", IrqTuningLogPrefix, controller)
 
 	return controller, nil
 }
@@ -1166,7 +1160,36 @@ func (nm *NicIrqTuningManager) getIrqsCorrespondingRxQueuesPPSInDecOrder(irqs []
 }
 
 func (ic *IrqTuningController) String() string {
+	msg := "IrqTuningController:\n"
 
+	if ic.agentConf != nil {
+		msg = fmt.Sprintf("%s  agentConf.MachineInfoConfiguration.NetNSDirAbsPath: %s\n", msg, ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
+	} else {
+		msg = fmt.Sprintf("%s  agentConf: nil\n", msg)
+	}
+
+	if ic.conf != nil {
+		msg = fmt.Sprintf("%s  conf:\n", msg)
+
+		confLines := strings.Split(ic.conf.String(), "\n")
+		for i, line := range confLines {
+			if i == 0 {
+				continue
+			}
+
+			msg = fmt.Sprintf("%s %s\n", line)
+		}
+	} else {
+		msg = fmt.Sprintf("%s  conf: nil\n", msg)
+	}
+
+	if ic.emitter != nil {
+		msg = fmt.Sprintf("%s  emitter: non-nil\n", msg)
+	} else {
+		msg = fmt.Sprintf("%s  emitter: nil\n", msg)
+	}
+
+	return msg
 }
 
 func (ic *IrqTuningController) emitErrMetric(reason string, level int64) {
