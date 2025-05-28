@@ -1270,6 +1270,18 @@ func (ic *IrqTuningController) String() string {
 			msg = fmt.Sprintf("%s%s    %d: %d\n", msg, indent, cpu, ic.CPUInfo.CPU2Socket[cpu])
 		}
 
+		indent = spaces
+		msg = fmt.Sprintf("%s%s    CPUOnline:\n", msg, indent)
+		cpus = []int64{}
+		for cpu, _ := range ic.CPUInfo.CPUOnline {
+			cpus = append(cpus, cpu)
+		}
+
+		indent = spaces + spaces
+		general.SortInt64Slice(cpus)
+		for _, cpu := range cpus {
+			msg = fmt.Sprintf("%s%s    cpu%d: %t\n", msg, indent, cpu, ic.CPUInfo.CPUOnline[cpu])
+		}
 	} else {
 		msg = fmt.Sprintf("%s    CPUInfo: nil", msg)
 	}
