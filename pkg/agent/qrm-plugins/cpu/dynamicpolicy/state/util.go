@@ -45,7 +45,7 @@ var (
 		commonstate.PoolNameReclaim,
 	).Union(StaticPools).Union(ForbiddenPools)
 
-	// ForbiddenPools prohibited from being allocated to user containers and
+	// ForbiddenPools forbidden from being allocated to user containers and
 	// is mainly used to perform specific tasks
 	ForbiddenPools = sets.NewString(
 		commonstate.PoolNameInterrupt,

@@ -584,8 +584,8 @@ func (p *DynamicPolicy) generateBlockCPUSet(resp *advisorapi.ListAndWatchRespons
 		availableCPUs = availableCPUs.Difference(blockCPUSet[blockID])
 	}
 
-	// walk through prohibited pools to construct blockCPUSet (for prohibited pool),
-	// and calculate availableCPUs after deducting prohibited pools
+	// walk through forbidden pools to construct blockCPUSet (for forbidden pool),
+	// and calculate availableCPUs after deducting forbidden pools
 	// TODO(KFX): Determine if the logic is correct
 	for _, poolName := range state.ForbiddenPools.List() {
 		allocationInfo := p.state.GetAllocationInfo(poolName, commonstate.FakedContainerName)
@@ -980,15 +980,15 @@ func (p *DynamicPolicy) applyNUMAHeadroom(resp *advisorapi.ListAndWatchResponse)
 
 func (p *DynamicPolicy) reviseReclaimPool(newEntries state.PodEntries, nonReclaimActualBindingNUMAs, pooledUnionDedicatedCPUSet machine.CPUSet) error {
 	// TODO(KFX): ensure
-	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
+	forbiddenCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
 	if err != nil {
-		return fmt.Errorf("GetUnitedPoolsCPUs for prohibited pools failed with error: %v", err)
+		return fmt.Errorf("GetUnitedPoolsCPUs for forbidden pools failed with error: %v", err)
 	}
 
 	// if there is no block for state.PoolNameReclaim pool,
 	// we must make it existing here even if cause overlap
 	if newEntries.CheckPoolEmpty(commonstate.PoolNameReclaim) {
-		reclaimPoolCPUSet := p.machineInfo.CPUDetails.CPUs().Difference(p.reservedCPUs).Difference(pooledUnionDedicatedCPUSet).Difference(prohibitedCPUs)
+		reclaimPoolCPUSet := p.machineInfo.CPUDetails.CPUs().Difference(p.reservedCPUs).Difference(pooledUnionDedicatedCPUSet).Difference(forbiddenCPUs)
 		if reclaimPoolCPUSet.IsEmpty() {
 			reclaimPoolCPUSet = p.reservedReclaimedCPUSet.Clone()
 			general.Infof("fallback takeByNUMABalance for reclaimPoolCPUSet: %s", reclaimPoolCPUSet.String())

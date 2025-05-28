@@ -75,13 +75,13 @@ func (p *DynamicPolicy) sharedCoresWithoutNUMABindingAllocationHandler(_ context
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckDedicated),
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckSharedOrDedicatedNUMABinding))
 	// TODO(KFX): ensure
-	// cores that are prohibited from user binding need to be deducted from the pool.
-	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
+	// cores that are forbidden from user binding need to be deducted from the pool.
+	forbiddenCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
 	if err != nil {
-		return nil, fmt.Errorf("getProhibitedCPUs failed with error: %v", err)
+		return nil, fmt.Errorf("getForbiddenCPUs failed with error: %v", err)
 	}
 
-	pooledCPUs.Difference(prohibitedCPUs)
+	pooledCPUs.Difference(forbiddenCPUs)
 
 	if pooledCPUs.IsEmpty() {
 		general.Errorf("pod: %s/%s, container: %s get empty pooledCPUs", req.PodNamespace, req.PodName, req.ContainerName)
@@ -393,12 +393,12 @@ func (p *DynamicPolicy) dedicatedCoresWithNUMABindingAllocationHandler(ctx conte
 	}
 
 	// TODO(KFX): ensure
-	// avoid running services on prohibited CPUs.
-	prohibitedCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
+	// avoid running services on forbidden CPUs.
+	forbiddenCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, p.state.GetPodEntries())
 	if err != nil {
-		return nil, fmt.Errorf("getProhibitedCPUs failed with error: %v", err)
+		return nil, fmt.Errorf("getForbiddenCPUs failed with error: %v", err)
 	}
-	result = result.Difference(prohibitedCPUs)
+	result = result.Difference(forbiddenCPUs)
 
 	general.InfoS("allocate CPUs successfully",
 		"podNamespace", req.PodNamespace,
@@ -923,12 +923,12 @@ func (p *DynamicPolicy) adjustPoolsAndIsolatedEntries(
 		state.WrapAllocationMetaFilter((*commonstate.AllocationMeta).CheckDedicatedNUMABinding))
 
 	// TODO(KFX): ensure logic
-	// deduct the cpus that is prohibited from being used by user containers.
-	prohibitedPoolCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, entries)
+	// deduct the cpus that is forbidden from being used by user containers.
+	forbiddenPoolCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, entries)
 	if err != nil {
-		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
+		return fmt.Errorf("get forbidden united pools‘ cpus failed with error: %v", err)
 	}
-	availableCPUs = availableCPUs.Difference(prohibitedPoolCPUs)
+	availableCPUs = availableCPUs.Difference(forbiddenPoolCPUs)
 
 	reclaimOverlapShareRatio, err := p.getReclaimOverlapShareRatio(entries)
 	if err != nil {
@@ -1117,7 +1117,7 @@ func (p *DynamicPolicy) applyPoolsAndIsolatedInfo(poolsCPUSet map[string]machine
 	// TODO(KFX): ensure logic
 	forbiddenPoolsCPUs, err := state.GetUnitedPoolsCPUs(state.ForbiddenPools, newPodEntries)
 	if err != nil {
-		return fmt.Errorf("get prohibited united pools‘ cpus failed with error: %v", err)
+		return fmt.Errorf("get forbidden united pools‘ cpus failed with error: %v", err)
 	}
 	rampUpCPUs = rampUpCPUs.Difference(forbiddenPoolsCPUs)
 
@@ -1521,8 +1521,8 @@ func (p *DynamicPolicy) generatePoolsAndIsolation(poolsQuantityMap map[string]ma
 		poolsCPUSet[commonstate.PoolNameReclaim] = p.reservedReclaimedCPUSet.Clone()
 	}
 
-	// TODO: whether if deal with prohibited pools
-	// deal with prohibited pools
+	// TODO: whether if deal with forbidden pools
+	// deal with forbidden pools
 	currentPodEntries := p.state.GetPodEntries()
 	for _, poolName := range state.ForbiddenPools.List() {
 		cset, err := currentPodEntries.GetCPUSetForPool(poolName)

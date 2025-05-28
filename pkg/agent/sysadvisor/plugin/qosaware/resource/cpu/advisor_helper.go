@@ -154,21 +154,21 @@ func (cra *cpuResourceAdvisor) initializeHeadroomAssembler() error {
 }
 
 // updateNumasAvailableResource updates available resource of all numa nodes.
-// available = total - reserved pool - prohibited pool
+// available = total - reserved pool - forbidden pool
 func (cra *cpuResourceAdvisor) updateNumasAvailableResource() {
 	cra.numaAvailable = make(map[int]int)
 	reservePoolInfo, _ := cra.metaCache.GetPoolInfo(commonstate.PoolNameReserve)
 	cpusPerNuma := cra.metaServer.CPUsPerNuma()
 
 	// TODO(KFX): ensure logic
-	prohibitedCPUsMap := make(map[int]int)
+	forbiddenCPUsMap := make(map[int]int)
 	for _, poolName := range state.ForbiddenPools.List() {
 		poolInfo, ok := cra.metaCache.GetPoolInfo(poolName)
 		if poolInfo == nil || !ok {
 			continue
 		}
 		for numaID, cpuset := range poolInfo.TopologyAwareAssignments {
-			prohibitedCPUsMap[numaID] += cpuset.Size()
+			forbiddenCPUsMap[numaID] += cpuset.Size()
 		}
 	}
 
@@ -180,11 +180,11 @@ func (cra *cpuResourceAdvisor) updateNumasAvailableResource() {
 			reservePoolNuma = cpuset.Size()
 		}
 		// TODO(KFX): ensure logic
-		prohibitedPoolNuma := 0
-		if v, ok := prohibitedCPUsMap[id]; ok {
-			prohibitedPoolNuma = v
+		forbiddenPoolNuma := 0
+		if v, ok := forbiddenCPUsMap[id]; ok {
+			forbiddenPoolNuma = v
 		}
-		cra.numaAvailable[id] = cpusPerNuma - reservePoolNuma - prohibitedPoolNuma
+		cra.numaAvailable[id] = cpusPerNuma - reservePoolNuma - forbiddenPoolNuma
 	}
 }
 
