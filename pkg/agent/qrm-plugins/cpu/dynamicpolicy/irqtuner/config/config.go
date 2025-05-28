@@ -220,9 +220,9 @@ func NewConfiguration() *IrqTuningConfig {
 func (c *IrqTuningConfig) String() string {
 	msg := "IrqTuningConfig:\n"
 
-	msg = fmt.Sprintf("%s  Interval: %d\n", msg, c.Interval)
-	msg = fmt.Sprintf("%s  EnableIrqTuning: %t\n", msg, c.EnableIrqTuning)
-	msg = fmt.Sprintf("%s  IrqTuningPolicy: %s\n", msg, c.IrqTuningPolicy)
+	msg = fmt.Sprintf("%s    Interval: %d\n", msg, c.Interval)
+	msg = fmt.Sprintf("%s    EnableIrqTuning: %t\n", msg, c.EnableIrqTuning)
+	msg = fmt.Sprintf("%s    IrqTuningPolicy: %s\n", msg, c.IrqTuningPolicy)
 	msg = fmt.Sprintf("%s  EnableRPS: %t\n", msg, c.EnableRPS)
 	msg = fmt.Sprintf("%s  EnableRPSCPUVSNicsQueue: %f\n", msg, c.EnableRPSCPUVSNicsQueue)
 	msg = fmt.Sprintf("%s  NicAffinitySocketsPolicy: %s\n", msg, c.NicAffinitySocketsPolicy)
