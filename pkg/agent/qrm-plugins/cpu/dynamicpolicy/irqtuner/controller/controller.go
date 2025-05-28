@@ -549,8 +549,18 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 }
 
 func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter irqtuner.StateAdapter, emitter metrics.MetricEmitter, machineInfo *machine.KatalystMachineInfo) (*IrqTuningController, error) {
+	var retErr error
+
+	defer func() {
+		if retErr != nil {
+			_ = emitter.StoreInt64(metricUtil.MetricNameIrqTuningErr, irqtuner.IrqTuningFatal, metrics.MetricTypeNameRaw,
+				metrics.MetricTag{Key: "reason", Val: irqtuner.NewIrqTuningControllerFailed})
+		}
+	}()
+
 	if isIrqBalanceNGServiceRuning() {
-		return nil, fmt.Errorf("irqbalance-ng service is running")
+		retErr = fmt.Errorf("irqbalance-ng service is running")
+		return nil, retErr
 	}
 
 	conf := config.ConvertDynamicConfigToIrqTuningConfig(agentConf.DynamicAgentConfiguration.GetDynamicConfiguration())
@@ -558,17 +568,20 @@ func NewIrqTuningController(agentConf *agent.AgentConfiguration, irqStateAdapter
 	cpuInfo := machineInfo.CPUTopology.CPUInfo
 
 	if len(cpuInfo.Sockets) == 0 {
-		return nil, fmt.Errorf("invalid cpuinfo with 0 socket")
+		retErr = fmt.Errorf("invalid cpuinfo with 0 socket")
+		return nil, retErr
 	}
 
 	ksoftirqds, err := general.ListKsoftirqdProcesses()
 	if err != nil {
-		return nil, fmt.Errorf("failed to ListKsoftirqdProcesses, err %v", err)
+		retErr = fmt.Errorf("failed to ListKsoftirqdProcesses, err %v", err)
+		return nil, retErr
 	}
 
 	for cpuID, _ := range cpuInfo.CPUOnline {
 		if _, ok := ksoftirqds[cpuID]; !ok {
-			return nil, fmt.Errorf("cpu%d's ksoftirqd not exists", cpuID)
+			retErr = fmt.Errorf("cpu%d's ksoftirqd not exists", cpuID)
+			return nil, retErr
 		}
 	}
 
