@@ -1166,7 +1166,22 @@ func (nm *NicIrqTuningManager) getIrqsCorrespondingRxQueuesPPSInDecOrder(irqs []
 }
 
 func (ic *IrqTuningController) String() string {
+	info := "IrqTuningController:\n"
+	if ic.agentConf != nil {
+		info = fmt.Sprintf("%s  agentConf.MachineInfoConfiguration.NetNSDirAbsPath: %s\n", info, ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
+	} else {
+		info = fmt.Sprintf("%s  agentConf: nil\n", info)
+	}
 
+	if ic.conf != nil {
+		info = fmt.Sprintf("%s  conf:\n", info)
+		info = fmt.Sprintf("%s    Interval: %d", ic.conf.Interval)
+		info = fmt.Sprintf("%s    EnableIrqTuning: %t", ic.conf.EnableIrqTuning)
+		info = fmt.Sprintf("%s    IrqTuningPolicy: %s", ic.conf.IrqTuningPolicy)
+		info = fmt.Sprintf("%s    EnableRPS: %t", ic.conf.EnableRPS)
+	}
+
+	return info
 }
 
 func (ic *IrqTuningController) emitErrMetric(reason string, level int64) {
