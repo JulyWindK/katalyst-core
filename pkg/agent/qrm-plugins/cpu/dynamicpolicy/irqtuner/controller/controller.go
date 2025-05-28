@@ -1164,6 +1164,8 @@ func (nm *NicIrqTuningManager) getIrqsCorrespondingRxQueuesPPSInDecOrder(irqs []
 }
 
 func (ic *IrqTuningController) String() string {
+	spaces := "    "
+
 	msg := "IrqTuningController:\n"
 
 	if ic.agentConf != nil {
@@ -1200,25 +1202,33 @@ func (ic *IrqTuningController) String() string {
 	if ic.CPUInfo != nil {
 		msg = fmt.Sprintf("%s    CPUInfo:\n", msg)
 
-		indent := "    "
+		indent := spaces
 		msg = fmt.Sprintf("%s%s    CPUVendor: %s\n", msg, indent, ic.CPUInfo.CPUVendor)
 
 		msg = fmt.Sprintf("%s%s    Sockets:\n", msg, indent)
 		for i := 0; i < len(ic.CPUInfo.Sockets); i++ {
-
 			socket := ic.CPUInfo.Sockets[i]
-			msg = fmt.Sprintf("%s            Sockets[%d]:\n", msg, i)
-			msg = fmt.Sprintf("%s                NumaIDs: %+v\n", msg, socket.NumaIDs)
+			indent = spaces + spaces
+			msg = fmt.Sprintf("%s%s    Sockets[%d]:\n", msg, indent, i)
+
+			indent = spaces + spaces + spaces
+			msg = fmt.Sprintf("%s%s    NumaIDs: %+v\n", msg, indent, socket.NumaIDs)
 
 			if ic.CPUInfo.CPUVendor == cpuid.Intel {
-				msg = fmt.Sprintf("%s                IntelNumas:\n", msg)
+				msg = fmt.Sprintf("%s%s    IntelNumas: %+v\n", msg, indent, socket.IntelNumas)
 				for j := 0; j < len(socket.IntelNumas); j++ {
 					numa := socket.IntelNumas[j]
-					msg = fmt.Sprintf("%s                    IntelNumas[%d]:\n", msg, j)
-					msg = fmt.Sprintf("%s                NumaIDs: %+v\n", msg, socket.NumaIDs)
+					indent = spaces + spaces + spaces + spaces
+					msg = fmt.Sprintf("%s%s    IntelNumas[%d]:\n", msg, indent, j)
+
+					indent = spaces + spaces + spaces + spaces + spaces
+					msg = fmt.Sprintf("%s%s    PhyCores\n", msg, indent)
+					for _, phyCore := range numa.PhyCores {
+						indent = spaces + spaces + spaces + spaces + spaces + spaces
+						msg = fmt.Sprintf("%s%s    CPUs: %+v\n", msg, indent, phyCore.CPUs)
+					}
 				}
 			}
-
 		}
 	}
 
