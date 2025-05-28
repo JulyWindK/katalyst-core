@@ -1167,13 +1167,13 @@ func (ic *IrqTuningController) String() string {
 	msg := "IrqTuningController:\n"
 
 	if ic.agentConf != nil {
-		msg = fmt.Sprintf("%s  agentConf.MachineInfoConfiguration.NetNSDirAbsPath: %s\n", msg, ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
+		msg = fmt.Sprintf("%s    agentConf.MachineInfoConfiguration.NetNSDirAbsPath: %s\n", msg, ic.agentConf.MachineInfoConfiguration.NetNSDirAbsPath)
 	} else {
-		msg = fmt.Sprintf("%s  agentConf: nil\n", msg)
+		msg = fmt.Sprintf("%s    agentConf: nil\n", msg)
 	}
 
 	if ic.conf != nil {
-		msg = fmt.Sprintf("%s  conf:\n", msg)
+		msg = fmt.Sprintf("%s    conf:\n", msg)
 
 		confLines := strings.Split(ic.conf.String(), "\n")
 		for i, line := range confLines {
@@ -1185,16 +1185,16 @@ func (ic *IrqTuningController) String() string {
 				continue
 			}
 
-			msg = fmt.Sprintf("%s  %s\n", msg, line)
+			msg = fmt.Sprintf("%s    %s\n", msg, line)
 		}
 	} else {
-		msg = fmt.Sprintf("%s  conf: nil\n", msg)
+		msg = fmt.Sprintf("%s    conf: nil\n", msg)
 	}
 
 	if ic.emitter != nil {
-		msg = fmt.Sprintf("%s  emitter: non-nil\n", msg)
+		msg = fmt.Sprintf("%s    emitter: non-nil\n", msg)
 	} else {
-		msg = fmt.Sprintf("%s  emitter: nil\n", msg)
+		msg = fmt.Sprintf("%s    emitter: nil\n", msg)
 	}
 
 	return msg
