@@ -1177,6 +1177,10 @@ func (ic *IrqTuningController) String() string {
 				continue
 			}
 
+			if len(strings.TrimSpace(line)) == 0 {
+				continue
+			}
+
 			msg = fmt.Sprintf("%s %s\n", line)
 		}
 	} else {
