@@ -1215,7 +1215,7 @@ func (ic *IrqTuningController) String() string {
 			msg = fmt.Sprintf("%s%s    NumaIDs: %+v\n", msg, indent, socket.NumaIDs)
 
 			if ic.CPUInfo.CPUVendor == cpuid.Intel {
-				msg = fmt.Sprintf("%s%s    IntelNumas: %+v\n", msg, indent, socket.IntelNumas)
+				msg = fmt.Sprintf("%s%s    IntelNumas:\n", msg, indent)
 				for _, j := range socket.NumaIDs {
 					numa := socket.IntelNumas[j]
 					indent = spaces + spaces + spaces + spaces
@@ -1226,6 +1226,28 @@ func (ic *IrqTuningController) String() string {
 					for _, phyCore := range numa.PhyCores {
 						indent = spaces + spaces + spaces + spaces + spaces + spaces
 						msg = fmt.Sprintf("%s%s    CPUs: %+v\n", msg, indent, phyCore.CPUs)
+					}
+				}
+			} else if ic.CPUInfo.CPUVendor == cpuid.AMD {
+				msg = fmt.Sprintf("%s%s    AMDNumas:\n", msg, indent)
+				for _, j := range socket.NumaIDs {
+					numa := socket.AMDNumas[j]
+					indent = spaces + spaces + spaces + spaces
+					msg = fmt.Sprintf("%s%s    AMDNumas[%d]:\n", msg, indent, j)
+
+					indent = spaces + spaces + spaces + spaces + spaces
+					msg = fmt.Sprintf("%s%s    CCDs:\n", msg, indent)
+
+					for k, ccd := range numa.CCDs {
+						indent = spaces + spaces + spaces + spaces + spaces + spaces
+						msg = fmt.Sprintf("%s%s    CCD[%d]:\n", msg, indent, k)
+
+						indent = spaces + spaces + spaces + spaces + spaces + spaces + spaces
+						msg = fmt.Sprintf("%s%s    PhyCores:\n", msg, indent)
+						for _, phyCore := range ccd.PhyCores {
+							indent = spaces + spaces + spaces + spaces + spaces + spaces + spaces + spaces
+							msg = fmt.Sprintf("%s%s    CPUs: %+v\n", msg, indent, phyCore.CPUs)
+						}
 					}
 				}
 			}
