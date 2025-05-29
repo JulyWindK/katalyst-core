@@ -1326,6 +1326,8 @@ func (ic *IrqTuningController) String() string {
 
 			msg = fmt.Sprintf("%s    %s\n", msg, line)
 		}
+	} else {
+		msg = fmt.Sprintf("%s    LowThroughputNics: nil\n", msg)
 	}
 
 	return msg
