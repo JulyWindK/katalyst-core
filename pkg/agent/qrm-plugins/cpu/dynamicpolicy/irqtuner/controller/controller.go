@@ -2222,6 +2222,7 @@ func (ic *IrqTuningController) selectPhysicalCoreWithMostIrqs(coreIrqsCount map[
 }
 
 func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, irqs []int, qualifiedCoresMap map[int64]interface{}) error {
+	general.Infof("%s nic %s tuneNicIrqsAffinityQualifiedCores in", IrqTuningLogPrefix, nic)
 	isSriovContainerNic := true
 	for _, nm := range ic.Nics {
 		if nm.NicInfo.IfIndex == nic.IfIndex {
@@ -2238,6 +2239,8 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 	coresIrqCount := ic.getCoresIrqCount(includeSriovContainersNics)
 	hasIrqTuned := false
 
+	general.Infof("%s nic %s irqs %+v", IrqTuningLogPrefix, nic, irqs)
+
 	for _, irq := range irqs {
 		core, ok := nic.Irq2Core[irq]
 		if !ok {
@@ -2247,6 +2250,7 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 
 		// needless to tune a irq when its affinitied core is qualified
 		if _, ok := qualifiedCoresMap[core]; ok {
+			general.Infof("%s nic %s irq %d affinitied core %s is already qualified", IrqTuningLogPrefix, irq, core)
 			continue
 		}
 
@@ -2426,6 +2430,10 @@ retry:
 				numasWithNotEnoughQualifiedResource = append(numasWithNotEnoughQualifiedResource, numa)
 				goto retry
 			}
+
+			general.Infof("%s nic %s numa %d qualifiedCCDs: %d", IrqTuningLogPrefix, nic, numa, len(qualifiedCCDs))
+			general.Infof("%s call tuneNicIrqsAffinityCCDsFairly", IrqTuningLogPrefix)
+
 			if err := ic.tuneNicIrqsAffinityCCDsFairly(nic, numaAssignedIrqs, qualifiedCCDs); err != nil {
 				general.Errorf("%s failed to tuneIrqsAffinityNumaCCDsFairly for nic %s in numa %d ccds, err %s", IrqTuningLogPrefix, nic, numa, err)
 			}
@@ -2436,6 +2444,9 @@ retry:
 				numasWithNotEnoughQualifiedResource = append(numasWithNotEnoughQualifiedResource, numa)
 				goto retry
 			}
+
+			general.Infof("%s nic %s numa %d qualifiedCoresMap: %+v", IrqTuningLogPrefix, nic, numa, qualifiedCoresMap)
+			general.Infof("%s nic %s call tuneNicIrqsAffinityQualifiedCores", IrqTuningLogPrefix, nic)
 
 			if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, numaAssignedIrqs, qualifiedCoresMap); err != nil {
 				general.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic, err)
@@ -2470,6 +2481,9 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityCCDsFairly(nic *NicInfo, irqs 
 			general.Errorf("%s failed to find qualified cores in ccd for nic %s", IrqTuningLogPrefix, nic)
 			continue
 		}
+
+		general.Infof("%s nic %s qualifiedCoresMap: %+v", IrqTuningLogPrefix, nic, qualifiedCoresMap)
+		general.Infof("%s nic %s call tuneNicIrqsAffinityQualifiedCores", IrqTuningLogPrefix, nic)
 
 		if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, ccdAssignedIrqs, qualifiedCoresMap); err != nil {
 			general.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic, err)
