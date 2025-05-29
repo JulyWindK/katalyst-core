@@ -1311,6 +1311,23 @@ func (ic *IrqTuningController) String() string {
 
 	msg = fmt.Sprintf("%s    NicSyncInterval: %d\n", msg, ic.NicSyncInterval)
 
+	if len(ic.LowThroughputNics) > 0 {
+		msg = fmt.Sprintf("%s    conf:\n", msg)
+
+		confLines := strings.Split(ic.conf.String(), "\n")
+		for i, line := range confLines {
+			if i == 0 {
+				continue
+			}
+
+			if len(strings.TrimSpace(line)) == 0 {
+				continue
+			}
+
+			msg = fmt.Sprintf("%s    %s\n", msg, line)
+		}
+	}
+
 	return msg
 }
 
