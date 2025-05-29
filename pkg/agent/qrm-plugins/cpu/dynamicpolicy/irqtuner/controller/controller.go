@@ -5279,13 +5279,6 @@ func (ic *IrqTuningController) syncDynamicConfig() {
 }
 
 func (ic *IrqTuningController) periodicTuning() {
-	if !ic.conf.EnableIrqTuning {
-		ic.disableIrqTuning()
-		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 0, metrics.MetricTypeNameRaw)
-		return
-	}
-	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 1, metrics.MetricTypeNameRaw)
-
 	if (len(ic.Nics) == 0 && len(ic.LowThroughputNics) == 0) || time.Since(ic.LastNicSyncTime).Seconds() >= float64(ic.NicSyncInterval) {
 		if err := ic.syncNics(); err != nil {
 			general.Errorf("%s failed to syncNics, err %v", IrqTuningLogPrefix, err)
@@ -5293,6 +5286,13 @@ func (ic *IrqTuningController) periodicTuning() {
 			return
 		}
 	}
+
+	if !ic.conf.EnableIrqTuning {
+		ic.disableIrqTuning()
+		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 0, metrics.MetricTypeNameRaw)
+		return
+	}
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningEnabled, 1, metrics.MetricTypeNameRaw)
 
 	switch ic.conf.IrqTuningPolicy {
 	case config.IrqTuningIrqCoresExclusive:
