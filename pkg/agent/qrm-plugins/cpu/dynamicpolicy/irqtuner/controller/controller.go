@@ -1286,6 +1286,31 @@ func (ic *IrqTuningController) String() string {
 		msg = fmt.Sprintf("%s    CPUInfo: nil", msg)
 	}
 
+	if len(ic.Ksoftirqds) > 0 {
+		msg = fmt.Sprintf("%s    Ksoftirqds:\n", msg)
+
+		var cpus []int64
+		for cpu, _ := range ic.Ksoftirqds {
+			cpus = append(cpus, cpu)
+		}
+		general.SortInt64Slice(cpus)
+
+		indent := spaces
+		for _, cpu := range cpus {
+			msg = fmt.Sprintf("%s%s    cpu%d: %d\n", msg, indent, cpu, ic.Ksoftirqds[cpu])
+		}
+	} else {
+		msg = fmt.Sprintf("%s    emitter: nil\n", msg)
+	}
+
+	if ic.IrqStateAdapter != nil {
+		msg = fmt.Sprintf("%s    IrqStateAdapter: non-nil\n", msg)
+	} else {
+		msg = fmt.Sprintf("%s    IrqStateAdapter: nil\n", msg)
+	}
+
+	msg = fmt.Sprintf("%s    NicSyncInterval: %d", msg, ic.NicSyncInterval)
+
 	return msg
 }
 
