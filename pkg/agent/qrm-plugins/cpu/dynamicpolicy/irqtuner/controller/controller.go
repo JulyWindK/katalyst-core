@@ -490,12 +490,12 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 
 	general.Infof("%s normal throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range normalThroughputNics {
-		general.Infof("  %s %s", IrqTuningLogPrefix, nic)
+		general.Infof("%s   %s", IrqTuningLogPrefix, nic)
 	}
 
 	general.Infof("%s low throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range lowThroughputNics {
-		general.Infof("  %s %s", IrqTuningLogPrefix, nic)
+		general.Infof("%s   %s", IrqTuningLogPrefix, nic)
 	}
 
 	nicsAssignedSockets, err := AssignSocketsForNics(normalThroughputNics, cpuInfo, conf.NicAffinitySocketsPolicy)
@@ -640,7 +640,7 @@ retry:
 		general.Infof("%s nic %s before tidy irqs affinitys", IrqTuningLogPrefix, nic)
 		for irq, cpus := range irq2CPUs {
 			cpuStr, _ := general.ConvertIntSliceToBitmapString(cpus)
-			general.Infof("  irq %d: cpu %s", irq, cpuStr)
+			general.Infof("%s   irq %d: cpu %s", IrqTuningLogPrefix, irq, cpuStr)
 		}
 
 		irq2Core, err = machine.TidyUpNicIrqsAffinityCPUs(irq2CPUs)
@@ -649,7 +649,7 @@ retry:
 		} else {
 			general.Infof("%s nic %s after tidy irqs affinitys", IrqTuningLogPrefix, nic)
 			for irq, core := range irq2Core {
-				general.Infof("  irq %d: cpu %d", irq, core)
+				general.Infof("%s   irq %d: cpu %d", IrqTuningLogPrefix, irq, core)
 			}
 		}
 
@@ -692,7 +692,7 @@ func GetNicInfo(nic *machine.NicBasicInfo) (*NicInfo, error) {
 
 	general.Infof("%s nic %s irq affinity", IrqTuningLogPrefix, nic)
 	for irq, core := range irq2Core {
-		general.Infof("  irq %d: cpu %d", irq, core)
+		general.Infof("%s   irq %d: cpu %d", IrqTuningLogPrefix, irq, core)
 	}
 
 	socketIrqCores, err := getSocketIrqCores(irq2Core)
@@ -1621,12 +1621,12 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 
 	general.Infof("%s normal throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range normalThroughputNics {
-		general.Infof(" %s", nic.NicInfo)
+		general.Infof("%s   %s", IrqTuningLogPrefix, nic.NicInfo)
 	}
 
 	general.Infof("%s low throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range lowThroughputNics {
-		general.Infof(" %s", nic.NicInfo)
+		general.Infof("%s   %s", IrqTuningLogPrefix, nic.NicInfo)
 	}
 
 	sort.Slice(normalThroughputNics, func(i, j int) bool {
@@ -1799,12 +1799,12 @@ func (ic *IrqTuningController) syncNics() error {
 
 	general.Infof("%s old nics:", IrqTuningLogPrefix)
 	for _, nic := range oldNics {
-		general.Infof("  %s, queue number %d", nic, nic.NicInfo.QueueNum)
+		general.Infof("%s   %s, queue number %d", IrqTuningLogPrefix, nic, nic.NicInfo.QueueNum)
 	}
 
 	general.Infof("%s new synced nics:", IrqTuningLogPrefix)
 	for _, nic := range nics {
-		general.Infof("  %s, queue number %d", nic, nic.QueueNum)
+		general.Infof("%s   %s, queue number %d", IrqTuningLogPrefix, nic, nic.QueueNum)
 	}
 
 	ic.IndicatorsStats = nil
