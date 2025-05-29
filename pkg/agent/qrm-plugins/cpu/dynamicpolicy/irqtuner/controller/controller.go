@@ -2411,7 +2411,7 @@ retry:
 	irqIndex := 0
 	for _, numa := range qualifiedNumas {
 		numaAssignedIrqCount := avgNumaIrqCount + numasRemainder[numa]
-		numaAssignedIrqs := irqs[irqIndex:numaAssignedIrqCount]
+		numaAssignedIrqs := irqs[irqIndex : irqIndex+numaAssignedIrqCount]
 
 		irqIndex += len(numaAssignedIrqs)
 
