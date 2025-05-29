@@ -1319,8 +1319,8 @@ func (ic *IrqTuningController) String() string {
 			msg = fmt.Sprintf("%s%s    LowThroughputNics[i]:\n", msg, indent, i)
 			indent = spaces + spaces
 
-			confLines := strings.Split(ic.conf.String(), "\n")
-			for i, line := range confLines {
+			nicLines := strings.Split(nic.String(), "\n")
+			for i, line := range nicLines {
 				if i == 0 {
 					continue
 				}
