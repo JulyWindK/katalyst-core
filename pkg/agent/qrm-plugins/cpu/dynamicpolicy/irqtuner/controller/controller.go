@@ -2382,6 +2382,8 @@ retry:
 	avgNumaIrqCount := len(irqs) / len(qualifiedNumas)
 	remainder := len(irqs) % len(qualifiedNumas)
 
+	general.Infof("%s irqs %d, qualifiedNumas: %+v, avgNumaIrqCount: %d, remainder: %d", IrqTuningLogPrefix, len(irqs), qualifiedNumas, avgNumaIrqCount, remainder)
+
 	// distribute the remainder evenly among all sockets, and then numas
 	numasRemainder := make(map[int]int) // numaID as map key
 	left, right := 0, len(qualifiedNumas)-1
@@ -2408,9 +2410,12 @@ retry:
 		return fmt.Errorf("impossible, remainder should be zero after distribute to qualified numas")
 	}
 
+	general.Infof("%s numasRemainder: %+v", IrqTuningLogPrefix, numasRemainder)
+
 	irqIndex := 0
 	for _, numa := range qualifiedNumas {
 		numaAssignedIrqCount := avgNumaIrqCount + numasRemainder[numa]
+		general.Infof("%s numa: %d, avgNumaIrqCount: %d, numasRemainder[%d]: %d, numaAssignedIrqCount: %d", IrqTuningLogPrefix, numa, avgNumaIrqCount, numa, numasRemainder[numa])
 		numaAssignedIrqs := irqs[irqIndex:numaAssignedIrqCount]
 
 		irqIndex += len(numaAssignedIrqs)
