@@ -1309,7 +1309,7 @@ func (ic *IrqTuningController) String() string {
 		msg = fmt.Sprintf("%s    IrqStateAdapter: nil\n", msg)
 	}
 
-	msg = fmt.Sprintf("%s    NicSyncInterval: %d", msg, ic.NicSyncInterval)
+	msg = fmt.Sprintf("%s    NicSyncInterval: %d\n", msg, ic.NicSyncInterval)
 
 	return msg
 }
