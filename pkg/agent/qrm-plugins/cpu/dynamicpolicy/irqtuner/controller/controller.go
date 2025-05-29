@@ -1361,6 +1361,18 @@ func (ic *IrqTuningController) String() string {
 		msg = fmt.Sprintf("%s    LowThroughputNics: nil\n", msg)
 	}
 
+	if ic.IndicatorsStats != nil {
+		msg = fmt.Sprintf("%s    IndicatorsStats: non-nil\n", msg)
+	} else {
+		msg = fmt.Sprintf("%s    IndicatorsStats: nil\n", msg)
+	}
+
+	if ic.IrqAffinityChanges != nil {
+		msg = fmt.Sprintf("%s    IndicatorsStats: non-nil\n", msg)
+	} else {
+		msg = fmt.Sprintf("%s    IrqAffinityChanges: nil\n", msg)
+	}
+
 	return msg
 }
 
