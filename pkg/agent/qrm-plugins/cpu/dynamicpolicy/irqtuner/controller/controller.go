@@ -490,12 +490,12 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 
 	general.Infof("%s normal throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range normalThroughputNics {
-		general.Infof(" %s", nic)
+		general.Infof("  %s %s", IrqTuningLogPrefix, nic)
 	}
 
 	general.Infof("%s low throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range lowThroughputNics {
-		general.Infof(" %s", nic)
+		general.Infof("  %s %s", IrqTuningLogPrefix, nic)
 	}
 
 	nicsAssignedSockets, err := AssignSocketsForNics(normalThroughputNics, cpuInfo, conf.NicAffinitySocketsPolicy)
