@@ -1368,7 +1368,7 @@ func (ic *IrqTuningController) String() string {
 	}
 
 	if ic.IrqAffinityChanges != nil {
-		msg = fmt.Sprintf("%s    IndicatorsStats: non-nil\n", msg)
+		msg = fmt.Sprintf("%s    IrqAffinityChanges:\n", msg)
 	} else {
 		msg = fmt.Sprintf("%s    IrqAffinityChanges: nil\n", msg)
 	}
