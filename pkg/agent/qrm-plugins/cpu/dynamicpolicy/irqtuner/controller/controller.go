@@ -16,6 +16,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 )
 
@@ -972,27 +973,18 @@ func AssignSocketsForLowThroughputNics(nics []*machine.NicBasicInfo, cpuInfo *ma
 	return ifIndex2Sockets
 }
 
-func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSocket map[int][]int) map[int]ExclusiveIrqCoresSelectOrder {
-	var nicsAssignedSockets [][]int
-	for _, sockets := range nicAssignedSocket {
-		nicsAssignedSockets = append(nicsAssignedSockets, sockets)
-	}
-
+func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSockets map[int][]int) map[int]ExclusiveIrqCoresSelectOrder {
+	// define a asssignedSockets set to calculate if has overlapped socket
+	var assignedSockets sets.Int
 	var nicsAssignedSocketsHasOverlap bool
-	for i, sockets := range nicsAssignedSockets {
-		if i == len(nicsAssignedSockets)-1 {
-			break
-		}
 
-		for _, skts := range nicsAssignedSockets[i+1:] {
-			for _, s1 := range sockets {
-				for _, s2 := range skts {
-					if s1 == s2 {
-						nicsAssignedSocketsHasOverlap = true
-						break
-					}
-				}
+	for _, sockets := range nicAssignedSockets {
+		for _, socket := range sockets {
+			if assignedSockets.Has(socket) {
+				nicsAssignedSocketsHasOverlap = true
+				break
 			}
+			assignedSockets.Insert(socket)
 		}
 	}
 
@@ -1001,7 +993,7 @@ func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSocket map[int][]int) 
 	// assgined sockets can select exlcusive irq cores from different part of overlapped socket, for exmaple, one nic select exclusive irq
 	// cores from head part of numa cpus, and another nic select exclusive irq cores from tail part of numa cpus.
 	var nicIfindexes []int
-	for ifIndex, _ := range nicAssignedSocket {
+	for ifIndex, _ := range nicAssignedSockets {
 		nicIfindexes = append(nicIfindexes, ifIndex)
 	}
 	sort.Ints(nicIfindexes)
