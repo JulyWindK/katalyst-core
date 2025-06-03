@@ -3768,12 +3768,13 @@ func (ic *IrqTuningController) calculateExclusiveIrqCoresIncrease(oldIndicatorsS
 	return
 }
 
-func (nm *NicIrqTuningManager) isPingPongIrqBalance(srcIrqCore int64, dstIrqCore int64, lbConf *config.IrqLoadBalanceConfig) bool {
-	if nm.LastIrqLoadBalance == nil {
+func (ic *IrqTuningController) isPingPongIrqBalance(nic *NicIrqTuningManager, srcIrqCore int64, dstIrqCore int64) bool {
+	if nic.LastIrqLoadBalance == nil {
 		return false
 	}
 
-	lastIrqLoadBalance := nm.LastIrqLoadBalance
+	lbConf := &ic.conf.IrqLoadBalanceConf
+	lastIrqLoadBalance := nic.LastIrqLoadBalance
 
 	if time.Since(lastIrqLoadBalance.TimeStamp).Seconds() >= float64(lbConf.PingPongIntervalThresh) {
 		return false
@@ -3966,7 +3967,7 @@ func (ic *IrqTuningController) balanceIrqLoadBasedOnIrqUtil(nic *NicIrqTuningMan
 			break
 		}
 
-		if nic.isPingPongIrqBalance(srcIrqCore.CpuID, cpuUtils[dstIrqCoreIndex].CpuID, lbConf) {
+		if ic.isPingPongIrqBalance(nic, srcIrqCore.CpuID, cpuUtils[dstIrqCoreIndex].CpuID) {
 			nic.TuningRecords.IrqLoadBalancePingPongCount++
 			if nic.TuningRecords.IrqLoadBalancePingPongCount >= lbConf.PingPongCountThresh {
 				needToIncIrqCores = true
