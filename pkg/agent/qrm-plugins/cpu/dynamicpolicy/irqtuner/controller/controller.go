@@ -414,7 +414,7 @@ func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *machine.NicBasicI
 
 	sort.Ints(assignedSockets)
 
-	return &NicIrqTuningManager{
+	nm := &NicIrqTuningManager{
 		Conf:                         conf,
 		NicInfo:                      nicInfo,
 		IrqAffinityPolicy:            InitTuning,
@@ -423,7 +423,11 @@ func NewNicIrqTuningManager(conf *config.IrqTuningConfig, nic *machine.NicBasicI
 		IrqCoresExclusionSwitchStat: IrqCoresExclusionSwitchStat{
 			IrqCoresExclusionLastSwitchTime: time.Now(),
 		},
-	}, nil
+	}
+
+	general.Infof("%s %s", IrqTuningLogPrefix, nm)
+
+	return nm, nil
 }
 
 // return value:
