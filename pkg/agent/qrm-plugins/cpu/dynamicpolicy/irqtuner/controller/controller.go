@@ -1059,7 +1059,7 @@ func AssignSocketsForLowThroughputNics(nics []*machine.NicBasicInfo, cpuInfo *ma
 
 func CalculateNicExclusiveIrqCoresSelectOrdrer(nicAssignedSockets map[int][]int) map[int]ExclusiveIrqCoresSelectOrder {
 	// define a asssignedSockets set to calculate if has overlapped socket
-	var assignedSockets sets.Int
+	assignedSockets := sets.NewInt()
 	var nicsAssignedSocketsHasOverlap bool
 
 	for _, sockets := range nicAssignedSockets {
