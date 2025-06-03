@@ -1090,6 +1090,149 @@ func calculateIrqCoresDiff(a []int64, b []int64) []int64 {
 	return diff
 }
 
+func (nm *NicIrqTuningManager) String() string {
+	msg := "NicIrqTuningManager:\n"
+
+	if nm.Conf != nil {
+		msg = fmt.Sprintf("%s    Conf: non-nil\n", msg)
+	} else {
+		msg = fmt.Sprintf("%s    Conf: nil\n", msg)
+	}
+
+	if nm.NicInfo != nil {
+		msg = fmt.Sprintf("%s    NicInfo:\n", msg)
+
+		nicInfo := nm.NicInfo
+
+		if nicInfo.NicBasicInfo != nil {
+			basicInfo := nicInfo.NicBasicInfo
+
+			msg = fmt.Sprintf("%s        NicBasicInfo:\n", msg)
+			msg = fmt.Sprintf("%s            InterfaceInfo:\n", msg)
+			msg = fmt.Sprintf("%s                NetNSInfo:\n", msg)
+			msg = fmt.Sprintf("%s                    NSName: %s\n", msg, basicInfo.NSName)
+			msg = fmt.Sprintf("%s                    NSInode: %d\n", msg, basicInfo.NSInode)
+			msg = fmt.Sprintf("%s                    NSAbsDir: %s\n", msg, basicInfo.NSAbsDir)
+			msg = fmt.Sprintf("%s                Name: %s\n", msg, basicInfo.Name)
+			msg = fmt.Sprintf("%s                IfIndex: %d\n", msg, basicInfo.IfIndex)
+			msg = fmt.Sprintf("%s                Speed: %d\n", msg, basicInfo.Speed)
+			msg = fmt.Sprintf("%s                NumaNode: %d\n", msg, basicInfo.NumaNode)
+			msg = fmt.Sprintf("%s                Enable: %t\n", msg, basicInfo.Enable)
+			if basicInfo.Addr != nil {
+				msg = fmt.Sprintf("%s                Addr: non-nil\n", msg)
+			} else {
+				msg = fmt.Sprintf("%s                Addr: nil\n", msg)
+			}
+			msg = fmt.Sprintf("%s                PCIAddr: %s\n", msg, basicInfo.IfIndex)
+
+			msg = fmt.Sprintf("%s            Driver: %s\n", msg, basicInfo.Driver)
+			msg = fmt.Sprintf("%s            IsVirtioNetDev: %t\n", msg, basicInfo.IsVirtioNetDev)
+			msg = fmt.Sprintf("%s            VirtioNetName: %s\n", msg, basicInfo.VirtioNetName)
+			msg = fmt.Sprintf("%s            Irqs: %+v\n", msg, basicInfo.Irqs)
+			msg = fmt.Sprintf("%s            QueueNum: %d\n", msg, basicInfo.QueueNum)
+
+			var queues []int
+			for queue, _ := range basicInfo.Queue2Irq {
+				queues = append(queues, queue)
+			}
+			sort.Ints(queues)
+			msg = fmt.Sprintf("%s            Queue2Irq:\n", msg)
+			for _, queue := range queues {
+				msg = fmt.Sprintf("%s                %d: %d\n", msg, queue, basicInfo.Queue2Irq[queue])
+			}
+
+			var irqs []int
+			for irq, _ := range basicInfo.Irq2Queue {
+				irqs = append(irqs, irq)
+			}
+			sort.Ints(irqs)
+			msg = fmt.Sprintf("%s            Irq2Queue:\n", msg)
+			for _, irq := range irqs {
+				msg = fmt.Sprintf("%s                %d: %d\n", msg, irq, basicInfo.Irq2Queue[irq])
+			}
+		} else {
+			msg = fmt.Sprintf("%s        NicBasicInfo: nil\n", msg)
+		}
+
+		var irqs []int
+		for irq, _ := range nicInfo.Irq2Core {
+			irqs = append(irqs, irq)
+		}
+		sort.Ints(irqs)
+		msg = fmt.Sprintf("%s        Irq2Core:\n", msg)
+		for _, irq := range irqs {
+			msg = fmt.Sprintf("%s            %d: %d\n", msg, irq, nicInfo.Irq2Core[irq])
+		}
+
+		var sockets []int
+		for socket, _ := range nicInfo.SocketIrqCores {
+			sockets = append(sockets, socket)
+		}
+		sort.Ints(sockets)
+		msg = fmt.Sprintf("%s        SocketIrqCores:\n", msg)
+		for _, socket := range sockets {
+			irqCores := nicInfo.SocketIrqCores[socket]
+			var tmpIrqCores []int64
+			tmpIrqCores = append(tmpIrqCores, irqCores...)
+			general.SortInt64Slice(tmpIrqCores)
+			msg = fmt.Sprintf("%s            SocketIrqCores[%d]: %+v\n", msg, socket, tmpIrqCores)
+		}
+	} else {
+		msg = fmt.Sprintf("%s    NicInfo: nil\n", msg)
+	}
+
+	msg = fmt.Sprintf("%s    IrqAffinityPolicy: %s\n", msg, nm.IrqAffinityPolicy)
+	msg = fmt.Sprintf("%s    FallbackToBalanceFair: %t\n", msg, nm.FallbackToBalanceFair)
+	msg = fmt.Sprintf("%s    AssignedSockets: %+v\n", msg, nm.AssignedSockets)
+	msg = fmt.Sprintf("%s    ExclusiveIrqCoresSelectOrder: %s\n", msg, nm.ExclusiveIrqCoresSelectOrder)
+
+	msg = fmt.Sprintf("%s    NicThroughputClassSwitchStat:\n", msg)
+	msg = fmt.Sprintf("%s        LowThroughputSuccCount: %d\n", msg, nm.NicThroughputClassSwitchStat.LowThroughputSuccCount)
+	msg = fmt.Sprintf("%s        NormalThroughputSuccCount: %d\n", msg, nm.NicThroughputClassSwitchStat.NormalThroughputSuccCount)
+
+	msg = fmt.Sprintf("%s    IrqCoresExclusionSwitchStat:\n", msg)
+	msg = fmt.Sprintf("%s        IrqCoresExclusionLastSwitchTime: %s\n", msg, nm.IrqCoresExclusionSwitchStat.IrqCoresExclusionLastSwitchTime)
+	msg = fmt.Sprintf("%s        EnableExclusionThreshSuccCount: %d\n", msg, nm.IrqCoresExclusionSwitchStat.EnableExclusionThreshSuccCount)
+	msg = fmt.Sprintf("%s        DisableExclusionThreshSuccCount: %d\n", msg, nm.IrqCoresExclusionSwitchStat.DisableExclusionThreshSuccCount)
+
+	msg = fmt.Sprintf("%s    TuningRecords:\n", msg)
+	if nm.LastIrqLoadBalance != nil {
+		msg = fmt.Sprintf("%s        LastIrqLoadBalance:\n", msg)
+		msg = fmt.Sprintf("%s            SourceCores: %+v\n", msg, nm.LastIrqLoadBalance.SourceCores)
+		msg = fmt.Sprintf("%s            DestCores: %+v\n", msg, nm.LastIrqLoadBalance.DestCores)
+		msg = fmt.Sprintf("%s            IrqTunings:\n", msg)
+		for irq, _ := range nm.LastIrqLoadBalance.IrqTunings {
+			irqAffinityTuning := nm.LastIrqLoadBalance.IrqTunings[irq]
+			msg = fmt.Sprintf("%s                irq: %d, soure core: %d, dest core: %d\n", msg, irq, irqAffinityTuning.SourceCore, irqAffinityTuning.DestCore)
+		}
+		msg = fmt.Sprintf("%s            TimeStamp: %s\n", msg, nm.LastIrqLoadBalance.TimeStamp)
+	} else {
+		msg = fmt.Sprintf("%s        LastIrqLoadBalance: nil\n", msg)
+	}
+
+	msg = fmt.Sprintf("%s        IrqLoadBalancePingPongCount: %d\n", msg, nm.IrqLoadBalancePingPongCount)
+
+	if nm.LastExclusiveIrqCoresInc != nil {
+		msg = fmt.Sprintf("%s        LastExclusiveIrqCoresInc:\n", msg)
+		msg = fmt.Sprintf("%s            Number: %d\n", msg, nm.LastExclusiveIrqCoresInc.Number)
+		msg = fmt.Sprintf("%s            Cores: %+v\n", msg, nm.LastExclusiveIrqCoresInc.Cores)
+		msg = fmt.Sprintf("%s            TimeStamp: %s\n", msg, nm.LastExclusiveIrqCoresInc.TimeStamp)
+	} else {
+		msg = fmt.Sprintf("%s        LastExclusiveIrqCoresInc: nil\n", msg)
+	}
+
+	if nm.LastExclusiveIrqCoresDec != nil {
+		msg = fmt.Sprintf("%s        LastExclusiveIrqCoresDec:\n", msg)
+		msg = fmt.Sprintf("%s            Number: %d\n", msg, nm.LastExclusiveIrqCoresDec.Number)
+		msg = fmt.Sprintf("%s            Cores: %+v\n", msg, nm.LastExclusiveIrqCoresDec.Cores)
+		msg = fmt.Sprintf("%s            TimeStamp: %s\n", msg, nm.LastExclusiveIrqCoresDec.TimeStamp)
+	} else {
+		msg = fmt.Sprintf("%s        LastExclusiveIrqCoresDec: nil\n", msg)
+	}
+
+	return msg
+}
+
 func (nm *NicIrqTuningManager) collectNicStats() (*NicStats, error) {
 	totalRxPackets, err := machine.GetNetDevRxPackets(nm.NicInfo.NicBasicInfo)
 	if err != nil {
