@@ -642,7 +642,7 @@ retry:
 		}
 		retries++
 
-		general.Infof("%s nic %s before tidy irqs affinitys", IrqTuningLogPrefix, nic)
+		general.Infof("%s [before tidy] nic %s irq affinity:", IrqTuningLogPrefix, nic)
 		for irq, cpus := range irq2CPUs {
 			cpuStr, _ := general.ConvertIntSliceToBitmapString(cpus)
 			general.Infof("%s   irq %d: cpu %s", IrqTuningLogPrefix, irq, cpuStr)
@@ -652,7 +652,7 @@ retry:
 		if err != nil {
 			general.Errorf("%s nic %s failed to TidyUpIrqsAffinityCPUs, err %v", IrqTuningLogPrefix, nic, err)
 		} else {
-			general.Infof("%s nic %s after tidy irqs affinitys", IrqTuningLogPrefix, nic)
+			general.Infof("%s [after tidy] nic %s irq affinity:", IrqTuningLogPrefix, nic)
 			for irq, core := range irq2Core {
 				general.Infof("%s   irq %d: cpu %d", IrqTuningLogPrefix, irq, core)
 			}
@@ -695,7 +695,7 @@ func GetNicInfo(nic *machine.NicBasicInfo) (*NicInfo, error) {
 		return nil, fmt.Errorf("failed to getIrqsAffinityCPUs(%+v), err %v", irqs, err)
 	}
 
-	general.Infof("%s nic %s irq affinity", IrqTuningLogPrefix, nic)
+	general.Infof("%s nic %s irq affinity:", IrqTuningLogPrefix, nic)
 	for irq, core := range irq2Core {
 		general.Infof("%s   irq %d: cpu %d", IrqTuningLogPrefix, irq, core)
 	}
