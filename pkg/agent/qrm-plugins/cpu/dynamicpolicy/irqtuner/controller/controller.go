@@ -1709,6 +1709,36 @@ func (ic *IrqTuningController) emitNicIrqLoadBalance(nic *NicIrqTuningManager, l
 		metrics.MetricTag{Key: "dest_cores", Val: destIrqCoresStr})
 }
 
+func (ic *IrqTuningController) isNormalThroughputNic(nic *NicInfo) bool {
+	for _, nm := range ic.Nics {
+		if nm.NicInfo.IfIndex == nic.IfIndex {
+			return true
+		}
+	}
+	return false
+}
+
+func (ic *IrqTuningController) isLowThroughputNic(nic *NicInfo) bool {
+	for _, nm := range ic.LowThroughputNics {
+		if nm.NicInfo.IfIndex == nic.IfIndex {
+			return true
+		}
+	}
+	return false
+}
+
+func (ic *IrqTuningController) isSriovContainerNic(nic *NicInfo) bool {
+	for _, cnt := range ic.SriovContainers {
+		for _, n := range cnt.Nics {
+			if n.IfIndex == nic.IfIndex {
+				return true
+			}
+		}
+
+	}
+	return false
+}
+
 func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error) {
 	nicStats := make(map[int]*NicStats)
 
@@ -2349,33 +2379,37 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 	return qualifiedCCDs
 }
 
-func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
-	isSriovContainerNic := true
+func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo, includeAllNormalThroughputNics bool) map[int64]int {
+	isNormalThroughputNic := ic.isNormalThroughputNic(nic)
 
-	nms := ic.getAllNics()
-	for _, nm := range nms {
-		if nm.NicInfo.IfIndex == nic.IfIndex {
-			isSriovContainerNic = false
-			break
-		}
-	}
-
-	includeSriovContainersNics := false
-	if isSriovContainerNic {
-		includeSriovContainersNics = true
+	isSriovContainerNic := false
+	if !isNormalThroughputNic {
+		isSriovContainerNic = ic.isSriovContainerNic(nic)
 	}
 
 	coresIrqCount := make(map[int64]int)
 
 	// only account normal throughput nics, ignore low throughput nics
-	for _, nic := range ic.Nics {
+	// ic.Nics has been sorted by ifindex
+	for _, nm := range ic.Nics {
+		if !includeAllNormalThroughputNics {
+			// when calculate cores irq count for normal throughput nicX, only account irqs of normal throughput nics with
+			// ifindex less than nicX's ifindex(not include nicX)
+			// generally irq balance will be performed for ic.Nics based on ifindex ascending order, so it will result in
+			// stable balance for all shared-nics.
+			// when calculate cores irq count for low throughput nics, will account irqs of all normal throughput nics.
+			if isNormalThroughputNic && nm.NicInfo.IfIndex >= nic.IfIndex {
+				break
+			}
+		}
+
 		// need to filter irqs of nics whose irq affinity policy is IrqCoresExclusive,
 		// because if a nic's irq affinity policy is changind from others to IrqCoresExclusive,
 		// then its irqs affinitied cores may not be exclusive irq cores, and its irqs should not be counted,
 		// or it will have impact on calculate avg core irq count in non-exclusive irq cores.
-		exclusive, err := ic.isExclusiveIrqCoresNic(nic.NicInfo.IfIndex)
+		exclusive, err := ic.isExclusiveIrqCoresNic(nm.NicInfo.IfIndex)
 		if err != nil {
-			general.Errorf("%s failed to isExclusiveIrqCoresNic check for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
+			general.Errorf("%s failed to isExclusiveIrqCoresNic check for nic %s, err %s", IrqTuningLogPrefix, nm.NicInfo, err)
 			continue
 		}
 
@@ -2383,16 +2417,18 @@ func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
 			continue
 		}
 
-		coreAffIrqs := nic.NicInfo.getIrqCoreAffinitiedIrqs()
+		coreAffIrqs := nm.NicInfo.getIrqCoreAffinitiedIrqs()
 		for core, irqs := range coreAffIrqs {
 			coresIrqCount[core] += len(irqs)
 		}
 	}
 
-	if includeSriovContainersNics {
+	// account sriov nics's irqs only for sriov nic's irq balance
+	// needless to account sriov nics's irqs for shared-nic's irq balance
+	if isSriovContainerNic {
 		for _, cnt := range ic.SriovContainers {
-			for _, nic := range cnt.Nics {
-				coreAffIrqs := nic.getIrqCoreAffinitiedIrqs()
+			for _, n := range cnt.Nics {
+				coreAffIrqs := n.getIrqCoreAffinitiedIrqs()
 				for core, irqs := range coreAffIrqs {
 					coresIrqCount[core] += len(irqs)
 				}
@@ -2496,9 +2532,18 @@ func (ic *IrqTuningController) selectPhysicalCoreWithMostIrqs(coreIrqsCount map[
 	return ic.selectPhysicalCoreWithLeastOrMostIrqs(coreIrqsCount, qualifiedCoresMap, false)
 }
 
+// when calculate cores irq count for normal throughput nicX, only account irqs of normal throughput nics with
+// ifindex less than nicX's ifindex(not include nicX)
+// generally irq balance will be performed for ic.Nics based on ifindex ascending order, so it will result in
+// stable balance for all shared-nics.
+// when calculate cores irq count for low throughput nics, will account irqs of all normal throughput nics.
 func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, irqs []int, qualifiedCoresMap map[int64]interface{}) error {
-	coresIrqCount := ic.getCoresIrqCount(nic)
+	// when calculate cores irq count, needless to account all normal throughput nics' irqs,
+	// only account irqs of nics with ifindex less-than current nic's ifindex.
+	coresIrqCount := ic.getCoresIrqCount(nic, false)
 	hasIrqTuned := false
+
+	isSriovContainerNic := ic.isSriovContainerNic(nic)
 
 	for _, irq := range irqs {
 		core, ok := nic.Irq2Core[irq]
@@ -2507,14 +2552,25 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 			continue
 		}
 
-		// needless to tune a irq when its affinitied core is qualified
-		if _, ok := qualifiedCoresMap[core]; ok {
-			continue
+		// sriov nic needless to change irq affinity if current irq core is qualified,
+		// because later will balance sriov nic's irqs in corresponding qualified cores.
+		// the reason of why not perform static stable irq balance for sriov containers based on container id ascending
+		// order is that containers exit frequently, if one sriov container exit, then irq rebalance will be needed for
+		// containers with container id greater than that of this exited container.
+		if isSriovContainerNic {
+			// needless to tune a irq when its affinitied core is qualified
+			if _, ok := qualifiedCoresMap[core]; ok {
+				continue
+			}
 		}
 
 		targetCore, err := ic.selectPhysicalCoreWithLeastIrqs(coresIrqCount, qualifiedCoresMap)
 		if err != nil {
 			general.Errorf("%s failed to selectPhysicalCoreWithLeastIrqs, err %v", IrqTuningLogPrefix, err)
+			continue
+		}
+
+		if targetCore == core {
 			continue
 		}
 
@@ -2768,8 +2824,9 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 		return fmt.Errorf("qualifiedCoresMap length is zero")
 	}
 
-	// balance irqs in qualified cpus based on all nics(with balance-fair policy)'s irq affinity.
-	coresIrqCount := ic.getCoresIrqCount(nic)
+	// balance irqs in qualified cpus, when calculate cores irq count, need to account irqs of all normal throughput nics, even
+	// irqs of nics with IrqCoresExclusive policy, because qualified cores map will exclude irqs of nics with IrqCoresExclusive policy
+	coresIrqCount := ic.getCoresIrqCount(nic, true)
 	irqSumCount := ic.calculateCoresIrqSumCount(coresIrqCount, qualifiedCoresMap)
 	changedIrq2Core := make(map[int]int64)
 
@@ -3070,20 +3127,6 @@ func (ic *IrqTuningController) balanceSriovContainerNicsIrqsInSelfCores(cnt *Con
 }
 
 func (ic *IrqTuningController) BalanceNicsIrqsInQualifiedCoresFairly() error {
-	for _, nic := range ic.Nics {
-		if nic.IrqAffinityPolicy != IrqCoresExclusive {
-			if err := ic.balanceNicIrqsFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-				general.Errorf("%s failed to balanceNicIrqsFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
-			}
-		}
-	}
-
-	for _, nic := range ic.LowThroughputNics {
-		if err := ic.balanceNicIrqsInNumaFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-			general.Errorf("%s failed to balanceNicIrqsInNumaFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
-		}
-	}
-
 	for _, cnt := range ic.SriovContainers {
 		if err := ic.balanceSriovContainerNicsIrqsInSelfCores(cnt); err != nil {
 			general.Errorf("%s failed to balanceSriovContainerNicsIrqsInSelfCores for container %s, err %v", IrqTuningLogPrefix, cnt.ContainerID, err)
@@ -3093,15 +3136,18 @@ func (ic *IrqTuningController) BalanceNicsIrqsInQualifiedCoresFairly() error {
 	return nil
 }
 
-// need to first put nics's irqs affinity their qualified cores
-// second balance nics' irqs in their qualified cores
 func (ic *IrqTuningController) TuneIrqAffinityForAllNicsWithBalanceFairPolicy() error {
 	// put all irqs of nics with balance-fair policy to qualified cpus
 	if err := ic.TuneNicsIrqsAffinityQualifiedCoresFairly(); err != nil {
 		return fmt.Errorf("failed to TuneNicsIrqsAffinityQualifiedCoresFairly, err %s", err)
 	}
 
-	// balance nic irqs in corresponding qualified cpus
+	// balance sriov nic irqs in corresponding qualified cpus,
+	// shard-nic irqs needless to balance, because TuneNicsIrqsAffinityQualifiedCoresFairly
+	// has stable balance shared-nic irqs.
+	// the reason of why not perform static stable irq balance for sriov containers based on container id ascending
+	// order is that containers exit frequently, if one sriov container exit, then irq rebalance will be needed for
+	// containers with container id greater than that of this exited container.
 	if err := ic.BalanceNicsIrqsInQualifiedCoresFairly(); err != nil {
 		return fmt.Errorf("failed to BalanceNicsIrqsInQualifiedCoresFairly, err %s", err)
 	}
@@ -3163,12 +3209,9 @@ func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
 		} else {
 			nic.IrqAffinityPolicy = IrqCoresExclusive
 
-			for _, lowThroughputNic := range ic.LowThroughputNics {
-				if nic.NicInfo.IfIndex == lowThroughputNic.NicInfo.IfIndex {
-					if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
-						general.Errorf("%s failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
-					}
-					break
+			if ic.isLowThroughputNic(nic.NicInfo) {
+				if err := ic.TuneNicIrqAffinityWithBalanceFairPolicy(nic); err != nil {
+					general.Errorf("%s failed to TuneNicIrqAffinityWithBalanceFairPolicy for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 				}
 			}
 		}
