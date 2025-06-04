@@ -1709,6 +1709,31 @@ func (ic *IrqTuningController) emitNicIrqLoadBalance(nic *NicIrqTuningManager, l
 		metrics.MetricTag{Key: "dest_cores", Val: destIrqCoresStr})
 }
 
+func (ic *IrqTuningController) isNormalThroughputNic(nic *NicInfo) bool {
+	normalThroughputNic := false
+	for _, nm := range ic.Nics {
+		if nm.NicInfo.IfIndex == nic.IfIndex {
+			normalThroughputNic = true
+			break
+		}
+	}
+	return normalThroughputNic
+}
+
+func (ic *IrqTuningController) isSriovContainerNic(nic *NicInfo) bool {
+	sriovNic := false
+	for _, cnt := range ic.SriovContainers {
+		for _, n := range cnt.Nics {
+			if n.IfIndex == nic.IfIndex {
+				sriovNic = true
+				break
+			}
+		}
+
+	}
+	return sriovNic
+}
+
 func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error) {
 	nicStats := make(map[int]*NicStats)
 
@@ -2350,32 +2375,31 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 }
 
 func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
-	isSriovContainerNic := true
+	isNormalThroughputNic := ic.isNormalThroughputNic(nic)
 
-	nms := ic.getAllNics()
-	for _, nm := range nms {
-		if nm.NicInfo.IfIndex == nic.IfIndex {
-			isSriovContainerNic = false
-			break
-		}
-	}
-
-	includeSriovContainersNics := false
-	if isSriovContainerNic {
-		includeSriovContainersNics = true
+	isSriovContainerNic := false
+	if !isNormalThroughputNic {
+		isSriovContainerNic = ic.isSriovContainerNic(nic)
 	}
 
 	coresIrqCount := make(map[int64]int)
 
 	// only account normal throughput nics, ignore low throughput nics
-	for _, nic := range ic.Nics {
+	// ic.Nics has been sorted by ifindex
+	for _, nm := range ic.Nics {
+		// when calculate cores irq count for nicX, needless to account irqs of nics with ifindex greater-equal
+		// nicX's ifindex(including nicX)
+		if isNormalThroughputNic && nm.NicInfo.IfIndex >= nic.IfIndex {
+			break
+		}
+
 		// need to filter irqs of nics whose irq affinity policy is IrqCoresExclusive,
 		// because if a nic's irq affinity policy is changind from others to IrqCoresExclusive,
 		// then its irqs affinitied cores may not be exclusive irq cores, and its irqs should not be counted,
 		// or it will have impact on calculate avg core irq count in non-exclusive irq cores.
-		exclusive, err := ic.isExclusiveIrqCoresNic(nic.NicInfo.IfIndex)
+		exclusive, err := ic.isExclusiveIrqCoresNic(nm.NicInfo.IfIndex)
 		if err != nil {
-			general.Errorf("%s failed to isExclusiveIrqCoresNic check for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
+			general.Errorf("%s failed to isExclusiveIrqCoresNic check for nic %s, err %s", IrqTuningLogPrefix, nm.NicInfo, err)
 			continue
 		}
 
@@ -2383,16 +2407,18 @@ func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
 			continue
 		}
 
-		coreAffIrqs := nic.NicInfo.getIrqCoreAffinitiedIrqs()
+		coreAffIrqs := nm.NicInfo.getIrqCoreAffinitiedIrqs()
 		for core, irqs := range coreAffIrqs {
 			coresIrqCount[core] += len(irqs)
 		}
 	}
 
-	if includeSriovContainersNics {
+	// account sriov nics's irqs only for sriov nic's irq balance
+	// needless to account sriov nics's irqs for shared-nic's irq balance
+	if isSriovContainerNic {
 		for _, cnt := range ic.SriovContainers {
-			for _, nic := range cnt.Nics {
-				coreAffIrqs := nic.getIrqCoreAffinitiedIrqs()
+			for _, n := range cnt.Nics {
+				coreAffIrqs := n.getIrqCoreAffinitiedIrqs()
 				for core, irqs := range coreAffIrqs {
 					coresIrqCount[core] += len(irqs)
 				}
@@ -2500,6 +2526,8 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 	coresIrqCount := ic.getCoresIrqCount(nic)
 	hasIrqTuned := false
 
+	isSriovContainerNic := ic.isSriovContainerNic(nic)
+
 	for _, irq := range irqs {
 		core, ok := nic.Irq2Core[irq]
 		if !ok {
@@ -2507,9 +2535,13 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 			continue
 		}
 
-		// needless to tune a irq when its affinitied core is qualified
-		if _, ok := qualifiedCoresMap[core]; ok {
-			continue
+		// sriov nic needless to change irq affinity if current irq core is qualified,
+		// because later will balance sriov nic's irqs in corresponding qualified cores.
+		if isSriovContainerNic {
+			// needless to tune a irq when its affinitied core is qualified
+			if _, ok := qualifiedCoresMap[core]; ok {
+				continue
+			}
 		}
 
 		targetCore, err := ic.selectPhysicalCoreWithLeastIrqs(coresIrqCount, qualifiedCoresMap)
@@ -2929,76 +2961,6 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 	return nil
 }
 
-func (ic *IrqTuningController) balanceNicIrqsInNumaFairly(nic *NicInfo, assingedSockets []int) error {
-	for _, socket := range assingedSockets {
-		for _, numa := range ic.CPUInfo.Sockets[socket].NumaIDs {
-			numaAffinitiedIrqs := nic.filterCoresAffinitiedIrqs(ic.CPUInfo.GetNodeCPUList(numa))
-			if len(numaAffinitiedIrqs) == 0 {
-				continue
-			}
-
-			qualifiedCoresMap := ic.getNumaQualifiedCoresMapForBalanceFairPolicy(numa)
-			if len(qualifiedCoresMap) == 0 {
-				general.Errorf("%s found zero qualified core in numa %d for nic %s irq affinity", IrqTuningLogPrefix, numa, nic)
-				continue
-			}
-
-			if err := ic.balanceNicIrqsInCoresFairly(nic, numaAffinitiedIrqs, qualifiedCoresMap); err != nil {
-				general.Errorf("%s failed to balanceNicIrqsInCoresFairly for nic %s in numa %d, err %s", IrqTuningLogPrefix, nic, numa, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (ic *IrqTuningController) balanceNicIrqsInCCDFairly(nic *NicInfo, assingedSockets []int) error {
-	if ic.CPUInfo.CPUVendor != cpuid.AMD {
-		return fmt.Errorf("invalid cpu arch %s", ic.CPUInfo.CPUVendor)
-	}
-
-	for _, socket := range assingedSockets {
-		for numaID, amdNuma := range ic.CPUInfo.Sockets[socket].AMDNumas {
-			for _, ccd := range amdNuma.CCDs {
-				ccdAffinitiedIrqs := nic.filterCoresAffinitiedIrqs(machine.GetLLCDomainCPUList(ccd))
-				if len(ccdAffinitiedIrqs) == 0 {
-					continue
-				}
-
-				qualifiedCoresMap := ic.getCCDQualifiedCoresMapForBalanceFairPolicy(ccd)
-				if len(qualifiedCoresMap) == 0 {
-					general.Errorf("%s found zero qualified core in numa %d ccd for nic %s irq affinity", IrqTuningLogPrefix, numaID, nic)
-					continue
-				}
-
-				if err := ic.balanceNicIrqsInCoresFairly(nic, ccdAffinitiedIrqs, qualifiedCoresMap); err != nil {
-					general.Errorf("%s failed to balanceNicIrqsInCoresFairly for nic %s in numa %d ccd, err %s", IrqTuningLogPrefix, nic, numaID, err)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func (ic *IrqTuningController) balanceNicIrqsInLLCDomainFairly(nic *NicInfo, assingedSockets []int) error {
-	if ic.CPUInfo.CPUVendor == cpuid.Intel {
-		return ic.balanceNicIrqsInNumaFairly(nic, assingedSockets)
-	} else if ic.CPUInfo.CPUVendor == cpuid.AMD {
-		return ic.balanceNicIrqsInCCDFairly(nic, assingedSockets)
-	} else {
-		return fmt.Errorf("unsupport cpu arch: %s", ic.CPUInfo.CPUVendor)
-	}
-}
-
-func (ic *IrqTuningController) balanceNicIrqsFairly(nic *NicInfo, assingedSockets []int) error {
-	if ic.conf.IrqTuningPolicy == config.IrqTuningBalanceFair {
-		return ic.balanceNicIrqsInLLCDomainFairly(nic, assingedSockets)
-	} else {
-		return ic.balanceNicIrqsInNumaFairly(nic, assingedSockets)
-	}
-}
-
 func (ic *IrqTuningController) tuneSriovContainerNicsIrqsAffinitySelfCores(cnt *ContainerInfoWrapper) error {
 	rawQualifiedCoresMap := ic.getSocketsQualifiedCoresMapForBalanceFairPolicy([]int{})
 
@@ -3070,20 +3032,6 @@ func (ic *IrqTuningController) balanceSriovContainerNicsIrqsInSelfCores(cnt *Con
 }
 
 func (ic *IrqTuningController) BalanceNicsIrqsInQualifiedCoresFairly() error {
-	for _, nic := range ic.Nics {
-		if nic.IrqAffinityPolicy != IrqCoresExclusive {
-			if err := ic.balanceNicIrqsFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-				general.Errorf("%s failed to balanceNicIrqsFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
-			}
-		}
-	}
-
-	for _, nic := range ic.LowThroughputNics {
-		if err := ic.balanceNicIrqsInNumaFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-			general.Errorf("%s failed to balanceNicIrqsInNumaFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
-		}
-	}
-
 	for _, cnt := range ic.SriovContainers {
 		if err := ic.balanceSriovContainerNicsIrqsInSelfCores(cnt); err != nil {
 			general.Errorf("%s failed to balanceSriovContainerNicsIrqsInSelfCores for container %s, err %v", IrqTuningLogPrefix, cnt.ContainerID, err)
@@ -4439,10 +4387,6 @@ func (ic *IrqTuningController) handleUnqualifiedCoresChangeForExclusiveIrqCores(
 func (ic *IrqTuningController) TuneNicIrqAffinityWithBalanceFairPolicy(nic *NicIrqTuningManager) error {
 	if err := ic.tuneNicIrqsAffinityFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
 		return err
-	}
-
-	if err := ic.balanceNicIrqsFairly(nic.NicInfo, nic.AssignedSockets); err != nil {
-		general.Errorf("%s failed to balanceNicIrqsFairly for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 	}
 
 	nic.IrqAffinityPolicy = IrqBalanceFair
