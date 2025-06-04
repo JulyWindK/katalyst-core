@@ -400,6 +400,26 @@ type ContainerInfoWrapper struct {
 	Nics             []*NicInfo // nics of sriov container
 }
 
+func (c *ContainerInfoWrapper) getContainerCPUs() []int64 {
+	var cpus []int64
+
+	for _, cpuset := range c.ActualCPUSet {
+		cpus = append(cpus, cpuset.ToSliceInt64()...)
+	}
+	return cpus
+}
+
+func (c *ContainerInfoWrapper) isKataBMContainer() bool {
+	if c.RuntimeClassName != KataRuntimeClassName {
+		return false
+	}
+
+	if val, ok := c.Annotations[KataBMAnnotationName]; ok && val == KataBMAnnotationValue {
+		return true
+	}
+	return false
+}
+
 type IrqTuningController struct {
 	agentConf            *agent.AgentConfiguration
 	conf                 *config.IrqTuningConfig
@@ -408,12 +428,14 @@ type IrqTuningController struct {
 	Ksoftirqds           map[int64]int // cpuid as map key, ksoftirqd pid as value
 	IrqStateAdapter      irqtuner.StateAdapter
 	Containers           map[string]*ContainerInfoWrapper // container id as map key
+	SriovContainers      []*ContainerInfoWrapper
+	KataBMContainers     []*ContainerInfoWrapper
 	IrqAffForbiddenCores []int64
 
 	NicSyncInterval   int // interval of sync nic interval, periodic sync for active nics change, like nic number changed, nic queue number changed
 	LastNicSyncTime   time.Time
-	LowThroughputNics []*NicIrqTuningManager
-	Nics              []*NicIrqTuningManager // nic level irq tuning manager
+	LowThroughputNics []*NicIrqTuningManager // sorted by nic ifindex
+	Nics              []*NicIrqTuningManager // sorted by nic ifindex
 	*IndicatorsStats
 
 	IrqAffinityChanges map[int]*IrqAffinityChange // nic ifindex as map key. used to record irq affinity changes in each periodicTuning, and will be reset at the beginning of periodicTuning
@@ -1997,26 +2019,6 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 	}
 }
 
-func (c *ContainerInfoWrapper) getContainerCPUs() []int64 {
-	var cpus []int64
-
-	for _, cpuset := range c.ActualCPUSet {
-		cpus = append(cpus, cpuset.ToSliceInt64()...)
-	}
-	return cpus
-}
-
-func (c *ContainerInfoWrapper) isKataBMContainer() bool {
-	if c.RuntimeClassName != KataRuntimeClassName {
-		return false
-	}
-
-	if val, ok := c.Annotations[KataBMAnnotationName]; ok && val == KataBMAnnotationValue {
-		return true
-	}
-	return false
-}
-
 func (ic *IrqTuningController) syncNics() error {
 	general.Infof("%s sync nics", IrqTuningLogPrefix)
 
@@ -2119,11 +2121,9 @@ func (ic *IrqTuningController) syncNics() error {
 func (ic *IrqTuningController) getKataBMContainerCPUs() []int64 {
 	var katabmCPUs []int64
 
-	for _, cnt := range ic.Containers {
-		if cnt.isKataBMContainer() {
-			for _, cpuset := range cnt.ActualCPUSet {
-				katabmCPUs = append(katabmCPUs, cpuset.ToSliceInt64()...)
-			}
+	for _, cnt := range ic.KataBMContainers {
+		for _, cpuset := range cnt.ActualCPUSet {
+			katabmCPUs = append(katabmCPUs, cpuset.ToSliceInt64()...)
 		}
 	}
 	return katabmCPUs
@@ -2132,11 +2132,9 @@ func (ic *IrqTuningController) getKataBMContainerCPUs() []int64 {
 func (ic *IrqTuningController) getKataBMContainerNumas() []int {
 	var numas []int
 
-	for _, cnt := range ic.Containers {
-		if cnt.isKataBMContainer() {
-			for numaID, _ := range cnt.ActualCPUSet {
-				numas = append(numas, numaID)
-			}
+	for _, cnt := range ic.KataBMContainers {
+		for numaID, _ := range cnt.ActualCPUSet {
+			numas = append(numas, numaID)
 		}
 	}
 	return numas
@@ -2204,11 +2202,7 @@ func (ic *IrqTuningController) getExclusiveIrqCores(excludedNicsIfIndex []int) [
 func (ic *IrqTuningController) getSRIOVContainerDedicatedCores() []int64 {
 	var sriovDedicatedCores []int64
 
-	for _, cnt := range ic.Containers {
-		if !cnt.IsSriovContainer {
-			continue
-		}
-
+	for _, cnt := range ic.SriovContainers {
 		if cnt.CheckDedicated() {
 			for _, cpuset := range cnt.ActualCPUSet {
 				sriovDedicatedCores = append(sriovDedicatedCores, cpuset.ToSliceInt64()...)
@@ -2366,11 +2360,7 @@ func (ic *IrqTuningController) getCoresIrqCount(includeSriovContainersNics bool)
 	}
 
 	if includeSriovContainersNics {
-		for _, cnt := range ic.Containers {
-			if !cnt.IsSriovContainer {
-				continue
-			}
-
+		for _, cnt := range ic.SriovContainers {
 			for _, nic := range cnt.Nics {
 				coreAffIrqs := nic.getIrqCoreAffinitiedIrqs()
 				for core, irqs := range coreAffIrqs {
@@ -3045,11 +3035,7 @@ func (ic *IrqTuningController) TuneNicsIrqsAffinityQualifiedCoresFairly() error 
 		}
 	}
 
-	for _, cnt := range ic.Containers {
-		if !cnt.IsSriovContainer {
-			continue
-		}
-
+	for _, cnt := range ic.SriovContainers {
 		if err := ic.tuneSriovContainerNicsIrqsAffinitySelfCores(cnt); err != nil {
 			general.Errorf("%s failed to tuneSriovContainerNicsIrqsAffinitySelfCores for container %s, err %v", IrqTuningLogPrefix, cnt.ContainerID, err)
 		}
@@ -3096,11 +3082,7 @@ func (ic *IrqTuningController) BalanceNicsIrqsInQualifiedCoresFairly() error {
 		}
 	}
 
-	for _, cnt := range ic.Containers {
-		if !cnt.IsSriovContainer {
-			continue
-		}
-
+	for _, cnt := range ic.SriovContainers {
 		if err := ic.balanceSriovContainerNicsIrqsInSelfCores(cnt); err != nil {
 			general.Errorf("%s failed to balanceSriovContainerNicsIrqsInSelfCores for container %s, err %v", IrqTuningLogPrefix, cnt.ContainerID, err)
 		}
@@ -3382,6 +3364,23 @@ retry:
 		ic.Containers[container.ContainerID] = container
 	}
 
+	var sriovContainers []*ContainerInfoWrapper
+	var katabmContainers []*ContainerInfoWrapper
+	for _, cont := range ic.Containers {
+		if cont.IsSriovContainer {
+			sriovContainers = append(sriovContainers, cont)
+			continue
+		}
+
+		if cont.isKataBMContainer() {
+			katabmContainers = append(katabmContainers, cont)
+		}
+	}
+	ic.KataBMContainers = katabmContainers
+	ic.SriovContainers = sriovContainers
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningSriovContainersCount, int64(len(ic.SriovContainers)), metrics.MetricTypeNameRaw)
+	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningKataBMContainersCount, int64(len(ic.KataBMContainers)), metrics.MetricTypeNameRaw)
+
 	forbiddendCores, err := ic.IrqStateAdapter.GetIRQForbiddenCores()
 	if err != nil {
 		return fmt.Errorf("failed to GetIRQForbiddenCores, err %s", err)
@@ -3447,11 +3446,9 @@ func (ic *IrqTuningController) adaptIrqAffinityPolicy(oldIndicatorsStats *Indica
 	shouldFallbackToBalanceFairPolicy := false
 	// if there are katabm container or sriov container, then fallback to balance-fair policy,
 	// but needless to set nic.FallbackToBalanceFair = true
-	for _, cnt := range ic.Containers {
-		if cnt.isKataBMContainer() || cnt.IsSriovContainer {
-			shouldFallbackToBalanceFairPolicy = true
-			break
-		}
+	for len(ic.KataBMContainers) > 0 || len(ic.SriovContainers) > 0 {
+		shouldFallbackToBalanceFairPolicy = true
+		break
 	}
 
 	oldNicStats := oldIndicatorsStats.NicStats
