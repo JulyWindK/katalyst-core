@@ -2336,7 +2336,11 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 
 func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
 	isSriovContainerNic := true
-	for _, nm := range ic.Nics {
+
+	var nms []*NicIrqTuningManager
+	nms = append(nms, ic.Nics...)
+	nms = append(nms, ic.LowThroughputNics...)
+	for _, nm := range nms {
 		if nm.NicInfo.IfIndex == nic.IfIndex {
 			isSriovContainerNic = false
 			break
