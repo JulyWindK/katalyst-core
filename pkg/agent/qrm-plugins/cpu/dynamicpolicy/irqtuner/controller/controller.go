@@ -1568,6 +1568,14 @@ func (ic *IrqTuningController) String() string {
 	return msg
 }
 
+func (ic *IrqTuningController) getAllNics() []*NicIrqTuningManager {
+	var nics []*NicIrqTuningManager
+	nics = append(nics, ic.Nics...)
+	nics = append(nics, ic.LowThroughputNics...)
+
+	return nics
+}
+
 func (ic *IrqTuningController) emitErrMetric(reason string, level int64) {
 	_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningErr, level, metrics.MetricTypeNameRaw,
 		metrics.MetricTag{Key: "reason", Val: reason})
@@ -1591,7 +1599,8 @@ func (ic *IrqTuningController) emitIrqTuningPolicy() {
 }
 
 func (ic *IrqTuningController) emitNicsIrqAffinityPolicy() {
-	for _, nic := range ic.Nics {
+	nics := ic.getAllNics()
+	for _, nic := range nics {
 		val := int64(-1)
 		if nic.IrqAffinityPolicy == IrqBalanceFair {
 			val = 0
@@ -1702,7 +1711,9 @@ func (ic *IrqTuningController) emitNicIrqLoadBalance(nic *NicIrqTuningManager, l
 
 func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error) {
 	nicStats := make(map[int]*NicStats)
-	for _, nic := range ic.Nics {
+
+	nics := ic.getAllNics()
+	for _, nic := range nics {
 		stats, err := nic.collectNicStats()
 		if err != nil {
 			return nil, fmt.Errorf("failed to collectNicStats, err %v", err)
@@ -1984,7 +1995,7 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		}
 	}
 
-	// clear ic.Nics
+	// clear ic.LowThroughputNics
 	ic.LowThroughputNics = []*NicIrqTuningManager{}
 
 	if len(lowThroughputNics) > 0 {
@@ -2028,9 +2039,7 @@ func (ic *IrqTuningController) syncNics() error {
 	}
 	ic.LastNicSyncTime = time.Now()
 
-	var oldNics []*NicIrqTuningManager
-	oldNics = append(oldNics, ic.Nics...)
-	oldNics = append(oldNics, ic.LowThroughputNics...)
+	oldNics := ic.getAllNics()
 
 	sort.Slice(oldNics, func(i, j int) bool {
 		return oldNics[i].NicInfo.IfIndex < oldNics[j].NicInfo.IfIndex
@@ -2158,6 +2167,12 @@ func (ic *IrqTuningController) isExclusiveIrqCoresNic(ifindex int) (bool, error)
 			} else {
 				return false, nil
 			}
+		}
+	}
+
+	for _, nic := range ic.LowThroughputNics {
+		if nic.NicInfo.IfIndex == ifindex {
+			return false, nil
 		}
 	}
 
@@ -2336,7 +2351,9 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 
 func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
 	isSriovContainerNic := true
-	for _, nm := range ic.Nics {
+
+	nms := ic.getAllNics()
+	for _, nm := range nms {
 		if nm.NicInfo.IfIndex == nic.IfIndex {
 			isSriovContainerNic = false
 			break
@@ -3093,11 +3110,8 @@ func (ic *IrqTuningController) TuneIrqAffinityForAllNicsWithBalanceFairPolicy() 
 }
 
 func (ic *IrqTuningController) restoreNicsOriginalIrqCoresExclusivePolicy() {
-	var nics []*NicIrqTuningManager
-	nics = append(nics, ic.Nics...)
-	nics = append(nics, ic.LowThroughputNics...)
-
 	initTuning := false
+	nics := ic.getAllNics()
 	for _, nic := range nics {
 		if nic.IrqAffinityPolicy == InitTuning {
 			initTuning = true
@@ -3230,7 +3244,8 @@ func (ic *IrqTuningController) getNicsIfSRIOVContainer(cnt *irqtuner.ContainerIn
 	// N.B., shared netns for all containers maybe changed, so missed match in shared netns for all containers
 	// dose not means this container's netns is not shared with other containers, so check if this container's
 	// netns name has prefix "cni-" is neccessary.
-	for _, nic := range ic.Nics {
+	nms := ic.getAllNics()
+	for _, nic := range nms {
 		if netnsInode == nic.NicInfo.NSInode {
 			return false, nil
 		}
@@ -5106,12 +5121,12 @@ func (ic *IrqTuningController) setRPSForNic(nic *NicIrqTuningManager) error {
 	}
 }
 
-func (ic *IrqTuningController) setRPSForNics() error {
+func (ic *IrqTuningController) setRPSForNics(nics []*NicIrqTuningManager) error {
 	if ic.conf.IrqTuningPolicy != config.IrqTuningBalanceFair {
 		return fmt.Errorf("irq tuing policy is %s, only support enable rps for fair-balance policy", ic.conf.IrqTuningPolicy)
 	}
 
-	for _, nic := range ic.Nics {
+	for _, nic := range nics {
 		if err := ic.setRPSForNic(nic); err != nil {
 			general.Errorf("%s failed to setRPSForNic for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 			ic.emitErrMetric(irqtuner.SetRPSForNicFailed, irqtuner.IrqTuningError)
@@ -5146,8 +5161,8 @@ func (ic *IrqTuningController) clearRPSForNic(nic *NicIrqTuningManager) error {
 	return nil
 }
 
-func (ic *IrqTuningController) clearRPSForNics() error {
-	for _, nic := range ic.Nics {
+func (ic *IrqTuningController) clearRPSForNics(nics []*NicIrqTuningManager) error {
+	for _, nic := range nics {
 		if err := ic.clearRPSForNic(nic); err != nil {
 			general.Errorf("%s failed to clearRPSForNic for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 			ic.emitErrMetric(irqtuner.ClearRPSForNicFailed, irqtuner.IrqTuningError)
@@ -5181,7 +5196,8 @@ func (ic *IrqTuningController) nicRPSCleared(nic *NicInfo) bool {
 }
 
 func (ic *IrqTuningController) nicsRPSCleared() bool {
-	for _, nic := range ic.Nics {
+	nics := ic.getAllNics()
+	for _, nic := range nics {
 		if !ic.nicRPSCleared(nic.NicInfo) {
 			return false
 		}
@@ -5319,13 +5335,19 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 
 	// rps reconcile
 	if enableRPS {
-		if err := ic.setRPSForNics(); err != nil {
+		if err := ic.setRPSForNics(ic.Nics); err != nil {
 			general.Errorf("%s failed to setRPSForNics, err %s", IrqTuningLogPrefix, err)
+		}
+
+		if len(ic.LowThroughputNics) > 0 {
+			if err := ic.clearRPSForNics(ic.LowThroughputNics); err != nil {
+				general.Errorf("%s failed to clearRPSForNics, err %s", IrqTuningLogPrefix, err)
+			}
 		}
 
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningRPSEnabled, 1, metrics.MetricTypeNameRaw)
 	} else {
-		if err := ic.clearRPSForNics(); err != nil {
+		if err := ic.clearRPSForNics(ic.getAllNics()); err != nil {
 			general.Errorf("%s failed to clearRPSForNics, err %s", IrqTuningLogPrefix, err)
 		}
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningRPSEnabled, 0, metrics.MetricTypeNameRaw)
@@ -5349,7 +5371,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	}()
 
 	if !ic.nicsRPSCleared() {
-		if err := ic.clearRPSForNics(); err != nil {
+		if err := ic.clearRPSForNics(ic.getAllNics()); err != nil {
 			general.Errorf("%s failed to makeSureNicsRPSCleared, err %s", IrqTuningLogPrefix, err)
 			return
 		}
