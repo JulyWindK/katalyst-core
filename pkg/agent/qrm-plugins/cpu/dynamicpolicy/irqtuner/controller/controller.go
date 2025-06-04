@@ -2334,7 +2334,20 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 	return qualifiedCCDs
 }
 
-func (ic *IrqTuningController) getCoresIrqCount(includeSriovContainersNics bool) map[int64]int {
+func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
+	isSriovContainerNic := true
+	for _, nm := range ic.Nics {
+		if nm.NicInfo.IfIndex == nic.IfIndex {
+			isSriovContainerNic = false
+			break
+		}
+	}
+
+	includeSriovContainersNics := false
+	if isSriovContainerNic {
+		includeSriovContainersNics = true
+	}
+
 	coresIrqCount := make(map[int64]int)
 
 	// only account normal throughput nics, ignore low throughput nics
@@ -2373,9 +2386,7 @@ func (ic *IrqTuningController) getCoresIrqCount(includeSriovContainersNics bool)
 	return coresIrqCount
 }
 
-func (ic *IrqTuningController) calculateCoresIrqSumCount(coresMap map[int64]interface{}, includeSriovContainersNics bool) int {
-	coresIrqCount := ic.getCoresIrqCount(includeSriovContainersNics)
-
+func (ic *IrqTuningController) calculateCoresIrqSumCount(coresIrqCount map[int64]int, coresMap map[int64]interface{}) int {
 	irqSumCount := 0
 	for core, _ := range coresMap {
 		irqSumCount += coresIrqCount[core]
@@ -2469,20 +2480,7 @@ func (ic *IrqTuningController) selectPhysicalCoreWithMostIrqs(coreIrqsCount map[
 }
 
 func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, irqs []int, qualifiedCoresMap map[int64]interface{}) error {
-	isSriovContainerNic := true
-	for _, nm := range ic.Nics {
-		if nm.NicInfo.IfIndex == nic.IfIndex {
-			isSriovContainerNic = false
-			break
-		}
-	}
-
-	includeSriovContainersNics := false
-	if isSriovContainerNic {
-		includeSriovContainersNics = true
-	}
-
-	coresIrqCount := ic.getCoresIrqCount(includeSriovContainersNics)
+	coresIrqCount := ic.getCoresIrqCount(nic)
 	hasIrqTuned := false
 
 	for _, irq := range irqs {
@@ -2753,22 +2751,9 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 		return fmt.Errorf("qualifiedCoresMap length is zero")
 	}
 
-	isSriovContainerNic := true
-	for _, nm := range ic.Nics {
-		if nm.NicInfo.IfIndex == nic.IfIndex {
-			isSriovContainerNic = false
-			break
-		}
-	}
-
-	includeSriovContainersNics := false
-	if isSriovContainerNic {
-		includeSriovContainersNics = true
-	}
-
 	// balance irqs in qualified cpus based on all nics(with balance-fair policy)'s irq affinity.
-	coresIrqCount := ic.getCoresIrqCount(includeSriovContainersNics)
-	irqSumCount := ic.calculateCoresIrqSumCount(qualifiedCoresMap, includeSriovContainersNics)
+	coresIrqCount := ic.getCoresIrqCount(nic)
+	irqSumCount := ic.calculateCoresIrqSumCount(coresIrqCount, qualifiedCoresMap)
 	changedIrq2Core := make(map[int]int64)
 
 	// make sure parameter irqs affinitied cores's irq count less-equal round up avg core irq count, if there is a irq of parameter irqs
