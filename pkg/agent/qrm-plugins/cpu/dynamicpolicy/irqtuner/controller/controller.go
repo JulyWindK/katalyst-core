@@ -2379,7 +2379,7 @@ func (ic *IrqTuningController) getNumaQualifiedCCDsForBalanceFairPolicy(numa int
 	return qualifiedCCDs
 }
 
-func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
+func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo, includeAllNormalThroughputNics bool) map[int64]int {
 	isNormalThroughputNic := ic.isNormalThroughputNic(nic)
 
 	isSriovContainerNic := false
@@ -2392,12 +2392,14 @@ func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo) map[int64]int {
 	// only account normal throughput nics, ignore low throughput nics
 	// ic.Nics has been sorted by ifindex
 	for _, nm := range ic.Nics {
-		// when calculate cores irq count for nicX, needless to account irqs of nics with ifindex greater-equal
-		// nicX's ifindex(including nicX)
-		// generally irq balance will be performed for ic.Nics based on ifindex ascending order, so it will result in
-		// stable balance for all shared-nics.
-		if isNormalThroughputNic && nm.NicInfo.IfIndex >= nic.IfIndex {
-			break
+		if !includeAllNormalThroughputNics {
+			// when calculate cores irq count for nicX, needless to account irqs of nics with ifindex greater-equal
+			// nicX's ifindex(including nicX)
+			// generally irq balance will be performed for ic.Nics based on ifindex ascending order, so it will result in
+			// stable balance for all shared-nics.
+			if isNormalThroughputNic && nm.NicInfo.IfIndex >= nic.IfIndex {
+				break
+			}
 		}
 
 		// need to filter irqs of nics whose irq affinity policy is IrqCoresExclusive,
@@ -2534,7 +2536,7 @@ func (ic *IrqTuningController) selectPhysicalCoreWithMostIrqs(coreIrqsCount map[
 // generally irq balance will be performed for ic.Nics based on ifindex ascending order, so it will result in
 // stable balance for all shared-nics.
 func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, irqs []int, qualifiedCoresMap map[int64]interface{}) error {
-	coresIrqCount := ic.getCoresIrqCount(nic)
+	coresIrqCount := ic.getCoresIrqCount(nic, false)
 	hasIrqTuned := false
 
 	isSriovContainerNic := ic.isSriovContainerNic(nic)
@@ -2815,7 +2817,7 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 	}
 
 	// balance irqs in qualified cpus based on all nics(with balance-fair policy)'s irq affinity.
-	coresIrqCount := ic.getCoresIrqCount(nic)
+	coresIrqCount := ic.getCoresIrqCount(nic, true)
 	irqSumCount := ic.calculateCoresIrqSumCount(coresIrqCount, qualifiedCoresMap)
 	changedIrq2Core := make(map[int]int64)
 
