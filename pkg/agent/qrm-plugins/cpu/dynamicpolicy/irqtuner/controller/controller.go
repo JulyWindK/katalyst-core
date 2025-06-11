@@ -2571,6 +2571,9 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 		}
 
 		if targetCore == core {
+			// init coresIrqCount does not account this nic's irqs, so here coresIrqCount has not account this irq,
+			// so here need to add irq count to target core
+			coresIrqCount[targetCore]++
 			continue
 		}
 
@@ -2581,7 +2584,8 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 		}
 		general.Infof("%s nic %s set irq %d affinity cpu %d", IrqTuningLogPrefix, nic, irq, targetCore)
 
-		coresIrqCount[core]--
+		// init coresIrqCount does not account this nic's irqs, so here coresIrqCount has not account this irq,
+		// so here needless to dec irq count from orignal core, but need to add irq count to target core
 		coresIrqCount[targetCore]++
 		hasIrqTuned = true
 	}
