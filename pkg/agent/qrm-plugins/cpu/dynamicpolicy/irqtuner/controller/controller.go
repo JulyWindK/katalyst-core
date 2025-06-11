@@ -2398,6 +2398,7 @@ func (ic *IrqTuningController) getCoresIrqCount(nic *NicInfo, includeAllNormalTh
 			// generally irq balance will be performed for ic.Nics based on ifindex ascending order, so it will result in
 			// stable balance for all shared-nics.
 			// when calculate cores irq count for low throughput nics, will account irqs of all normal throughput nics.
+			// sriov container nic does not meet this condition
 			if isNormalThroughputNic && nm.NicInfo.IfIndex >= nic.IfIndex {
 				break
 			}
@@ -2571,6 +2572,14 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 		}
 
 		if targetCore == core {
+			// shared nic (include normal throughput nic and low throughput nic):
+			//   getCoresIrqCount does not account this nic's irqs if this nic is a shared nic (stored in ic.Nics or ic.LowThroughputNics),
+			//   so here coresIrqCount has not account this irq, so here need to add irq count to target core
+			// sriov nic:
+			//   sriov nic irqs has been counted in getCoresIrqCount, so here needless to add irq count to target core.
+			if !isSriovContainerNic {
+				coresIrqCount[targetCore]++
+			}
 			continue
 		}
 
@@ -2581,7 +2590,15 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 		}
 		general.Infof("%s nic %s set irq %d affinity cpu %d", IrqTuningLogPrefix, nic, irq, targetCore)
 
-		coresIrqCount[core]--
+		// shared nic (include normal throughput nic and low throughput nic):
+		//   getCoresIrqCount does not account this nic's irqs if this nic is a shared nic (stored in ic.Nics or ic.LowThroughputNics),
+		//   so here coresIrqCount has not account this irq,
+		//   so here needless to dec irq count from orignal core, but need to add irq count to target core
+		// sriov nic:
+		//   sriov nic irqs has been counted in getCoresIrqCount, so here need to dec irq count from orignal core.
+		if isSriovContainerNic {
+			coresIrqCount[core]--
+		}
 		coresIrqCount[targetCore]++
 		hasIrqTuned = true
 	}
