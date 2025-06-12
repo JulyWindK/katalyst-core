@@ -172,7 +172,9 @@ func (e *EvictionStrategyImpl) isResourceExclusivePod(pod *corev1.Pod) bool {
 	}
 
 	podResourceList := native.CalculateResource(pod)
+	klog.Infof("[DEBUG]: pod [%v] podResourceList: %v, nodeAllocatable: %v", pod.Name, podResourceList, node.Status.Allocatable)
 	for resourceName, podQuantity := range podResourceList {
+		klog.Infof("[DEBUG]: pod [%v] podResource [%v]:%v, nodeAllocatable [%v]:%v", pod.Name, resourceName, podQuantity, resourceName, node.Status.Allocatable[resourceName])
 		if nodeQuantity, ok := node.Status.Allocatable[resourceName]; ok {
 			if nodeQuantity.Equal(podQuantity) {
 				return true
