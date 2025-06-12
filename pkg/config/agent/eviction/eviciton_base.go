@@ -36,9 +36,10 @@ type GenericEvictionConfiguration struct {
 	// EvictionManagerSyncPeriod is the interval duration that eviction manager fetches information from registered plugins
 	EvictionManagerSyncPeriod time.Duration
 
-	// those two variables are used to filter out eviction-free pods
+	// those three variables are used to filter out eviction-free pods
 	EvictionSkippedAnnotationKeys sets.String
 	EvictionSkippedLabelKeys      sets.String
+	EvictionSkipResourceExclusive bool
 
 	// EvictionBurst limit the burst eviction counts
 	EvictionBurst int
@@ -61,6 +62,7 @@ type EvictionConfiguration struct {
 
 func NewGenericEvictionConfiguration() *GenericEvictionConfiguration {
 	return &GenericEvictionConfiguration{
+		EvictionSkipResourceExclusive: false,
 		EvictionSkippedAnnotationKeys: sets.NewString(),
 		EvictionSkippedLabelKeys:      sets.NewString(),
 		PodMetricLabels:               sets.NewString(),

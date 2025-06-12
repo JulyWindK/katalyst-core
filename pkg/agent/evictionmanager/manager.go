@@ -167,7 +167,7 @@ func NewEvictionManager(genericClient *client.GenericClientSet, recorder events.
 
 	e := &EvictionManger{
 		killQueue:    queue,
-		killStrategy: rule.NewEvictionStrategyImpl(conf),
+		killStrategy: rule.NewEvictionStrategyImpl(conf, metaServer),
 
 		metaGetter:                metaServer,
 		emitter:                   emitter,
@@ -368,11 +368,15 @@ func (m *EvictionManger) doEvict(softEvictPods, forceEvictPods map[string]*rule.
 
 	rpList := rule.RuledEvictPodList{}
 	for _, rp := range forceEvictPods {
-		if rp != nil && rp.EvictPod.Pod != nil && m.killStrategy.CandidateValidate(rp) {
-			general.Infof(" ready to evict %s/%s, reason: %s", rp.Pod.Namespace, rp.Pod.Name, rp.Reason)
+		if rp == nil || rp.EvictPod == nil || rp.EvictPod.Pod == nil {
+			general.Warningf(" found nil pod in forceEvictPods")
+			continue
+		}
+		if m.killStrategy.CandidateValidate(rp) {
+			general.Infof("ready to evict %s/%s, reason: %s", rp.Pod.Namespace, rp.Pod.Name, rp.Reason)
 			rpList = append(rpList, rp)
 		} else {
-			general.Warningf(" found nil pod in forceEvictPods")
+			general.Warningf("candidate pod %v verification failed, skipping eviction", rp.Pod.Name)
 		}
 	}
 

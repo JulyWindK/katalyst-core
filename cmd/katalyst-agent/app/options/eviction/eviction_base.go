@@ -37,9 +37,10 @@ type GenericEvictionOptions struct {
 	// EvictionManagerSyncPeriod is the interval duration that eviction manager fetches information from registered plugins
 	EvictionManagerSyncPeriod time.Duration
 
-	// those two variables are used to filter out eviction-free pods
+	// those three variables are used to filter out eviction-free pods
 	EvictionSkippedAnnotationKeys []string
 	EvictionSkippedLabelKeys      []string
+	EvictionSkipResourceExclusive bool
 
 	// EvictionBurst limit the burst eviction counts
 	EvictionBurst int
@@ -62,6 +63,7 @@ func NewGenericEvictionOptions() *GenericEvictionOptions {
 		EvictionManagerSyncPeriod:     5 * time.Second,
 		EvictionSkippedAnnotationKeys: []string{},
 		EvictionSkippedLabelKeys:      []string{},
+		EvictionSkipResourceExclusive: false,
 		EvictionBurst:                 3,
 		PodKiller:                     consts.KillerNameEvictionKiller,
 		StrictAuthentication:          false,
@@ -86,6 +88,8 @@ func (o *GenericEvictionOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 		"A list of annotations to identify a bunch of pods that should be filtered out during eviction")
 	fs.StringSliceVar(&o.EvictionSkippedLabelKeys, "eviction-skipped-labels", o.EvictionSkippedLabelKeys,
 		"A list of labels to identify a bunch of pods that should be filtered out during eviction")
+	fs.BoolVar(&o.EvictionSkipResourceExclusive, "eviction-skip-resource-exclusive", o.EvictionSkipResourceExclusive,
+		"Avoid eviction of pods that exclusively use resources")
 
 	fs.IntVar(&o.EvictionBurst, "eviction-burst", o.EvictionBurst,
 		"The burst amount of pods to be evicted by edition manager")
@@ -108,6 +112,7 @@ func (o *GenericEvictionOptions) ApplyTo(c *evictionconfig.GenericEvictionConfig
 	c.EvictionManagerSyncPeriod = o.EvictionManagerSyncPeriod
 	c.EvictionSkippedAnnotationKeys.Insert(o.EvictionSkippedAnnotationKeys...)
 	c.EvictionSkippedLabelKeys.Insert(o.EvictionSkippedLabelKeys...)
+	c.EvictionSkipResourceExclusive = o.EvictionSkipResourceExclusive
 	c.EvictionBurst = o.EvictionBurst
 	c.PodKiller = o.PodKiller
 	c.StrictAuthentication = o.StrictAuthentication
