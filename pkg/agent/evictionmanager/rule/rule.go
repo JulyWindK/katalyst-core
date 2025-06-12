@@ -17,11 +17,16 @@ limitations under the License.
 package rule
 
 import (
+	"context"
+
+	"github.com/kubewharf/katalyst-core/pkg/util/native"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	kubelettypes "k8s.io/kubernetes/pkg/kubelet/types"
 
 	pkgconfig "github.com/kubewharf/katalyst-core/pkg/config"
 	"github.com/kubewharf/katalyst-core/pkg/config/generic"
+	"github.com/kubewharf/katalyst-core/pkg/metaserver"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 )
 
@@ -41,13 +46,15 @@ type EvictionStrategy interface {
 }
 
 type EvictionStrategyImpl struct {
-	conf     *generic.GenericConfiguration
-	compares []general.CmpFunc
+	conf       *generic.GenericConfiguration
+	metaServer *metaserver.MetaServer
+	compares   []general.CmpFunc
 }
 
-func NewEvictionStrategyImpl(conf *pkgconfig.Configuration) EvictionStrategy {
+func NewEvictionStrategyImpl(conf *pkgconfig.Configuration, metaServer *metaserver.MetaServer) EvictionStrategy {
 	e := &EvictionStrategyImpl{
-		conf: conf.GenericConfiguration,
+		conf:       conf.GenericConfiguration,
+		metaServer: metaServer,
 	}
 
 	// if any compare function reach out with a result, returns immediately
@@ -88,6 +95,11 @@ func (e *EvictionStrategyImpl) CandidateValidate(rp *RuledEvictPod) bool {
 	if kubelettypes.IsCriticalPod(pod) {
 		return false
 	}
+
+	if e.isResourceExclusivePod(pod) {
+		return false
+	}
+
 	return true
 }
 
@@ -147,6 +159,29 @@ func (e *EvictionStrategyImpl) ComparePodName(s1, s2 interface{}) int {
 
 		return c1.Pod.Name > c2.Pod.Name
 	}, s1, s2)
+}
+
+func (e *EvictionStrategyImpl) isResourceExclusivePod(pod *corev1.Pod) bool {
+	if pod == nil {
+		return false
+	}
+
+	node, err := e.metaServer.GetNode(context.Background())
+	if err != nil {
+		klog.Warningf("failed to get node, err: %v", err)
+		return false
+	}
+
+	podResourceList := native.CalculateResource(pod)
+	for resourceName, podQuantity := range podResourceList {
+		if nodeQuantity, ok := node.Status.Allocatable[resourceName]; ok {
+			if nodeQuantity.Equal(podQuantity) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // covertBoolSortCompareToIntSort converts the bool-based sorting
