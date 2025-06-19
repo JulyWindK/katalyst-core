@@ -157,12 +157,16 @@ func (p *topologyAdapterImpl) GetTopologyZones(parentCtx context.Context) ([]*no
 		return nil, errors.Wrap(err, "get allocatable Resources from pod resource server failed")
 	}
 
-	if klog.V(5).Enabled() {
-		listPodResourcesResponseStr, _ := json.Marshal(listPodResourcesResponse)
-		allocatableResourcesResponseStr, _ := json.Marshal(allocatableResources)
-		klog.Infof("list pod Resources: %s\n allocatable Resources: %s", string(listPodResourcesResponseStr),
-			string(allocatableResourcesResponseStr))
-	}
+	//if klog.V(5).Enabled() {
+	//	listPodResourcesResponseStr, _ := json.Marshal(listPodResourcesResponse)
+	//	allocatableResourcesResponseStr, _ := json.Marshal(allocatableResources)
+	//	klog.Infof("list pod Resources: %s\n allocatable Resources: %s", string(listPodResourcesResponseStr),
+	//		string(allocatableResourcesResponseStr))
+	//}
+	listPodResourcesResponseStr, _ := json.Marshal(listPodResourcesResponse)
+	allocatableResourcesResponseStr, _ := json.Marshal(allocatableResources)
+	general.Infof("[DEBUG]list pod Resources: %s\n allocatable Resources: %s", string(listPodResourcesResponseStr),
+		string(allocatableResourcesResponseStr))
 
 	// validate pod Resources server response to make sure report topology status is correct
 	if err = p.validatePodResourcesServerResponse(allocatableResources, listPodResourcesResponse); err != nil {
@@ -218,6 +222,10 @@ func (p *topologyAdapterImpl) GetTopologyZones(parentCtx context.Context) ([]*no
 		return nil, errors.Wrap(err, "get device zone topology failed")
 	}
 
+	general.Infof("[DEBUG]zoneAllocations: %v", zoneAllocations)
+	general.Infof("[DEBUG]zoneResources: %v", zoneResources)
+	general.Infof("[DEBUG]zoneAttributes: %v", zoneAttributes)
+	general.Infof("[DEBUG]zoneSiblings: %v", zoneSiblings)
 	return topologyZoneGenerator.GenerateTopologyZoneStatus(zoneAllocations, zoneResources, zoneAttributes, zoneSiblings), nil
 }
 
@@ -286,6 +294,7 @@ func (p *topologyAdapterImpl) Run(ctx context.Context, handler func()) error {
 func (p *topologyAdapterImpl) validatePodResourcesServerResponse(allocatableResourcesResponse *podresv1.
 	AllocatableResourcesResponse, listPodResourcesResponse *podresv1.ListPodResourcesResponse,
 ) error {
+	general.Infof("[DEBUG]needValidationResources:%v", p.needValidationResources)
 	if len(p.needValidationResources) > 0 {
 		if allocatableResourcesResponse == nil {
 			return fmt.Errorf("allocatable resources response is nil")
