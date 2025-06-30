@@ -266,6 +266,7 @@ func getUniqueLockWithTimeout(filename string, duration time.Duration, tries int
 
 // GetUniqueLock is a wrapper function for getUniqueLockWithTimeout with default configurations
 func GetUniqueLock(filename string) (*Flock, error) {
+	klog.Infof("[DEBUG][GetUniqueLock] try to get unique lock, filename: %s", filename)
 	return getUniqueLockWithTimeout(filename, FlockCoolingInterval, FlockTryLockMaxTimes)
 }
 
