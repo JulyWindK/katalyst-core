@@ -157,6 +157,7 @@ func acquireLock(genericCtx *agent.GenericContext, conf *config.Configuration) *
 	}()
 
 	for {
+		klog.Infof("[DEBUG]acquiring lock, lock file name:%v node:%v", conf.LockFileName, conf.NodeName)
 		lock, err := general.GetUniqueLock(fmt.Sprintf("%s-%s", conf.LockFileName, conf.NodeName))
 		if err != nil {
 			_ = genericCtx.EmitterPool.GetDefaultMetricsEmitter().StoreInt64(metricsNameLockingFailed, 1, metrics.MetricTypeNameRaw)
