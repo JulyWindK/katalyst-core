@@ -20,6 +20,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/pprof"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -227,7 +229,15 @@ func (c *GenericContext) Run(ctx context.Context) {
 	c.EmitterPool.Run(ctx)
 	c.BroadcastAdapter.StartRecordingToSink(ctx.Done())
 	go func() {
-		klog.Fatal(c.ListenAndServe())
+		err := c.ListenAndServe()
+		klog.Infof("[DEBUG]GenericContext ListenAndServe err:%v", err)
+		if err != nil && strings.Contains(err.Error(), "address already in use") {
+			klog.Warningf("listen and serve failed:%v", err)
+		}
+		if err != nil && err.Error() == syscall.EADDRINUSE.Error() {
+			klog.Infof("[DEBUG]test err:%v sysErr:%v", err, syscall.EADDRINUSE)
+		}
+		klog.Fatal(err)
 		<-ctx.Done()
 	}()
 }
