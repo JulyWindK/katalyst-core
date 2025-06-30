@@ -233,11 +233,10 @@ func (c *GenericContext) Run(ctx context.Context) {
 		klog.Infof("[DEBUG]GenericContext ListenAndServe err:%v", err)
 		if err != nil && strings.Contains(err.Error(), "address already in use") {
 			klog.Warningf("listen and serve failed:%v", err)
-		}
-		if err != nil && err.Error() == syscall.EADDRINUSE.Error() {
 			klog.Infof("[DEBUG]test err:%v sysErr:%v", err, syscall.EADDRINUSE)
+		} else {
+			klog.Fatal(err)
 		}
-		klog.Fatal(err)
 		<-ctx.Done()
 	}()
 }
