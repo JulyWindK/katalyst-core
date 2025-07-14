@@ -2498,7 +2498,9 @@ func (ic *IrqTuningController) selectPhysicalCoreWithLeastOrMostIrqs(coreIrqsCou
 	targetPhyCoreIndex := -1
 	targetPhyCoreIrqsCount := 0
 
-	for phyCoreIndex, irqsCount := range phyCoreIrqsCount {
+	// make sure traversing phyCores in ascending order
+	for phyCoreIndex, _ := range phyCores {
+		irqsCount := phyCoreIrqsCount[phyCoreIndex]
 		hasQualifiedCPU := false
 		for _, cpu := range phyCores[phyCoreIndex].CPUs {
 			if _, ok := qualifiedCoresMap[cpu]; ok {
