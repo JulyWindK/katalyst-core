@@ -2455,6 +2455,16 @@ func (ic *IrqTuningController) selectPhysicalCoreWithLeastOrMostIrqs(coreIrqsCou
 		return 0, fmt.Errorf("qualifiedCoresMap length is zero")
 	}
 
+	getMinCPUID := func(cpus []int64) int64 {
+		minCPUID := int64(-1)
+		for _, cpu := range cpus {
+			if minCPUID == -1 || cpu < minCPUID {
+				minCPUID = cpu
+			}
+		}
+		return minCPUID
+	}
+
 	general.Infof("%s coresIrqCount:", IrqTuningLogPrefixDebug)
 	var cores []int64
 	for core, _ := range coreIrqsCount {
@@ -2473,7 +2483,12 @@ func (ic *IrqTuningController) selectPhysicalCoreWithLeastOrMostIrqs(coreIrqsCou
 	general.Infof("%s qualified cores: %s", IrqTuningLogPrefixDebug, general.ConvertLinuxListToString(qualifiedCores))
 
 	var phyCores []machine.PhyCore
+	var socketIDs []int
 	for socketID, _ := range ic.CPUInfo.Sockets {
+		socketIDs = append(socketIDs, socketID)
+	}
+	sort.Ints(socketIDs)
+	for _, socketID := range socketIDs {
 		socketPhyCores := ic.CPUInfo.GetSocketPhysicalCores(socketID)
 		phyCores = append(phyCores, socketPhyCores...)
 	}
@@ -2498,7 +2513,9 @@ func (ic *IrqTuningController) selectPhysicalCoreWithLeastOrMostIrqs(coreIrqsCou
 	targetPhyCoreIndex := -1
 	targetPhyCoreIrqsCount := 0
 
-	for phyCoreIndex, irqsCount := range phyCoreIrqsCount {
+	// make sure traversing phyCores in ascending order
+	for phyCoreIndex, phyCore := range phyCores {
+		irqsCount := phyCoreIrqsCount[phyCoreIndex]
 		hasQualifiedCPU := false
 		for _, cpu := range phyCores[phyCoreIndex].CPUs {
 			if _, ok := qualifiedCoresMap[cpu]; ok {
@@ -2511,12 +2528,14 @@ func (ic *IrqTuningController) selectPhysicalCoreWithLeastOrMostIrqs(coreIrqsCou
 		}
 
 		if least {
-			if targetPhyCoreIndex == -1 || irqsCount < targetPhyCoreIrqsCount {
+			if targetPhyCoreIndex == -1 || irqsCount < targetPhyCoreIrqsCount ||
+				(irqsCount == targetPhyCoreIrqsCount && getMinCPUID(phyCore.CPUs) < getMinCPUID(phyCores[targetPhyCoreIrqsCount].CPUs)) {
 				targetPhyCoreIndex = phyCoreIndex
 				targetPhyCoreIrqsCount = irqsCount
 			}
 		} else {
-			if targetPhyCoreIndex == -1 || irqsCount > targetPhyCoreIrqsCount {
+			if targetPhyCoreIndex == -1 || irqsCount > targetPhyCoreIrqsCount ||
+				(irqsCount == targetPhyCoreIrqsCount && getMinCPUID(phyCore.CPUs) < getMinCPUID(phyCores[targetPhyCoreIrqsCount].CPUs)) {
 				targetPhyCoreIndex = phyCoreIndex
 				targetPhyCoreIrqsCount = irqsCount
 			}
@@ -2566,6 +2585,13 @@ func (ic *IrqTuningController) selectPhysicalCoreWithMostIrqs(coreIrqsCount map[
 // generally irq balance will be performed for ic.Nics based on ifindex ascending order, so it will result in
 // stable balance for all shared-nics.
 // when calculate cores irq count for low throughput nics, will account irqs of all normal throughput nics.
+//
+// Regarding the same shared NIC, tuneNicIrqsAffinityQualifiedCores may be called multiple times.
+// However, each time, the coresIrqCount returned by getCoresIrqCount does not account for this
+// NIC's IRQs and does not consider IRQs that have already been tuned in previous calls.
+// Therefore, it is required that for the same NIC, multiple calls to tuneNicIrqsAffinityQualifiedCores
+// use non-overlapping qualifiedCoresMap inputs. This ensures correctness even without tracking
+// previously tuned IRQs.
 func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, irqs []int, qualifiedCoresMap map[int64]interface{}) error {
 	general.Infof("%s func was in, nic %s, irqs:%+v", IrqTuningLogPrefixDebug, nic, irqs)
 
