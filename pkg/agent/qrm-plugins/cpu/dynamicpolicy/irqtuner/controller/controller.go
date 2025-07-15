@@ -884,6 +884,8 @@ func (n *NicInfo) filterCoresAffinitiedIrqs(coresList []int64) []int {
 			irqs = append(irqs, coreIrqs...)
 		}
 	}
+
+	sort.Ints(irqs)
 	return irqs
 }
 
@@ -2910,6 +2912,7 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 	for core, _ := range coresIrqCount {
 		cores = append(cores, core)
 	}
+	general.SortInt64Slice(cores)
 	for _, core := range cores {
 		general.Infof("%s   %d: %d", IrqTuningLogPrefixDebug, core, coresIrqCount[core])
 	}
@@ -3110,7 +3113,8 @@ func (ic *IrqTuningController) balanceNicIrqsInCCDFairly(nic *NicInfo, assingedS
 	}
 
 	for _, socket := range assingedSockets {
-		for numaID, amdNuma := range ic.CPUInfo.Sockets[socket].AMDNumas {
+		for _, numaID := range ic.CPUInfo.Sockets[socket].NumaIDs {
+			amdNuma := ic.CPUInfo.Sockets[socket].AMDNumas[numaID]
 			for _, ccd := range amdNuma.CCDs {
 				ccdAffinitiedIrqs := nic.filterCoresAffinitiedIrqs(machine.GetLLCDomainCPUList(ccd))
 				if len(ccdAffinitiedIrqs) == 0 {
