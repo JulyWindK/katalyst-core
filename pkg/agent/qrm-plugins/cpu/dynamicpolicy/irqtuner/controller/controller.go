@@ -2585,22 +2585,43 @@ func (ic *IrqTuningController) selectPhysicalCoreWithMostIrqs(coreIrqsCount map[
 // generally irq balance will be performed for ic.Nics based on ifindex ascending order, so it will result in
 // stable balance for all shared-nics.
 // when calculate cores irq count for low throughput nics, will account irqs of all normal throughput nics.
-//
-// Regarding the same shared NIC, tuneNicIrqsAffinityQualifiedCores may be called multiple times.
-// However, each time, the coresIrqCount returned by getCoresIrqCount does not account for this
-// NIC's IRQs and does not consider IRQs that have already been tuned in previous calls.
-// Therefore, it is required that for the same NIC, multiple calls to tuneNicIrqsAffinityQualifiedCores
-// use non-overlapping qualifiedCoresMap inputs. This ensures correctness even without tracking
-// previously tuned IRQs.
-func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, irqs []int, qualifiedCoresMap map[int64]interface{}) error {
-	general.Infof("%s func was in, nic %s, irqs:%+v", IrqTuningLogPrefixDebug, nic, irqs)
+func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, irqs []int, qualifiedCoresMap map[int64]interface{}, tunedIrqs []int) error {
+	general.Infof("%s func was in, nic %s, irqs:%+v, tuned irqs: %+v", IrqTuningLogPrefixDebug, nic, irqs, tunedIrqs)
+
+	// shared nic (include normal throughput nic and low throughput nic, stored in ic.Nics and ic.LowThroughputNics):
+	//   shared nic's irqs are not accounted in getCoresIrqCount
+	// sriov nic:
+	//   sriov nic's irqs are accounted in getCoresIrqCount
+	accountedIrqs := make(map[int]struct{})
 
 	// when calculate cores irq count, needless to account all normal throughput nics' irqs,
 	// only account irqs of nics with ifindex less-than current nic's ifindex.
 	coresIrqCount := ic.getCoresIrqCount(nic, false)
+
+	// Regarding the same shared NIC, tuneNicIrqsAffinityQualifiedCores may be called multiple times.
+	// However, each time, the coresIrqCount returned by getCoresIrqCount does not account for this
+	// NIC's IRQs and does not consider IRQs that have already been tuned in previous calls.
+	// Therefore, it is required to pass previously tuned IRQs to tuneNicIrqsAffinityQualifiedCores,
+	// so that the affinity cores of those IRQs can be included when updating coresIrqCount.
+	for _, irq := range tunedIrqs {
+		irqCore, ok := nic.Irq2Core[irq]
+		if !ok {
+			general.Errorf("%s failed to find irq %d in nic %s Irq2Core: %+v", IrqTuningLogPrefix, nic, irq, nic.Irq2Core)
+			continue
+		}
+		coresIrqCount[irqCore]++
+		accountedIrqs[irq] = struct{}{}
+	}
+
 	hasIrqTuned := false
 
 	isSriovContainerNic := ic.isSriovContainerNic(nic)
+	if isSriovContainerNic {
+		// sriov nic's irqs are accounted in getCoresIrqCount
+		for _, irq := range irqs {
+			accountedIrqs[irq] = struct{}{}
+		}
+	}
 
 	general.Infof("%s nic %s, isSriovContainerNic: %t, coresIrqCount:", IrqTuningLogPrefixDebug, nic, isSriovContainerNic)
 	var cores []int64
@@ -2641,13 +2662,11 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 		general.Infof("%s nic %s, irq %d current core %d, new select core %d", IrqTuningLogPrefixDebug, nic, irq, core, targetCore)
 
 		if targetCore == core {
-			// shared nic (include normal throughput nic and low throughput nic):
-			//   getCoresIrqCount does not account this nic's irqs if this nic is a shared nic (stored in ic.Nics or ic.LowThroughputNics),
-			//   so here coresIrqCount has not account this irq, so here need to add irq count to target core
-			// sriov nic:
-			//   sriov nic irqs has been counted in getCoresIrqCount, so here needless to add irq count to target core.
-			if !isSriovContainerNic {
+			// shared nic's irqs are not accounted in getCoresIrqCount, so here coresIrqCount has not account this irq,
+			// need to add irq count to target core
+			if _, ok := accountedIrqs[irq]; !ok {
 				coresIrqCount[targetCore]++
+				accountedIrqs[irq] = struct{}{}
 			}
 			general.Infof("%s nic %s irq %d original core %d is target core", IrqTuningLogPrefix, nic, irq, core)
 			continue
@@ -2660,16 +2679,12 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 		}
 		general.Infof("%s nic %s set irq %d affinity cpu %d", IrqTuningLogPrefix, nic, irq, targetCore)
 
-		// shared nic (include normal throughput nic and low throughput nic):
-		//   getCoresIrqCount does not account this nic's irqs if this nic is a shared nic (stored in ic.Nics or ic.LowThroughputNics),
-		//   so here coresIrqCount has not account this irq,
-		//   so here needless to dec irq count from orignal core, but need to add irq count to target core
-		// sriov nic:
-		//   sriov nic irqs has been counted in getCoresIrqCount, so here need to dec irq count from orignal core.
-		if isSriovContainerNic {
+		// sriov nic's irqs are accounted in getCoresIrqCount, so here need to dec irq count from orignal core.
+		if _, ok := accountedIrqs[irq]; ok {
 			coresIrqCount[core]--
 		}
 		coresIrqCount[targetCore]++
+		accountedIrqs[irq] = struct{}{}
 		hasIrqTuned = true
 	}
 
@@ -2693,8 +2708,11 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 func (ic *IrqTuningController) tuneNicIrqsAffinityNumasFairly(nic *NicInfo, assingedSockets []int, ccdsBalance bool) error {
 	general.Infof("%s func was in, nic %s, assigned sockets: %+v, ccdsBalance: %t", IrqTuningLogPrefixDebug, nic, assingedSockets, ccdsBalance)
 
-retry:
+	var tunedIrqs []int
 	var numasWithNotEnoughQualifiedResource []int
+
+retry:
+	tunedIrqs = []int{} // clear tunedIrqs in retry
 
 	qualifiedNumas := ic.getSocketsQualifiedNumasForBalanceFairPolicy(assingedSockets)
 
@@ -2777,7 +2795,7 @@ retry:
 				general.Infof("%s numa %d qualifiedCCD cpus: %s", IrqTuningLogPrefixDebug, numa, general.ConvertLinuxListToString(cpus))
 			}
 
-			if err := ic.tuneNicIrqsAffinityCCDsFairly(nic, numaAssignedIrqs, qualifiedCCDs); err != nil {
+			if err := ic.tuneNicIrqsAffinityCCDsFairly(nic, numaAssignedIrqs, qualifiedCCDs, tunedIrqs); err != nil {
 				general.Errorf("%s failed to tuneIrqsAffinityNumaCCDsFairly for nic %s in numa %d ccds, err %s", IrqTuningLogPrefix, nic, numa, err)
 			}
 		} else {
@@ -2794,21 +2812,24 @@ retry:
 			}
 			general.Infof("%s nic %s numa %d qualified cpus: %s, irqs: %+v", IrqTuningLogPrefixDebug, nic, numa, general.ConvertLinuxListToString(cpus), numaAssignedIrqs)
 
-			if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, numaAssignedIrqs, qualifiedCoresMap); err != nil {
+			if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, numaAssignedIrqs, qualifiedCoresMap, tunedIrqs); err != nil {
 				general.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic, err)
 			}
 		}
+		tunedIrqs = append(tunedIrqs, numaAssignedIrqs...)
 	}
 
 	return nil
 }
 
-func (ic *IrqTuningController) tuneNicIrqsAffinityCCDsFairly(nic *NicInfo, irqs []int, ccds []*machine.LLCDomain) error {
+func (ic *IrqTuningController) tuneNicIrqsAffinityCCDsFairly(nic *NicInfo, irqs []int, ccds []*machine.LLCDomain, tunedIrqs []int) error {
 	general.Infof("%s func was in, nic %s, irqs: %+v", IrqTuningLogPrefixDebug, nic, irqs)
 
 	avgCCDIrqCount := len(irqs) / len(ccds)
 	remainder := len(irqs) % len(ccds)
 
+	var tmpTunedIrqs []int
+	tmpTunedIrqs = append(tmpTunedIrqs, tunedIrqs...)
 	irqIndex := 0
 	for _, ccd := range ccds {
 		var ccdAssignedIrqs []int
@@ -2836,9 +2857,10 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityCCDsFairly(nic *NicInfo, irqs 
 		}
 		general.Infof("%s nic %s, qualifiedCores: %s, irqs: %+v", IrqTuningLogPrefixDebug, nic, general.ConvertLinuxListToString(cpus), ccdAssignedIrqs)
 
-		if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, ccdAssignedIrqs, qualifiedCoresMap); err != nil {
+		if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, ccdAssignedIrqs, qualifiedCoresMap, tmpTunedIrqs); err != nil {
 			general.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic, err)
 		}
+		tmpTunedIrqs = append(tmpTunedIrqs, ccdAssignedIrqs...)
 	}
 
 	return nil
@@ -3153,7 +3175,7 @@ func (ic *IrqTuningController) tuneSriovContainerNicsIrqsAffinitySelfCores(cnt *
 	}
 
 	for _, nic := range cnt.Nics {
-		if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, nic.getIrqs(), qualifiedCoresMap); err != nil {
+		if err := ic.tuneNicIrqsAffinityQualifiedCores(nic, nic.getIrqs(), qualifiedCoresMap, []int{}); err != nil {
 			general.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for container %s nic %s, err %v",
 				IrqTuningLogPrefix, cnt.ContainerID, nic, err)
 		}
@@ -4630,7 +4652,7 @@ func (ic *IrqTuningController) balanceNicsIrqsAwayFromDecreasedCores(oldIndicato
 					continue
 				}
 
-				if err := ic.tuneNicIrqsAffinityQualifiedCores(nic.NicInfo, decCoresAffinitiedIrqs, qualifiedCoresMap); err != nil {
+				if err := ic.tuneNicIrqsAffinityQualifiedCores(nic.NicInfo, decCoresAffinitiedIrqs, qualifiedCoresMap, []int{}); err != nil {
 					general.Errorf("%s failed to tuneNicIrqsAffinityQualifiedCores for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
 					ic.emitErrMetric(irqtuner.TuneNicIrqsAffinityQualifiedCoresFailed, irqtuner.IrqTuningError)
 				}
