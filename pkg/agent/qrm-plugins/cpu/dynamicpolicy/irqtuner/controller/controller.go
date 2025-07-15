@@ -2507,7 +2507,9 @@ func (ic *IrqTuningController) selectPhysicalCoreWithLeastOrMostIrqs(coreIrqsCou
 
 	general.Infof("%s physical cores irq count:", IrqTuningLogPrefixDebug)
 	for index, phyCore := range phyCores {
-		general.Infof("   %+v: %d", phyCore.CPUs, phyCoreIrqsCount[index])
+		if phyCoreIrqsCount[index] > 0 {
+			general.Infof("   %+v: %d", phyCore.CPUs, phyCoreIrqsCount[index])
+		}
 	}
 
 	targetPhyCoreIndex := -1
