@@ -40,6 +40,7 @@ import (
 
 	nodev1alpha1 "github.com/kubewharf/katalyst-api/pkg/apis/node/v1alpha1"
 	"github.com/kubewharf/katalyst-api/pkg/consts"
+	agentConf "github.com/kubewharf/katalyst-core/pkg/config/agent"
 	"github.com/kubewharf/katalyst-core/pkg/config/generic"
 	pkgconsts "github.com/kubewharf/katalyst-core/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/metaserver"
@@ -1062,6 +1063,7 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 		allocatableResources  *podresv1.AllocatableResourcesResponse
 		numaSocketZoneNodeMap map[util.ZoneNode]util.ZoneNode
 		metaServer            *metaserver.MetaServer
+		cacheGroupCPUsMap     map[int]sets.Int
 	}
 	tests := []struct {
 		name              string
@@ -1072,6 +1074,10 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 		{
 			name: "test-1",
 			args: args{
+				cacheGroupCPUsMap: map[int]sets.Int{
+					0: sets.NewInt(0, 2, 4, 6),
+					1: sets.NewInt(1, 3, 5, 7),
+				},
 				allocatableResources: &podresv1.AllocatableResourcesResponse{
 					Devices: []*podresv1.ContainerDevices{
 						{
@@ -1244,6 +1250,32 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 					},
 					Allocatable: &v1.ResourceList{
 						"nic": resource.MustParse("10G"),
+					},
+				},
+				{
+					Meta: util.ZoneMeta{
+						Type: nodev1alpha1.TopologyTypeCacheGroup,
+						Name: "0",
+					},
+				}: {
+					Capacity: &v1.ResourceList{
+						"cpu": resource.MustParse("4"),
+					},
+					Allocatable: &v1.ResourceList{
+						"cpu": resource.MustParse("4"),
+					},
+				},
+				{
+					Meta: util.ZoneMeta{
+						Type: nodev1alpha1.TopologyTypeCacheGroup,
+						Name: "1",
+					},
+				}: {
+					Capacity: &v1.ResourceList{
+						"cpu": resource.MustParse("4"),
+					},
+					Allocatable: &v1.ResourceList{
+						"cpu": resource.MustParse("4"),
 					},
 				},
 			},
@@ -1584,6 +1616,7 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 			p := &topologyAdapterImpl{
 				metaServer:            tt.args.metaServer,
 				numaSocketZoneNodeMap: tt.args.numaSocketZoneNodeMap,
+				cacheGroupCPUsMap:     tt.args.cacheGroupCPUsMap,
 			}
 			zoneResourcesMap, err := p.getZoneResources(tt.args.allocatableResources)
 			if (err != nil) != tt.wantErr {
@@ -1591,7 +1624,7 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 				return
 			}
 			if !apiequality.Semantic.DeepEqual(zoneResourcesMap, tt.wantZoneResources) {
-				t.Errorf("getZoneResources() got zoneResources = %v, wantZoneResources = %v",
+				t.Errorf("getZoneResources() got zoneResources = %+v, wantZoneResources = %+v",
 					zoneResourcesMap, tt.wantZoneResources)
 			}
 		})
@@ -1742,6 +1775,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 						{
 							Type: nodev1alpha1.TopologyTypeNuma,
 							Name: "0",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
 									"cpu":                                 resource.MustParse("24"),
@@ -1794,6 +1833,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 						{
 							Type: nodev1alpha1.TopologyTypeNuma,
 							Name: "1",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
 									"cpu":                                 resource.MustParse("24"),
@@ -1857,10 +1902,13 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 	t.Parallel()
 
 	type fields struct {
-		podList               []*v1.Pod
-		listPodResources      *podresv1.ListPodResourcesResponse
-		allocatableResources  *podresv1.AllocatableResourcesResponse
-		numaSocketZoneNodeMap map[util.ZoneNode]util.ZoneNode
+		podList                   []*v1.Pod
+		listPodResources          *podresv1.ListPodResourcesResponse
+		allocatableResources      *podresv1.AllocatableResourcesResponse
+		numaSocketZoneNodeMap     map[util.ZoneNode]util.ZoneNode
+		numaCacheGroupZoneNodeMap map[util.ZoneNode][]util.ZoneNode
+		numaDistanceMap           map[int][]machine.NumaDistanceInfo
+		cacheGroupCPUsMap         map[int]sets.Int
 	}
 	tests := []struct {
 		name    string
@@ -2174,6 +2222,44 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 					util.GenerateNumaZoneNode(0): util.GenerateSocketZoneNode(0),
 					util.GenerateNumaZoneNode(1): util.GenerateSocketZoneNode(1),
 				},
+				numaCacheGroupZoneNodeMap: map[util.ZoneNode][]util.ZoneNode{
+					util.GenerateNumaZoneNode(0): {
+						util.GenerateCacheGroupZoneNode(0),
+						util.GenerateCacheGroupZoneNode(2),
+					},
+					util.GenerateNumaZoneNode(1): {
+						util.GenerateCacheGroupZoneNode(1),
+						util.GenerateCacheGroupZoneNode(3),
+					},
+				},
+				numaDistanceMap: map[int][]machine.NumaDistanceInfo{
+					0: {
+						{
+							Distance: 10,
+							NumaID:   0,
+						},
+						{
+							Distance: 20,
+							NumaID:   1,
+						},
+					},
+					1: {
+						{
+							Distance: 20,
+							NumaID:   0,
+						},
+						{
+							Distance: 10,
+							NumaID:   1,
+						},
+					},
+				},
+				cacheGroupCPUsMap: map[int]sets.Int{
+					0: sets.NewInt(0, 4, 8, 12, 16, 20, 24, 28),
+					1: sets.NewInt(1, 5, 9, 13, 17, 21, 25, 29),
+					2: sets.NewInt(2, 6, 10, 14, 18, 22, 26, 30),
+					3: sets.NewInt(3, 7, 11, 15, 19, 23, 27, 31),
+				},
 			},
 			want: []*nodev1alpha1.TopologyZone{
 				{
@@ -2183,6 +2269,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 						{
 							Type: nodev1alpha1.TopologyTypeNuma,
 							Name: "0",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "10,20",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
 									"gpu":    resource.MustParse("2"),
@@ -2223,6 +2315,42 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 							},
 							Children: []*nodev1alpha1.TopologyZone{
 								{
+									Type: nodev1alpha1.TopologyTypeCacheGroup,
+									Name: "0",
+									Resources: nodev1alpha1.Resources{
+										Capacity: &v1.ResourceList{
+											"cpu": resource.MustParse("8"),
+										},
+										Allocatable: &v1.ResourceList{
+											"cpu": resource.MustParse("8"),
+										},
+									},
+									Attributes: []nodev1alpha1.Attribute{
+										{
+											Name:  "cpu_lists",
+											Value: "0,4,8,12,16,20,24,28",
+										},
+									},
+								},
+								{
+									Type: nodev1alpha1.TopologyTypeCacheGroup,
+									Name: "2",
+									Resources: nodev1alpha1.Resources{
+										Capacity: &v1.ResourceList{
+											"cpu": resource.MustParse("8"),
+										},
+										Allocatable: &v1.ResourceList{
+											"cpu": resource.MustParse("8"),
+										},
+									},
+									Attributes: []nodev1alpha1.Attribute{
+										{
+											Name:  "cpu_lists",
+											Value: "2,6,10,14,18,22,26,30",
+										},
+									},
+								},
+								{
 									Type: nodev1alpha1.TopologyTypeNIC,
 									Name: "eth0",
 									Resources: nodev1alpha1.Resources{
@@ -2253,6 +2381,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 						{
 							Type: nodev1alpha1.TopologyTypeNuma,
 							Name: "1",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "20,10",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
 									"cpu":    resource.MustParse("24"),
@@ -2289,6 +2423,42 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 								},
 							},
 							Children: []*nodev1alpha1.TopologyZone{
+								{
+									Type: nodev1alpha1.TopologyTypeCacheGroup,
+									Name: "1",
+									Resources: nodev1alpha1.Resources{
+										Capacity: &v1.ResourceList{
+											"cpu": resource.MustParse("8"),
+										},
+										Allocatable: &v1.ResourceList{
+											"cpu": resource.MustParse("8"),
+										},
+									},
+									Attributes: []nodev1alpha1.Attribute{
+										{
+											Name:  "cpu_lists",
+											Value: "1,5,9,13,17,21,25,29",
+										},
+									},
+								},
+								{
+									Type: nodev1alpha1.TopologyTypeCacheGroup,
+									Name: "3",
+									Resources: nodev1alpha1.Resources{
+										Capacity: &v1.ResourceList{
+											"cpu": resource.MustParse("8"),
+										},
+										Allocatable: &v1.ResourceList{
+											"cpu": resource.MustParse("8"),
+										},
+									},
+									Attributes: []nodev1alpha1.Attribute{
+										{
+											Name:  "cpu_lists",
+											Value: "3,7,11,15,19,23,27,31",
+										},
+									},
+								},
 								{
 									Type: nodev1alpha1.TopologyTypeNIC,
 									Name: "eth1",
@@ -2726,9 +2896,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 					ListPodResourcesResponse:     tt.fields.listPodResources,
 					AllocatableResourcesResponse: tt.fields.allocatableResources,
 				},
-				metaServer:            generateTestMetaServer(tt.fields.podList...),
-				qosConf:               generic.NewQoSConfiguration(),
-				numaSocketZoneNodeMap: tt.fields.numaSocketZoneNodeMap,
+				metaServer:                generateTestMetaServer(tt.fields.podList...),
+				qosConf:                   generic.NewQoSConfiguration(),
+				numaSocketZoneNodeMap:     tt.fields.numaSocketZoneNodeMap,
+				numaCacheGroupZoneNodeMap: tt.fields.numaCacheGroupZoneNodeMap,
+				numaDistanceMap:           tt.fields.numaDistanceMap,
+				cacheGroupCPUsMap:         tt.fields.cacheGroupCPUsMap,
 			}
 			got, err := p.GetTopologyZones(context.TODO())
 			if (err != nil) != tt.wantErr {
@@ -2798,7 +2971,7 @@ func Test_podResourcesServerTopologyAdapterImpl_Run(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.TODO())
 	notifier := make(chan struct{}, 1)
-	p, _ := NewPodResourcesServerTopologyAdapter(testMetaServer, generic.NewQoSConfiguration(),
+	p, _ := NewPodResourcesServerTopologyAdapter(testMetaServer, generic.NewQoSConfiguration(), agentConf.NewAgentConfiguration(),
 		endpoints, kubeletResourcePluginPath, pkgconsts.KubeletQoSResourceManagerCheckpoint, nil,
 		nil, getNumaInfo, nil, podresources.GetV1Client, []string{"cpu", "memory"})
 	err = p.Run(ctx, func() {})
