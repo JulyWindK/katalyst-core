@@ -162,12 +162,15 @@ func (p *topologyAdapterImpl) GetTopologyZones(parentCtx context.Context) ([]*no
 		return nil, errors.Wrap(err, "get allocatable Resources from pod resource server failed")
 	}
 
+	listPodResourcesResponseStr, _ := json.Marshal(listPodResourcesResponse)
+	allocatableResourcesResponseStr, _ := json.Marshal(allocatableResources)
 	if klog.V(5).Enabled() {
-		listPodResourcesResponseStr, _ := json.Marshal(listPodResourcesResponse)
-		allocatableResourcesResponseStr, _ := json.Marshal(allocatableResources)
+
 		klog.Infof("list pod Resources: %s\n allocatable Resources: %s", string(listPodResourcesResponseStr),
 			string(allocatableResourcesResponseStr))
 	}
+	klog.Infof("[KFX]list pod Resources: %s\n allocatable Resources: %s", string(listPodResourcesResponseStr),
+		string(allocatableResourcesResponseStr))
 
 	// validate pod Resources server response to make sure report topology status is correct
 	if err = p.validatePodResourcesServerResponse(allocatableResources, listPodResourcesResponse); err != nil {
@@ -178,50 +181,59 @@ func (p *topologyAdapterImpl) GetTopologyZones(parentCtx context.Context) ([]*no
 	if len(podResources) == 0 {
 		return nil, errors.Errorf("list pod resources response is empty")
 	}
+	klog.Infof("[KFX]list pod Resources: %v", podResources)
 
 	// filter already allocated pods
 	podResourcesList := filterAllocatedPodResourcesList(podResources)
+	klog.Infof("[KFX]filterAllocatedPodResourcesList podResourcesList: %v", podResourcesList)
 
 	// get numa Allocations by pod Resources
 	zoneAllocations, err := p.getZoneAllocations(podList, podResourcesList)
 	if err != nil {
 		return nil, errors.Wrap(err, "get zone allocations failed")
 	}
+	klog.Infof("[KFX]getZoneAllocations zoneAllocations: %v", zoneAllocations)
 
 	// get zone resources by allocatable resources
 	zoneResources, err := p.getZoneResources(allocatableResources)
 	if err != nil {
 		return nil, errors.Wrap(err, "get zone resources failed")
 	}
+	klog.Infof("[KFX]getZoneResources zoneResources: %v", zoneResources)
 
 	// get zone attributes by allocatable resources
 	zoneAttributes, err := p.getZoneAttributes(allocatableResources)
 	if err != nil {
 		return nil, errors.Wrap(err, "get zone attributes failed")
 	}
+	klog.Infof("[KFX]getZoneAttributes zoneAttributes: %v", zoneAttributes)
 
 	// get zone siblings by SiblingNumaMap
 	zoneSiblings, err := p.getZoneSiblings()
 	if err != nil {
 		return nil, errors.Wrap(err, "get zone siblings failed")
 	}
+	klog.Infof("[KFX]getZoneSiblings zoneSiblings: %v", zoneSiblings)
 
 	// initialize a topology zone generator by numa socket zone node map
 	topologyZoneGenerator, err := util.NewNumaSocketTopologyZoneGenerator(p.numaSocketZoneNodeMap)
 	if err != nil {
 		return nil, err
 	}
+	klog.Infof("[KFX]NewNumaSocketTopologyZoneGenerator  topologyZoneGenerator: %v", *topologyZoneGenerator)
 
 	// add other children zone node of numa or socket into topology zone generator by allocatable resources
 	err = p.addNumaSocketChildrenZoneNodes(topologyZoneGenerator, allocatableResources)
 	if err != nil {
 		return nil, errors.Wrap(err, "get socket and numa zone topology failed")
 	}
+	klog.Infof("[KFX]addNumaSocketChildrenZoneNodes  topologyZoneGenerator: %v", *topologyZoneGenerator)
 
 	err = p.addDeviceZoneNodes(topologyZoneGenerator, allocatableResources)
 	if err != nil {
 		return nil, errors.Wrap(err, "get device zone topology failed")
 	}
+	klog.Infof("[KFX]addDeviceZoneNodes  topologyZoneGenerator: %v", *topologyZoneGenerator)
 
 	return topologyZoneGenerator.GenerateTopologyZoneStatus(zoneAllocations, zoneResources, zoneAttributes, zoneSiblings), nil
 }

@@ -136,6 +136,11 @@ func generateTopologyZoneStatus(
 		return nil
 	}
 
+	klog.Infof("[KFX]generateTopologyZoneStatus zoneTopology:%v", *zoneTopology)
+	klog.Infof("[KFX]generateTopologyZoneStatus allocationsMap:%v", allocationsMap)
+	klog.Infof("[KFX]generateTopologyZoneStatus resourcesMap:%v", resourcesMap)
+	klog.Infof("[KFX]generateTopologyZoneStatus attributesMap:%v", attributesMap)
+	klog.Infof("[KFX]generateTopologyZoneStatus siblingsMap:%v", siblingsMap)
 	var result []*nodev1alpha1.TopologyZone
 	for zone, topology := range (*zoneTopology).Children {
 		topologyZone := &nodev1alpha1.TopologyZone{
