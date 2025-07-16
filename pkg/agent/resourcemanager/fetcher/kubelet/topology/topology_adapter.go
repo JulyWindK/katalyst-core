@@ -75,6 +75,9 @@ type topologyAdapterImpl struct {
 	// numaSocketZoneNodeMap map numa zone node => socket zone node
 	numaSocketZoneNodeMap map[util.ZoneNode]util.ZoneNode
 
+	// numaCacheGroupZoneNodeMap map numa zone node => cache group zone nodes
+	numaCacheGroupZoneNodeMap map[util.ZoneNode][]util.ZoneNode
+
 	// skipDeviceNames name of devices which will be skipped in getting numa allocatable and allocation
 	skipDeviceNames sets.String
 
@@ -118,6 +121,7 @@ func NewPodResourcesServerTopologyAdapter(metaServer *metaserver.MetaServer, qos
 	}
 
 	numaSocketZoneNodeMap := util.GenerateNumaSocketZone(numaInfo)
+	numaCacheGroupZoneNodeMap := util.GenerateNumaCacheGroupZone(numaInfo)
 	return &topologyAdapterImpl{
 		endpoints:                      endpoints,
 		kubeletResourcePluginPaths:     kubeletResourcePluginPaths,
@@ -125,6 +129,7 @@ func NewPodResourcesServerTopologyAdapter(metaServer *metaserver.MetaServer, qos
 		qosConf:                        qosConf,
 		metaServer:                     metaServer,
 		numaSocketZoneNodeMap:          numaSocketZoneNodeMap,
+		numaCacheGroupZoneNodeMap:      numaCacheGroupZoneNodeMap,
 		skipDeviceNames:                skipDeviceNames,
 		getClientFunc:                  getClientFunc,
 		podResourcesFilter:             podResourcesFilter,
