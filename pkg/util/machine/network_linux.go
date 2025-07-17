@@ -1128,7 +1128,23 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 		}
 	}
 
+	mountRetyMax := 1
+	retryCount := 0
+retry:
 	if err := syscall.Mount("sysfs", TmpNetNSSysDir, "sysfs", 0, ""); err != nil {
+		if err == syscall.EBUSY {
+			if retryCount < mountRetyMax {
+				klog.Errorf("failed to Mount(%s), err %v", TmpNetNSSysDir, err)
+				if err := syscall.Unmount(TmpNetNSSysDir, 0); err != nil {
+					klog.Fatalf("failed to Unmount(%s), err %v", TmpNetNSSysDir, err)
+				} else {
+					klog.Infof("succeed to Unmount(%s)", TmpNetNSSysDir)
+				}
+				retryCount++
+				goto retry
+			}
+		}
+
 		retErr = fmt.Errorf("failed to Mount(%s), err %v", TmpNetNSSysDir, err)
 		return nil, retErr
 	}
