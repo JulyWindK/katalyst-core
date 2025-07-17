@@ -149,7 +149,7 @@ type IrqTuningConfig struct {
 func NewConfiguration() *IrqTuningConfig {
 	return &IrqTuningConfig{
 		Interval:                 5,
-		EnableIrqTuning:          false,
+		EnableIrqTuning:          true,
 		IrqTuningPolicy:          IrqTuningBalanceFair,
 		EnableRPS:                false,
 		EnableRPSCPUVSNicsQueue:  0,

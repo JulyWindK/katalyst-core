@@ -29,6 +29,8 @@ const (
 	KataBMAnnotationValue = "true"
 )
 
+const IrqTuningLogPrefixDebug = "irq-tuning-debug:"
+
 // specific errors
 var ErrNotFoundProperDestIrqCore = errors.New("not found proper dest irq core for irq balance")
 
@@ -1790,6 +1792,8 @@ func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error
 
 // return value: old IndicatorStats
 func (ic *IrqTuningController) updateIndicatorsStats() (*IndicatorsStats, error) {
+	general.Infof("%s func was in", IrqTuningLogPrefixDebug)
+
 	if ic.IndicatorsStats == nil {
 		stats, err := ic.collectIndicatorsStats()
 		if err != nil {
@@ -1830,6 +1834,8 @@ func (ic *IrqTuningController) updateLatestIndicatorsStats(seconds int) (*Indica
 }
 
 func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *IndicatorsStats) {
+	general.Infof("%s func was in", IrqTuningLogPrefixDebug)
+
 	timeDiff := ic.IndicatorsStats.UpdateTime.Sub(oldIndicatorsStats.UpdateTime).Seconds()
 
 	var normalThroughputNics []*NicIrqTuningManager
@@ -1927,17 +1933,29 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		}
 	}
 
+	general.Infof("%s [old] normal throughput nics:", IrqTuningLogPrefixDebug)
+	for _, nic := range ic.Nics {
+		general.Infof("%s   %s", IrqTuningLogPrefixDebug, nic.NicInfo)
+	}
+
+	general.Infof("%s [old] low throughput nics:", IrqTuningLogPrefixDebug)
+	for _, nic := range ic.LowThroughputNics {
+		general.Infof("%s   %s", IrqTuningLogPrefixDebug, nic.NicInfo)
+	}
+
 	if len(ic.LowThroughputNics)+len(ic.Nics) != len(lowThroughputNics)+len(normalThroughputNics) {
 		general.Errorf("%s some nics are dropped by mistake", IrqTuningLogPrefix)
 		return
 	}
 
 	if !nicsMoved {
+		general.Infof("%s no nic switch throughput class", IrqTuningLogPrefixDebug)
 		return
 	}
 
 	// if no normal throughput Nics, donot move nics, because maybe no containers in the machine
 	if len(normalThroughputNics) == 0 {
+		general.Infof("%s [new] no normal throughput nic, so dont change nic classfication", IrqTuningLogPrefixDebug)
 		return
 	}
 
@@ -3378,6 +3396,8 @@ func (ic *IrqTuningController) getNewContainers(containers []irqtuner.ContainerI
 }
 
 func (ic *IrqTuningController) syncContainers() error {
+	general.Infof("%s func was in", IrqTuningLogPrefixDebug)
+
 	syncContainersRetryCount := 0
 retry:
 	containers, err := ic.IrqStateAdapter.ListContainers()
@@ -3389,6 +3409,11 @@ retry:
 			goto retry
 		}
 		return fmt.Errorf("failed to ListContainers, err %v", err)
+	}
+
+	general.Infof("%s ListContainers:", IrqTuningLogPrefixDebug)
+	for _, cnt := range containers {
+		general.Infof("%s   %s/%s/%s", IrqTuningLogPrefixDebug, cnt.PodName, cnt.ContainerID, cnt.QoSLevel)
 	}
 
 	containersMap := make(map[string]*irqtuner.ContainerInfo)
@@ -3437,6 +3462,8 @@ retry:
 	}
 
 	ic.IrqAffForbiddenCores = forbiddendCores.ToSliceInt64()
+
+	general.Infof("%s IrqAffForbiddenCores: %s", IrqTuningLogPrefixDebug, general.ConvertLinuxListToString(ic.IrqAffForbiddenCores))
 
 	return nil
 }
@@ -5179,6 +5206,8 @@ func (ic *IrqTuningController) nicsRPSCleared() bool {
 }
 
 func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
+	general.Infof("%s func was in", IrqTuningLogPrefixDebug)
+
 	ksoftirqdsNice := make(map[int]int)
 	for _, pid := range ic.Ksoftirqds {
 		nice, err := general.GetProcessNice(pid)
@@ -5291,6 +5320,8 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 		}
 	}
 
+	general.Infof("%s irq cores: %s", IrqTuningLogPrefixDebug, general.ConvertLinuxListToString(totalIrqCores))
+
 	// ic.conf.EnableRPS enalbe rps according to machine specifications configured by kcc
 	enableRPS := ic.conf.EnableRPS
 	if !enableRPS && ic.conf.EnableRPSCPUVSNicsQueue > 0 && len(ic.Nics) <= 2 {
@@ -5304,6 +5335,8 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 			enableRPS = true
 		}
 	}
+
+	general.Infof("%s enableRPS: %t", IrqTuningLogPrefixDebug, enableRPS)
 
 	// rps reconcile
 	if enableRPS {
