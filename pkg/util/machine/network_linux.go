@@ -1129,7 +1129,7 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 	}
 
 	if err := syscall.Mount("sysfs", TmpNetNSSysDir, "sysfs", 0, ""); err != nil {
-		retErr = fmt.Errorf("failed to Mount(%s), err %v", TmpNetNSSysDir, retErr)
+		retErr = fmt.Errorf("failed to Mount(%s), err %v", TmpNetNSSysDir, err)
 		return nil, retErr
 	}
 
