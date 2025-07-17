@@ -1059,13 +1059,17 @@ func ListNetNS(netNSDir string) ([]NetNSInfo, error) {
 }
 
 func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
-	var retErr error
+	var (
+		originalNetNSHdl netns.NsHandle
+		newNetNSHdl      netns.NsHandle
+		err              error
+	)
 
-	// need to LockOSThread during switch netns
+	// Must lock the OS thread when switching netns
 	runtime.LockOSThread()
 
 	defer func() {
-		if retErr != nil {
+		if err != nil {
 			runtime.UnlockOSThread()
 		}
 	}()
@@ -1077,60 +1081,68 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 		}, nil
 	}
 
-	originalNetNSHdl, err := netns.Get()
+	originalNetNSHdl, err = netns.Get()
 	if err != nil {
-		retErr = fmt.Errorf("failed to netns.Get, err %v", err)
-		return nil, retErr
+		return nil, fmt.Errorf("failed to netns.Get, err %v", err)
 	}
 
 	defer func() {
-		if retErr != nil {
+		if err != nil {
 			originalNetNSHdl.Close()
 		}
 	}()
 
 	newNetNSPath := netnsInfo.GetNetNSAbsPath()
-	newNetNSHdl, err := netns.GetFromPath(newNetNSPath)
+	newNetNSHdl, err = netns.GetFromPath(newNetNSPath)
 	if err != nil {
-		retErr = fmt.Errorf("failed to GetFromPath(%s), err %v", newNetNSPath, err)
-		return nil, retErr
+		return nil, fmt.Errorf("failed to GetFromPath(%s), err %v", newNetNSPath, err)
 	}
+
 	defer func() {
-		if retErr != nil {
+		if err != nil {
 			newNetNSHdl.Close()
 		}
 	}()
 
-	if err := netns.Set(newNetNSHdl); err != nil {
-		retErr = fmt.Errorf("failed to setns to %s, err %v", netnsInfo.NSName, retErr)
-		return nil, retErr
+	if err = netns.Set(newNetNSHdl); err != nil {
+		return nil, fmt.Errorf("failed to setns to %s, err %v", netnsInfo.NSName, err)
 	}
 
+	// Ensure we switch back to original netns on failure
 	defer func() {
-		if retErr != nil {
-			// switch back to original netns
-			if err := netns.Set(originalNetNSHdl); err != nil {
-				klog.Fatalf("failed to set netns to host netns, err %v", err)
+		if err != nil {
+			if restoreErr := netns.Set(originalNetNSHdl); restoreErr != nil {
+				klog.Fatalf("failed to restore original netns: %v", restoreErr)
 			}
 		}
 	}()
 
-	// create the target directory if it doesn't exist
-	if _, err := os.Stat(TmpNetNSSysDir); err != nil {
+	// Ensure /tmp/netns_sys exists
+	if _, err = os.Stat(TmpNetNSSysDir); err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(TmpNetNSSysDir, os.FileMode(0755)); err != nil {
-				retErr = fmt.Errorf("failed to MkdirAll(%s), err %v", TmpNetNSSysDir, err)
-				return nil, retErr
+			if err = os.MkdirAll(TmpNetNSSysDir, 0755); err != nil {
+				return nil, fmt.Errorf("failed to create %s, err %v", TmpNetNSSysDir, err)
 			}
 		} else {
-			retErr = fmt.Errorf("failed to Stat(%s), err %v", TmpNetNSSysDir, err)
-			return nil, retErr
+			return nil, fmt.Errorf("failed to stat %s, err %v", TmpNetNSSysDir, err)
 		}
 	}
 
-	if err := syscall.Mount("sysfs", TmpNetNSSysDir, "sysfs", 0, ""); err != nil {
-		retErr = fmt.Errorf("failed to Mount(%s), err %v", TmpNetNSSysDir, retErr)
-		return nil, retErr
+	// Mount sysfs into the new netns
+	if mntErr := syscall.Mount("sysfs", TmpNetNSSysDir, "sysfs", 0, ""); mntErr != nil {
+		if mntErr == syscall.EBUSY {
+			netSysDir := filepath.Join(TmpNetNSSysDir, ClassNetBasePath)
+			if _, statErr := os.Stat(netSysDir); statErr == nil {
+				klog.Warningf("sysfs already mounted at %s, maybe leaked", TmpNetNSSysDir)
+			} else {
+				klog.Warningf("failed to stat %s, err %v", netSysDir, statErr)
+				err = mntErr
+				return nil, fmt.Errorf("failed to mount sysfs at %s, err %v", TmpNetNSSysDir, err)
+			}
+		} else {
+			err = mntErr
+			return nil, fmt.Errorf("failed to mount sysfs at %s, err %v", TmpNetNSSysDir, err)
+		}
 	}
 
 	return &netnsSwitchContext{
