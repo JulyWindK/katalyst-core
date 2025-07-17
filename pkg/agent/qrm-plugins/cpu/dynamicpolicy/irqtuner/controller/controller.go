@@ -2663,14 +2663,14 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 //  1. the bandwidths of different nics may vary greatly, so nic level irqs balance in its assinged sockets will lead to
 //     better total bandwidth balance in its assgined sockets.
 //  2. nic level irq balance is simple than all nics(balance-fair policy)'s irqs balance.
-func (ic *IrqTuningController) tuneNicIrqsAffinityNumasFairly(nic *NicInfo, assingedSockets []int, ccdsBalance bool) error {
+func (ic *IrqTuningController) tuneNicIrqsAffinityNumasFairly(nic *NicInfo, assignedSockets []int, ccdsBalance bool) error {
 	var tunedIrqs []int
 	var numasWithNotEnoughQualifiedResource []int
 
 retry:
 	tunedIrqs = []int{} // clear tunedIrqs in retry
 
-	qualifiedNumas := ic.getSocketsQualifiedNumasForBalanceFairPolicy(assingedSockets)
+	qualifiedNumas := ic.getSocketsQualifiedNumasForBalanceFairPolicy(assignedSockets)
 
 	var tmpQualifiedNumas []int
 	for _, numa := range qualifiedNumas {
@@ -2801,25 +2801,25 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityCCDsFairly(nic *NicInfo, irqs 
 	return nil
 }
 
-func (ic *IrqTuningController) tuneNicIrqsAffinityLLCDomainsFairly(nic *NicInfo, assingedSockets []int) error {
+func (ic *IrqTuningController) tuneNicIrqsAffinityLLCDomainsFairly(nic *NicInfo, assignedSockets []int) error {
 	if ic.CPUInfo.CPUVendor == cpuid.Intel {
-		return ic.tuneNicIrqsAffinityNumasFairly(nic, assingedSockets, false)
+		return ic.tuneNicIrqsAffinityNumasFairly(nic, assignedSockets, false)
 	} else if ic.CPUInfo.CPUVendor == cpuid.AMD {
-		return ic.tuneNicIrqsAffinityNumasFairly(nic, assingedSockets, true)
+		return ic.tuneNicIrqsAffinityNumasFairly(nic, assignedSockets, true)
 	} else {
 		return fmt.Errorf("unsupport cpu arch: %s", ic.CPUInfo.CPUVendor)
 	}
 }
 
-func (ic *IrqTuningController) tuneNicIrqsAffinityFairly(nic *NicInfo, assingedSockets []int) error {
+func (ic *IrqTuningController) tuneNicIrqsAffinityFairly(nic *NicInfo, assignedSockets []int) error {
 	// only enable ccd balance when static config IrqTuningBalanceFair, disable ccd balance when
 	// IrqTuningPolicy is IrqTuningAuto, because if ic.conf.IrqTuningPolicy is IrqTuningAuto, which means
 	// there may have both IrqBalanceFair nic and IrqCoresExclusive nic, IrqCoresExclusive nic's irq cores
 	// will be changed dynamically, which will introduce significant challenges for IrqBalanceFair nic's irqs affinity.
 	if ic.conf.IrqTuningPolicy == config.IrqTuningBalanceFair {
-		return ic.tuneNicIrqsAffinityLLCDomainsFairly(nic, assingedSockets)
+		return ic.tuneNicIrqsAffinityLLCDomainsFairly(nic, assignedSockets)
 	} else {
-		return ic.tuneNicIrqsAffinityNumasFairly(nic, assingedSockets, false)
+		return ic.tuneNicIrqsAffinityNumasFairly(nic, assignedSockets, false)
 	}
 }
 
@@ -2990,8 +2990,8 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 	return nil
 }
 
-func (ic *IrqTuningController) balanceNicIrqsInNumaFairly(nic *NicInfo, assingedSockets []int) error {
-	for _, socket := range assingedSockets {
+func (ic *IrqTuningController) balanceNicIrqsInNumaFairly(nic *NicInfo, assignedSockets []int) error {
+	for _, socket := range assignedSockets {
 		for _, numa := range ic.CPUInfo.Sockets[socket].NumaIDs {
 			numaAffinitiedIrqs := nic.filterCoresAffinitiedIrqs(ic.CPUInfo.GetNodeCPUList(numa))
 			if len(numaAffinitiedIrqs) == 0 {
@@ -3013,12 +3013,12 @@ func (ic *IrqTuningController) balanceNicIrqsInNumaFairly(nic *NicInfo, assinged
 	return nil
 }
 
-func (ic *IrqTuningController) balanceNicIrqsInCCDFairly(nic *NicInfo, assingedSockets []int) error {
+func (ic *IrqTuningController) balanceNicIrqsInCCDFairly(nic *NicInfo, assignedSockets []int) error {
 	if ic.CPUInfo.CPUVendor != cpuid.AMD {
 		return fmt.Errorf("invalid cpu arch %s", ic.CPUInfo.CPUVendor)
 	}
 
-	for _, socket := range assingedSockets {
+	for _, socket := range assignedSockets {
 		for _, numaID := range ic.CPUInfo.Sockets[socket].NumaIDs {
 			amdNuma := ic.CPUInfo.Sockets[socket].AMDNumas[numaID]
 			for _, ccd := range amdNuma.CCDs {
@@ -3043,21 +3043,21 @@ func (ic *IrqTuningController) balanceNicIrqsInCCDFairly(nic *NicInfo, assingedS
 	return nil
 }
 
-func (ic *IrqTuningController) balanceNicIrqsInLLCDomainFairly(nic *NicInfo, assingedSockets []int) error {
+func (ic *IrqTuningController) balanceNicIrqsInLLCDomainFairly(nic *NicInfo, assignedSockets []int) error {
 	if ic.CPUInfo.CPUVendor == cpuid.Intel {
-		return ic.balanceNicIrqsInNumaFairly(nic, assingedSockets)
+		return ic.balanceNicIrqsInNumaFairly(nic, assignedSockets)
 	} else if ic.CPUInfo.CPUVendor == cpuid.AMD {
-		return ic.balanceNicIrqsInCCDFairly(nic, assingedSockets)
+		return ic.balanceNicIrqsInCCDFairly(nic, assignedSockets)
 	} else {
 		return fmt.Errorf("unsupport cpu arch: %s", ic.CPUInfo.CPUVendor)
 	}
 }
 
-func (ic *IrqTuningController) balanceNicIrqsFairly(nic *NicInfo, assingedSockets []int) error {
+func (ic *IrqTuningController) balanceNicIrqsFairly(nic *NicInfo, assignedSockets []int) error {
 	if ic.conf.IrqTuningPolicy == config.IrqTuningBalanceFair {
-		return ic.balanceNicIrqsInLLCDomainFairly(nic, assingedSockets)
+		return ic.balanceNicIrqsInLLCDomainFairly(nic, assignedSockets)
 	} else {
-		return ic.balanceNicIrqsInNumaFairly(nic, assingedSockets)
+		return ic.balanceNicIrqsInNumaFairly(nic, assignedSockets)
 	}
 }
 
@@ -4989,13 +4989,13 @@ func (ic *IrqTuningController) setNicQueuesRPS(nic *NicInfo, queues []int, destC
 	return nil
 }
 
-func (ic *IrqTuningController) setRPSInNumaForNic(nic *NicIrqTuningManager, assingedSockets []int) error {
+func (ic *IrqTuningController) setRPSInNumaForNic(nic *NicIrqTuningManager, assignedSockets []int) error {
 	oldRPSConf, err := machine.GetNicRxQueuesRpsConf(nic.NicInfo.NicBasicInfo)
 	if err != nil {
 		return err
 	}
 
-	for _, socket := range assingedSockets {
+	for _, socket := range assignedSockets {
 		for _, numa := range ic.CPUInfo.Sockets[socket].NumaIDs {
 			numaCoresList := ic.CPUInfo.GetNodeCPUList(numa)
 			numaAffinitiedQueues := nic.NicInfo.filterCoresAffinitiedQueues(numaCoresList)
@@ -5034,13 +5034,13 @@ func (ic *IrqTuningController) setRPSInNumaForNic(nic *NicIrqTuningManager, assi
 	return nil
 }
 
-func (ic *IrqTuningController) setRPSInCCDForNic(nic *NicIrqTuningManager, assingedSockets []int) error {
+func (ic *IrqTuningController) setRPSInCCDForNic(nic *NicIrqTuningManager, assignedSockets []int) error {
 	oldNicRPSConf, err := machine.GetNicRxQueuesRpsConf(nic.NicInfo.NicBasicInfo)
 	if err != nil {
 		return err
 	}
 
-	for _, socket := range assingedSockets {
+	for _, socket := range assignedSockets {
 		for numaID, amdNuma := range ic.CPUInfo.Sockets[socket].AMDNumas {
 			for _, ccd := range amdNuma.CCDs {
 				ccdCoresList := machine.GetLLCDomainCPUList(ccd)
