@@ -5,6 +5,7 @@ import (
 
 	"github.com/kubewharf/katalyst-api/pkg/apis/config/v1alpha1"
 	dynconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
 )
 
 type IrqTuningPolicy string
@@ -287,6 +288,9 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 	}
 
 	if dynamicConf.IRQTuningConfiguration != nil {
+		general.Infof("irq-tuning-debug: ori EnableIrqTuning %t, new EnableIrqTuning: %t",
+			conf.EnableIrqTuning, dynamicConf.IRQTuningConfiguration.EnableTuner)
+
 		conf.Interval = dynamicConf.IRQTuningConfiguration.TuningInterval
 		conf.EnableIrqTuning = dynamicConf.IRQTuningConfiguration.EnableTuner
 
