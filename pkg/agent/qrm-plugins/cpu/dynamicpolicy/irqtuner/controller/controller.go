@@ -1941,12 +1941,12 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 		return
 	}
 
-	general.Infof("%s normal throughput nics:", IrqTuningLogPrefix)
+	general.Infof("%s new normal throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range normalThroughputNics {
 		general.Infof("%s   %s", IrqTuningLogPrefix, nic.NicInfo)
 	}
 
-	general.Infof("%s low throughput nics:", IrqTuningLogPrefix)
+	general.Infof("%s new low throughput nics:", IrqTuningLogPrefix)
 	for _, nic := range lowThroughputNics {
 		general.Infof("%s   %s", IrqTuningLogPrefix, nic.NicInfo)
 	}
@@ -1972,15 +1972,15 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 	ic.Nics = []*NicIrqTuningManager{}
 
 	for _, nic := range normalThroughputNics {
-		newAssingedSockets, ok := nicsAssignedSockets[nic.NicInfo.IfIndex]
+		newAssignedSockets, ok := nicsAssignedSockets[nic.NicInfo.IfIndex]
 		if !ok {
 			general.Errorf("%s failed to find %s in nics new assigned sockets", IrqTuningLogPrefix, nic.NicInfo)
-			newAssingedSockets = nic.AssignedSockets
+			newAssignedSockets = nic.AssignedSockets
 		}
 
-		if len(newAssingedSockets) == 0 {
+		if len(newAssignedSockets) == 0 {
 			general.Errorf("%s it's impossible that nic %s assigned sockets is empty", IrqTuningLogPrefix, nic.NicInfo)
-			newAssingedSockets = nic.AssignedSockets
+			newAssignedSockets = nic.AssignedSockets
 		}
 
 		irqCoresSelectOrder, ok := nicsExclusiveIrqCoresSelectOrder[nic.NicInfo.IfIndex]
@@ -1989,10 +1989,10 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 			irqCoresSelectOrder = Forward
 		}
 
-		sort.Ints(newAssingedSockets)
+		sort.Ints(newAssignedSockets)
 
 		oldAssignedSockets := nic.AssignedSockets
-		nic.AssignedSockets = newAssingedSockets
+		nic.AssignedSockets = newAssignedSockets
 		oldExclusiveIrqCoresSelectOrder := nic.ExclusiveIrqCoresSelectOrder
 		nic.ExclusiveIrqCoresSelectOrder = irqCoresSelectOrder
 
@@ -2000,7 +2000,7 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 
 		if nic.IrqAffinityPolicy == IrqCoresExclusive {
 			change := false
-			if len(oldAssignedSockets) != len(newAssingedSockets) {
+			if len(oldAssignedSockets) != len(newAssignedSockets) {
 				change = true
 			}
 
@@ -2011,7 +2011,7 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 			if !change {
 				// oldAssignedSockets is sorted
 				for i, _ := range oldAssignedSockets {
-					if newAssingedSockets[i] != oldAssignedSockets[i] {
+					if newAssignedSockets[i] != oldAssignedSockets[i] {
 						change = true
 						break
 					}
@@ -2025,6 +2025,7 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 				}
 			}
 		}
+		general.Infof("%s [new] normal throughput nic: %s", IrqTuningLogPrefix, nic)
 	}
 
 	// clear ic.LowThroughputNics
@@ -2058,6 +2059,7 @@ func (ic *IrqTuningController) classifyNicsByThroughput(oldIndicatorsStats *Indi
 				nic.IrqAffinityPolicy = IrqBalanceFair
 			}
 			ic.LowThroughputNics = append(ic.LowThroughputNics, nic)
+			general.Infof("%s [new] low throughput nic: %s", IrqTuningLogPrefix, nic)
 		}
 	}
 }
