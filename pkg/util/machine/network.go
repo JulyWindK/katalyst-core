@@ -130,6 +130,7 @@ type netnsSwitchContext struct {
 	newNetNSHdl      netns.NsHandle
 	sysMountDir      string
 	sysDirRemounted  bool
+	locked           bool
 }
 
 type SoftNetStat struct {
