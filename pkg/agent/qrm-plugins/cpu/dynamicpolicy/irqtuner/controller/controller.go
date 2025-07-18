@@ -1294,15 +1294,18 @@ func (nm *NicIrqTuningManager) String() string {
 	return msg
 }
 
-func (nm *NicIrqTuningManager) collectNicStats() (*NicStats, error) {
+func (nm *NicIrqTuningManager) collectNicStats(collectQueueStats bool) (*NicStats, error) {
 	totalRxPackets, err := machine.GetNetDevRxPackets(nm.NicInfo.NicBasicInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	rxQueuePackets, err := machine.GetNicRxQueuePackets(nm.NicInfo.NicBasicInfo)
-	if err != nil {
-		return nil, err
+	rxQueuePackets := make(map[int]uint64)
+	if collectQueueStats {
+		rxQueuePackets, err = machine.GetNicRxQueuePackets(nm.NicInfo.NicBasicInfo)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &NicStats{
@@ -1748,7 +1751,11 @@ func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error
 
 	nics := ic.getAllNics()
 	for _, nic := range nics {
-		stats, err := nic.collectNicStats()
+		collectQueueStats := false
+		if nic.IrqAffinityPolicy == IrqCoresExclusive {
+			collectQueueStats = true
+		}
+		stats, err := nic.collectNicStats(collectQueueStats)
 		if err != nil {
 			return nil, fmt.Errorf("failed to collectNicStats, err %v", err)
 		}
