@@ -32,6 +32,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/moby/sys/mountinfo"
 	"github.com/safchain/ethtool"
 	"github.com/vishvananda/netns"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -1129,18 +1130,22 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 	}
 
 	// Mount sysfs into the new netns
-	if mntErr := syscall.Mount("sysfs", TmpNetNSSysDir, "sysfs", 0, ""); mntErr != nil {
-		if mntErr == syscall.EBUSY {
-			netSysDir := filepath.Join(TmpNetNSSysDir, ClassNetBasePath)
-			if _, statErr := os.Stat(netSysDir); statErr == nil {
-				klog.Warningf("sysfs already mounted at %s, maybe leaked", TmpNetNSSysDir)
-			} else {
-				klog.Warningf("failed to stat %s, err %v", netSysDir, statErr)
-				err = mntErr
-				return nil, fmt.Errorf("failed to mount sysfs at %s, err %v", TmpNetNSSysDir, err)
-			}
+	var mounted bool
+	mounted, err = mountinfo.Mounted(TmpNetNSSysDir)
+	if err != nil {
+		return nil, fmt.Errorf("check mounted dir: %s failed with error: %v", TmpNetNSSysDir, err)
+	}
+	if mounted {
+		netSysDir := filepath.Join(TmpNetNSSysDir, ClassNetBasePath)
+		if _, statErr := os.Stat(netSysDir); statErr == nil {
+			klog.Warningf("sysfs already mounted at %s, maybe leaked", TmpNetNSSysDir)
 		} else {
-			err = mntErr
+			klog.Warningf("failed to stat %s, err %v", netSysDir, statErr)
+			err = fmt.Errorf("other fs has mounted at %s", TmpNetNSSysDir)
+			return nil, err
+		}
+	} else {
+		if err = syscall.Mount("sysfs", TmpNetNSSysDir, "sysfs", 0, ""); err != nil {
 			return nil, fmt.Errorf("failed to mount sysfs at %s, err %v", TmpNetNSSysDir, err)
 		}
 	}

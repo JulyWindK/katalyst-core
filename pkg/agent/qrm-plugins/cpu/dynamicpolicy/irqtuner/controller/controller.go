@@ -476,7 +476,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 	for _, nic := range nics {
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
-			general.Errorf("%s failed to collectNicStats for nic %s, err %v", IrqTuningLogPrefix, nic, err)
+			general.Errorf("%s failed to GetNetDevRxPackets for nic %s, err %v", IrqTuningLogPrefix, nic, err)
 			continue
 		}
 		prevNicRxPackets[nic.IfIndex] = rxPackets
@@ -493,7 +493,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 	for _, nic := range nics {
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
-			general.Errorf("%s failed to collectNicStats for nic %s, err %v", IrqTuningLogPrefix, nic, err)
+			general.Errorf("%s failed to GetNetDevRxPackets for nic %s, err %v", IrqTuningLogPrefix, nic, err)
 			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
@@ -1300,9 +1300,12 @@ func (nm *NicIrqTuningManager) collectNicStats() (*NicStats, error) {
 		return nil, err
 	}
 
-	rxQueuePackets, err := machine.GetNicRxQueuePackets(nm.NicInfo.NicBasicInfo)
-	if err != nil {
-		return nil, err
+	rxQueuePackets := make(map[int]uint64)
+	if nm.IrqAffinityPolicy == IrqCoresExclusive {
+		rxQueuePackets, err = machine.GetNicRxQueuePackets(nm.NicInfo.NicBasicInfo)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &NicStats{
@@ -1744,50 +1747,57 @@ func (ic *IrqTuningController) isSriovContainerNic(nic *NicInfo) bool {
 }
 
 func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error) {
-	nicStats := make(map[int]*NicStats)
+	stats := &IndicatorsStats{
+		UpdateTime: time.Now(),
+	}
 
+	hasIrqCoresExclusiveNic := false
+	nicStats := make(map[int]*NicStats)
 	nics := ic.getAllNics()
 	for _, nic := range nics {
+		if nic.IrqAffinityPolicy == IrqCoresExclusive {
+			hasIrqCoresExclusiveNic = true
+		}
 		stats, err := nic.collectNicStats()
 		if err != nil {
 			return nil, fmt.Errorf("failed to collectNicStats, err %v", err)
 		}
 		nicStats[nic.NicInfo.IfIndex] = stats
 	}
+	stats.NicStats = nicStats
 
-	cpuStats, err := machine.CollectCpuStats()
-	if err != nil {
-		return nil, fmt.Errorf("failed to CollectCpuStats, err %v", err)
+	if hasIrqCoresExclusiveNic {
+		cpuStats, err := machine.CollectCpuStats()
+		if err != nil {
+			return nil, fmt.Errorf("failed to CollectCpuStats, err %v", err)
+		}
+		stats.CPUStats = cpuStats
+
+		softNetStats, err := machine.CollectSoftNetStats(ic.CPUInfo.CPUOnline)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collectSoftNetStats, err %v", err)
+		}
+		stats.SoftNetStats = softNetStats
+
+		var ksoftirqPids []int
+		for _, pid := range ic.Ksoftirqds {
+			ksoftirqPids = append(ksoftirqPids, pid)
+		}
+
+		ksoftirqdSchedWait, err := general.GetTaskSchedWait(ksoftirqPids)
+		if err != nil {
+			return nil, fmt.Errorf("failed to GetTaskSchedWait, err %v", err)
+		}
+		stats.KsoftirqdSchedWait = ksoftirqdSchedWait
+
+		netRxSoftirqCount, err := machine.CollectNetRxSoftirqStats()
+		if err != nil {
+			return nil, err
+		}
+		stats.NetRxSoftirqCount = netRxSoftirqCount
 	}
 
-	softNetStats, err := machine.CollectSoftNetStats(ic.CPUInfo.CPUOnline)
-	if err != nil {
-		return nil, fmt.Errorf("failed to collectSoftNetStats, err %v", err)
-	}
-
-	var ksoftirqPids []int
-	for _, pid := range ic.Ksoftirqds {
-		ksoftirqPids = append(ksoftirqPids, pid)
-	}
-
-	ksoftirqdSchedWait, err := general.GetTaskSchedWait(ksoftirqPids)
-	if err != nil {
-		return nil, fmt.Errorf("failed to GetTaskSchedWait, err %v", err)
-	}
-
-	netRxSoftirqCount, err := machine.CollectNetRxSoftirqStats()
-	if err != nil {
-		return nil, err
-	}
-
-	return &IndicatorsStats{
-		NicStats:           nicStats,
-		CPUStats:           cpuStats,
-		SoftNetStats:       softNetStats,
-		KsoftirqdSchedWait: ksoftirqdSchedWait,
-		NetRxSoftirqCount:  netRxSoftirqCount,
-		UpdateTime:         time.Now(),
-	}, nil
+	return stats, nil
 }
 
 // return value: old IndicatorStats
