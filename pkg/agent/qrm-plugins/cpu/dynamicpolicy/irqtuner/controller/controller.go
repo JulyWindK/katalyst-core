@@ -476,7 +476,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 	for _, nic := range nics {
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
-			general.Errorf("%s failed to collectNicStats for nic %s, err %v", IrqTuningLogPrefix, nic, err)
+			general.Errorf("%s failed to GetNetDevRxPackets for nic %s, err %v", IrqTuningLogPrefix, nic, err)
 			continue
 		}
 		prevNicRxPackets[nic.IfIndex] = rxPackets
@@ -493,7 +493,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 	for _, nic := range nics {
 		rxPackets, err := machine.GetNetDevRxPackets(nic)
 		if err != nil {
-			general.Errorf("%s failed to collectNicStats for nic %s, err %v", IrqTuningLogPrefix, nic, err)
+			general.Errorf("%s failed to GetNetDevRxPackets for nic %s, err %v", IrqTuningLogPrefix, nic, err)
 			normalThroughputNics = append(normalThroughputNics, nic)
 			continue
 		}
