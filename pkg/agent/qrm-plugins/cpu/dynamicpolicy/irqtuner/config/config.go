@@ -376,5 +376,6 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 	}
 
 	conf.EnableIrqTuning = true
+	conf.EnableRPSCPUVSNicsQueue = 3
 	return conf
 }
