@@ -378,7 +378,7 @@ func GetIrqAffinityCPUs(irq int) ([]int64, error) {
 }
 
 func setNicRxQueueRPS(nic *NicBasicInfo, queue int, rpsConf string) error {
-	if queue <= 0 {
+	if queue < 0 {
 		return fmt.Errorf("invalid rx queue %d", queue)
 	}
 
