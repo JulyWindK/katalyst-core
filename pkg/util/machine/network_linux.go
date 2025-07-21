@@ -30,7 +30,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/moby/sys/mountinfo"
@@ -41,6 +40,11 @@ import (
 
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/global"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
+)
+
+const (
+	sysFSDirNormal   = "/sys"
+	sysFSDirNetNSTmp = "/tmp/net_ns_sysfs"
 )
 
 const (
@@ -61,6 +65,7 @@ const (
 
 const (
 	DefaultNetNSDir    = "/var/run/netns"
+	HostNetNSName      = ""
 	DefaultNetNSSysDir = "/sys"
 	TmpNetNSSysDir     = "/tmp/net_ns_sysfs"
 	ClassNetBasePath   = "class/net"
@@ -74,8 +79,6 @@ const (
 )
 
 const UnknownNumaNode = -1
-
-var netnsMutex sync.Mutex
 
 // GetExtraNetworkInfo get network info from /sys/class/net and system function net.Interfaces.
 // if multiple network namespace is enabled, we should exec into all namespaces and parse nics for them.
@@ -125,18 +128,72 @@ func GetExtraNetworkInfo(conf *global.MachineInfoConfiguration) (*ExtraNetworkIn
 // If the namespace is the default one, the callback runs in the current network namespace.
 // Otherwise, it mounts a temporary sysfs to avoid contaminating the host sysfs.
 func DoNetNS(nsName, netNSDirAbsPath string, cb func(sysFsDir string) error) error {
-	netnsInfo := NetNSInfo{
-		NSName:   nsName,
-		NSAbsDir: netNSDirAbsPath,
+	// if nsName is defaulted, the callback function will be run in the current network namespace.
+	// So skip the whole function, just call cb().
+	// cb() needs a sysFsDir as arg but ignored, give it a fake one.
+	var nsAbsPath string
+	sysFsDir := sysFSDirNormal
+	if nsName == DefaultNICNamespace {
+		return cb(sysFsDir)
 	}
+	nsAbsPath = path.Join(netNSDirAbsPath, nsName)
 
-	nsc, err := netnsEnter(netnsInfo)
+	// if nsName is not defaulted, we should exec into the new network namespace.
+	// So we need to mount sysfs to /tmp/net_ns_sysfs to avoid contaminating the host sysfs directory.
+	// create the target directory if it doesn't exist
+	sysFsDir = sysFSDirNetNSTmp
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// save the current network namespace
+	originNS, err := netns.Get()
 	if err != nil {
-		return fmt.Errorf("failed to netnsEnter(%s), err %v", netnsInfo.NSName, err)
+		return err
 	}
-	defer nsc.netnsExit()
+	defer func() {
+		// switch back to the original namespace
+		if err := netns.Set(originNS); err != nil {
+			general.Fatalf("failed to unmount sys fs: %v", err)
+		}
+		_ = originNS.Close()
+	}()
 
-	return cb(nsc.sysMountDir)
+	// exec into the new network namespace
+	newNS, err := netns.GetFromPath(nsAbsPath)
+	if err != nil {
+		return fmt.Errorf("get handle from net ns path: %s failed with error: %v", nsAbsPath, err)
+	}
+	defer func() { _ = newNS.Close() }()
+
+	if err = netns.Set(newNS); err != nil {
+		return fmt.Errorf("set newNS: %s failed with error: %v", nsAbsPath, err)
+	}
+
+	// mount sysfs to /tmp/net_ns_sysfs to avoid contaminating the host sysfs directory
+	// create the target directory if it doesn't exist
+	if _, err := os.Stat(sysFsDir); err != nil {
+		if os.IsNotExist(err) {
+			if err := os.MkdirAll(sysFsDir, os.FileMode(0o755)); err != nil {
+				return fmt.Errorf("make dir: %s failed with error: %v", sysFsDir, err)
+			}
+		} else {
+			return fmt.Errorf("check dir: %s failed with error: %v", sysFsDir, err)
+		}
+	}
+
+	if err := syscall.Mount("sysfs", sysFsDir, "sysfs", 0, ""); err != nil {
+		return fmt.Errorf("mount sysfs to %s failed with error: %v", sysFsDir, err)
+	}
+
+	// the sysfs needs to be remounted before switching network namespace back
+	defer func() {
+		if err := syscall.Unmount(sysFsDir, 0); err != nil {
+			general.Fatalf("unmount sysfs: %s failed with error: %v", sysFsDir, err)
+		}
+	}()
+
+	return cb(sysFsDir)
 }
 
 // getNSNetworkHardwareTopology set given network namespaces and get nics inside if needed
@@ -969,7 +1026,7 @@ func ListNetNS(netNSDir string) ([]NetNSInfo, error) {
 
 	nsList := []NetNSInfo{
 		{
-			NSName:   DefaultNICNamespace,
+			NSName:   HostNetNSName,
 			NSInode:  hostNetNSInode,
 			NSAbsDir: netNSDir,
 		},
@@ -1018,19 +1075,12 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 		}
 	}()
 
-	if netnsInfo.NSName == DefaultNICNamespace {
+	if netnsInfo.NSName == HostNetNSName {
 		return &netnsSwitchContext{
 			newNetNSName: netnsInfo.NSName,
 			sysMountDir:  DefaultNetNSSysDir,
 		}, nil
 	}
-
-	netnsMutex.Lock()
-	defer func() {
-		if err != nil {
-			netnsMutex.Unlock()
-		}
-	}()
 
 	originalNetNSHdl, err = netns.Get()
 	if err != nil {
@@ -1106,7 +1156,6 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 		newNetNSHdl:      newNetNSHdl,
 		sysMountDir:      TmpNetNSSysDir,
 		sysDirRemounted:  true,
-		locked:           true,
 	}, nil
 }
 
@@ -1114,14 +1163,7 @@ func netnsEnter(netnsInfo NetNSInfo) (*netnsSwitchContext, error) {
 func (nsc *netnsSwitchContext) netnsExit() {
 	defer runtime.UnlockOSThread()
 
-	defer func() {
-		if nsc.locked {
-			netnsMutex.Unlock()
-			nsc.locked = false
-		}
-	}()
-
-	if nsc.newNetNSName == DefaultNICNamespace {
+	if nsc.newNetNSName == HostNetNSName {
 		return
 	}
 
