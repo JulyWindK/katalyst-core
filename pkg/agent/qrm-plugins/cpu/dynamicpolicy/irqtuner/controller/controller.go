@@ -558,7 +558,7 @@ func NewNicIrqTuningManagers(conf *config.IrqTuningConfig, nics []*machine.NicBa
 		assignedSockets := nicsAssignedSockets[n.IfIndex]
 		if len(assignedSockets) == 0 {
 			general.Errorf("%s nic %s assigned empty sockets", IrqTuningLogPrefix, n)
-			assignedSockets = cpuInfo.GetSocketSlice()
+			nicsAssignedSockets[n.IfIndex] = cpuInfo.GetSocketSlice()
 		}
 
 		mng, err := NewNicIrqTuningManager(conf, n, nicsAssignedSockets[n.IfIndex], irqCoresSelectOrder)
@@ -848,6 +848,7 @@ func (n *NicInfo) getIrqs() []int {
 		irqs = append(irqs, irq)
 	}
 
+	sort.Ints(irqs)
 	return irqs
 }
 
@@ -857,6 +858,7 @@ func (n *NicInfo) getQueues() []int {
 		queues = append(queues, queue)
 	}
 
+	sort.Ints(queues)
 	return queues
 }
 
@@ -902,6 +904,7 @@ func (n *NicInfo) filterCoresAffinitiedQueues(coreList []int64) []int {
 		queues = append(queues, queue)
 	}
 
+	sort.Ints(queues)
 	return queues
 }
 
@@ -924,6 +927,7 @@ func (n *NicInfo) getSocketAffinitiedIrqs(socket int) []int {
 		socketAffinitiedIrqs = append(socketAffinitiedIrqs, irqs...)
 	}
 
+	sort.Ints(socketAffinitiedIrqs)
 	return socketAffinitiedIrqs
 }
 
@@ -939,6 +943,8 @@ func (n *NicInfo) getIrqCores() []int64 {
 		coresMap[core] = nil
 		irqCores = append(irqCores, core)
 	}
+
+	general.SortInt64Slice(irqCores)
 	return irqCores
 }
 
@@ -962,6 +968,7 @@ func (n *NicInfo) filterIrqCores(coresList []int64) []int64 {
 		}
 	}
 
+	general.SortInt64Slice(filteredIrqCores)
 	return filteredIrqCores
 }
 
@@ -1515,7 +1522,7 @@ func (ic *IrqTuningController) String() string {
 
 		for i, nic := range ic.LowThroughputNics {
 			indent := spaces
-			msg = fmt.Sprintf("%s%s    LowThroughputNics[i]:\n", msg, indent, i)
+			msg = fmt.Sprintf("%s%s    LowThroughputNics[%d]:\n", msg, indent, i)
 			indent = spaces + spaces
 
 			nicLines := strings.Split(nic.String(), "\n")
@@ -1528,7 +1535,7 @@ func (ic *IrqTuningController) String() string {
 					continue
 				}
 
-				msg = fmt.Sprintf("%s    %s\n", msg, line)
+				msg = fmt.Sprintf("%s%s    %s\n", msg, indent, line)
 			}
 		}
 	} else {
@@ -1540,7 +1547,7 @@ func (ic *IrqTuningController) String() string {
 
 		for i, nic := range ic.Nics {
 			indent := spaces
-			msg = fmt.Sprintf("%s%s    Nics[i]:\n", msg, indent, i)
+			msg = fmt.Sprintf("%s%s    Nics[%d]:\n", msg, indent, i)
 			indent = spaces + spaces
 
 			nicLines := strings.Split(nic.String(), "\n")
@@ -1553,7 +1560,7 @@ func (ic *IrqTuningController) String() string {
 					continue
 				}
 
-				msg = fmt.Sprintf("%s    %s\n", msg, line)
+				msg = fmt.Sprintf("%s%s    %s\n", msg, indent, line)
 			}
 		}
 	} else {
@@ -2608,7 +2615,7 @@ func (ic *IrqTuningController) tuneNicIrqsAffinityQualifiedCores(nic *NicInfo, i
 	for _, irq := range tunedIrqs {
 		irqCore, ok := nic.Irq2Core[irq]
 		if !ok {
-			general.Errorf("%s failed to find irq %d in nic %s Irq2Core: %+v", IrqTuningLogPrefix, nic, irq, nic.Irq2Core)
+			general.Errorf("%s failed to find irq %d in nic %s Irq2Core: %+v", IrqTuningLogPrefix, irq, nic, nic.Irq2Core)
 			continue
 		}
 		coresIrqCount[irqCore]++
@@ -2974,7 +2981,7 @@ func (ic *IrqTuningController) balanceNicIrqsInCoresFairly(nic *NicInfo, irqs []
 				}
 			}
 			if !matched {
-				general.Warningf("%s nic %s core %d irq %d is not in irqs %+v", IrqTuningLogPrefix, nic, srcCore, irqs)
+				general.Warningf("%s nic %s core %d irq %d is not in irqs %+v", IrqTuningLogPrefix, nic, srcCore, irq, irqs)
 			}
 		}
 
@@ -3806,8 +3813,8 @@ func (ic *IrqTuningController) selectExclusiveIrqCoresForNic(nic *NicIrqTuningMa
 
 			qualifiedCoresMap := ic.getNumaQualifiedCoresMapForNicExclusiveIrqCores(nic.NicInfo, numa)
 			if len(qualifiedCoresMap) < numaIrqCoresCount {
-				return nil, fmt.Errorf("numa %s with qualified cores count %d less than numa assigned exclusive irq cores count",
-					len(qualifiedCoresMap), numaIrqCoresCount)
+				return nil, fmt.Errorf("numa %d with qualified cores count %d less than numa assigned exclusive irq cores count %d",
+					numa, len(qualifiedCoresMap), numaIrqCoresCount)
 			}
 
 			numaExclusiveIrqCores, err := ic.selectExclusiveIrqCoresFromNuma(numaIrqCoresCount, socket, numa, qualifiedCoresMap, nic.ExclusiveIrqCoresSelectOrder)
@@ -5269,13 +5276,13 @@ func (ic *IrqTuningController) adjustKsoftirqdsNice() error {
 		if isExclusiveIrqCore {
 			if nice != ic.conf.IrqCoresKsoftirqdNice {
 				if err := general.SetProcessNice(pid, ic.conf.IrqCoresKsoftirqdNice); err != nil {
-					general.Errorf("%s failed to SetProcessNice(%d, %d), err %s", IrqTuningLogPrefix, pid, ic.conf.IrqCoresKsoftirqdNice)
+					general.Errorf("%s failed to SetProcessNice(%d, %d), err %s", IrqTuningLogPrefix, pid, ic.conf.IrqCoresKsoftirqdNice, err)
 				}
 			}
 		} else {
 			if nice != 0 {
 				if err := general.SetProcessNice(pid, 0); err != nil {
-					general.Errorf("%s failed to SetProcessNice(%d, %d), err %s", IrqTuningLogPrefix, pid, ic.conf.IrqCoresKsoftirqdNice)
+					general.Errorf("%s failed to SetProcessNice(%d, %d), err %s", IrqTuningLogPrefix, pid, ic.conf.IrqCoresKsoftirqdNice, err)
 				}
 			}
 		}
@@ -5387,7 +5394,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 
 	if !ic.nicsRPSCleared() {
 		if err := ic.clearRPSForNics(ic.getAllNics()); err != nil {
-			general.Errorf("%s failed to makeSureNicsRPSCleared, err %s", IrqTuningLogPrefix, err)
+			general.Errorf("%s failed to clearRPSForNics, err %s", IrqTuningLogPrefix, err)
 			return
 		}
 
@@ -5508,7 +5515,7 @@ func (ic *IrqTuningController) periodicTuningIrqCoresExclusive() {
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	if err := ic.balanceNicsIrqsToNewIrqCores(oldStats); err != nil {
-		general.Errorf("%s failed to requestExclusiveIrqCores, err %s", IrqTuningLogPrefix, err)
+		general.Errorf("%s failed to balanceNicsIrqsToNewIrqCores, err %s", IrqTuningLogPrefix, err)
 		return
 	}
 
