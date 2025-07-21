@@ -1747,13 +1747,18 @@ func (ic *IrqTuningController) isSriovContainerNic(nic *NicInfo) bool {
 }
 
 func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error) {
-	nicStats := make(map[int]*NicStats)
+	stats := &IndicatorsStats{
+		UpdateTime: time.Now(),
+	}
 
+	hasIrqCoresExclusiveNic := false
+	nicStats := make(map[int]*NicStats)
 	nics := ic.getAllNics()
 	for _, nic := range nics {
 		collectQueueStats := false
 		if nic.IrqAffinityPolicy == IrqCoresExclusive {
 			collectQueueStats = true
+			hasIrqCoresExclusiveNic = true
 		}
 		stats, err := nic.collectNicStats(collectQueueStats)
 		if err != nil {
@@ -1761,40 +1766,40 @@ func (ic *IrqTuningController) collectIndicatorsStats() (*IndicatorsStats, error
 		}
 		nicStats[nic.NicInfo.IfIndex] = stats
 	}
+	stats.NicStats = nicStats
 
-	cpuStats, err := machine.CollectCpuStats()
-	if err != nil {
-		return nil, fmt.Errorf("failed to CollectCpuStats, err %v", err)
+	if hasIrqCoresExclusiveNic {
+		cpuStats, err := machine.CollectCpuStats()
+		if err != nil {
+			return nil, fmt.Errorf("failed to CollectCpuStats, err %v", err)
+		}
+		stats.CPUStats = cpuStats
+
+		softNetStats, err := machine.CollectSoftNetStats(ic.CPUInfo.CPUOnline)
+		if err != nil {
+			return nil, fmt.Errorf("failed to collectSoftNetStats, err %v", err)
+		}
+		stats.SoftNetStats = softNetStats
+
+		var ksoftirqPids []int
+		for _, pid := range ic.Ksoftirqds {
+			ksoftirqPids = append(ksoftirqPids, pid)
+		}
+
+		ksoftirqdSchedWait, err := general.GetTaskSchedWait(ksoftirqPids)
+		if err != nil {
+			return nil, fmt.Errorf("failed to GetTaskSchedWait, err %v", err)
+		}
+		stats.KsoftirqdSchedWait = ksoftirqdSchedWait
+
+		netRxSoftirqCount, err := machine.CollectNetRxSoftirqStats()
+		if err != nil {
+			return nil, err
+		}
+		stats.NetRxSoftirqCount = netRxSoftirqCount
 	}
 
-	softNetStats, err := machine.CollectSoftNetStats(ic.CPUInfo.CPUOnline)
-	if err != nil {
-		return nil, fmt.Errorf("failed to collectSoftNetStats, err %v", err)
-	}
-
-	var ksoftirqPids []int
-	for _, pid := range ic.Ksoftirqds {
-		ksoftirqPids = append(ksoftirqPids, pid)
-	}
-
-	ksoftirqdSchedWait, err := general.GetTaskSchedWait(ksoftirqPids)
-	if err != nil {
-		return nil, fmt.Errorf("failed to GetTaskSchedWait, err %v", err)
-	}
-
-	netRxSoftirqCount, err := machine.CollectNetRxSoftirqStats()
-	if err != nil {
-		return nil, err
-	}
-
-	return &IndicatorsStats{
-		NicStats:           nicStats,
-		CPUStats:           cpuStats,
-		SoftNetStats:       softNetStats,
-		KsoftirqdSchedWait: ksoftirqdSchedWait,
-		NetRxSoftirqCount:  netRxSoftirqCount,
-		UpdateTime:         time.Now(),
-	}, nil
+	return stats, nil
 }
 
 // return value: old IndicatorStats
