@@ -1064,6 +1064,7 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 		numaSocketZoneNodeMap map[util.ZoneNode]util.ZoneNode
 		metaServer            *metaserver.MetaServer
 		cacheGroupCPUsMap     map[int]sets.Int
+		reservedCPUs          string
 	}
 	tests := []struct {
 		name              string
@@ -1074,6 +1075,7 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 		{
 			name: "test-1",
 			args: args{
+				reservedCPUs: "0,2",
 				cacheGroupCPUsMap: map[int]sets.Int{
 					0: sets.NewInt(0, 2, 4, 6),
 					1: sets.NewInt(1, 3, 5, 7),
@@ -1262,7 +1264,7 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 						"cpu": resource.MustParse("4"),
 					},
 					Allocatable: &v1.ResourceList{
-						"cpu": resource.MustParse("4"),
+						"cpu": resource.MustParse("2"),
 					},
 				},
 				{
@@ -1617,6 +1619,7 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 				metaServer:            tt.args.metaServer,
 				numaSocketZoneNodeMap: tt.args.numaSocketZoneNodeMap,
 				cacheGroupCPUsMap:     tt.args.cacheGroupCPUsMap,
+				reservedCPUs:          tt.args.reservedCPUs,
 			}
 			zoneResourcesMap, err := p.getZoneResources(tt.args.allocatableResources)
 			if (err != nil) != tt.wantErr {
