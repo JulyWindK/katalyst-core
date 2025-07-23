@@ -5368,6 +5368,15 @@ func (ic *IrqTuningController) periodicTuningIrqBalanceFair() {
 		_ = ic.emitter.StoreInt64(metricUtil.MetricNameIrqTuningRPSEnabled, 0, metrics.MetricTypeNameRaw)
 	}
 
+	// debug START
+	for _, nic := range ic.LowThroughputNics {
+		if err := ic.setRPSForNic(nic); err != nil {
+			general.Errorf("%s failed to setRPSForNic for nic %s, err %s", IrqTuningLogPrefix, nic.NicInfo, err)
+			ic.emitErrMetric(irqtuner.SetRPSForNicFailed, irqtuner.IrqTuningError)
+		}
+	}
+	// debug END
+
 	// restore ksoftirqd default nice
 	if err := ic.adjustKsoftirqdsNice(); err != nil {
 		general.Errorf("%s failed to adjustKsoftirqdsNice, err %s", IrqTuningLogPrefix, err)
