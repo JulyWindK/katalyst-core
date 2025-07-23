@@ -848,6 +848,7 @@ func (n *NicInfo) getIrqs() []int {
 		irqs = append(irqs, irq)
 	}
 
+	sort.Ints(irqs)
 	return irqs
 }
 
@@ -857,6 +858,7 @@ func (n *NicInfo) getQueues() []int {
 		queues = append(queues, queue)
 	}
 
+	sort.Ints(queues)
 	return queues
 }
 
@@ -902,6 +904,7 @@ func (n *NicInfo) filterCoresAffinitiedQueues(coreList []int64) []int {
 		queues = append(queues, queue)
 	}
 
+	sort.Ints(queues)
 	return queues
 }
 
@@ -924,6 +927,7 @@ func (n *NicInfo) getSocketAffinitiedIrqs(socket int) []int {
 		socketAffinitiedIrqs = append(socketAffinitiedIrqs, irqs...)
 	}
 
+	sort.Ints(socketAffinitiedIrqs)
 	return socketAffinitiedIrqs
 }
 
@@ -939,6 +943,8 @@ func (n *NicInfo) getIrqCores() []int64 {
 		coresMap[core] = nil
 		irqCores = append(irqCores, core)
 	}
+
+	general.SortInt64Slice(irqCores)
 	return irqCores
 }
 
@@ -962,6 +968,7 @@ func (n *NicInfo) filterIrqCores(coresList []int64) []int64 {
 		}
 	}
 
+	general.SortInt64Slice(filteredIrqCores)
 	return filteredIrqCores
 }
 
