@@ -20,8 +20,6 @@ import (
 	"sync"
 
 	"github.com/prometheus/procfs"
-
-	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 )
 
 var (
@@ -40,16 +38,18 @@ type ProcFSManager interface {
 	GetIPVSStats() (procfs.IPVSStats, error)
 	GetNetDev() (map[string]procfs.NetDevLine, error)
 	GetNetStat() ([]procfs.NetStat, error)
+	GetNetSoftnetStat() ([]procfs.SoftnetStat, error)
 	GetNetTCP() (procfs.NetTCP, error)
 	GetNetTCP6() (procfs.NetTCP, error)
 	GetNetUDP() (procfs.NetUDP, error)
 	GetNetUDP6() (procfs.NetUDP, error)
 	GetSoftirqs() (procfs.Softirqs, error)
 	GetProcInterrupts() (procfs.Interrupts, error)
+	GetPorcInterruptAffinityCPUs(irq int) (string, error)
 	GetPSIStatsForResource(resourceName string) (procfs.PSIStats, error)
 	GetSchedStat() (*procfs.Schedstat, error)
 
-	ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) error
+	ApplyProcInterrupts(irqNumber int, cpuset string) error
 }
 
 // GetProcFSManager returns the singleton ProcFSManager.
