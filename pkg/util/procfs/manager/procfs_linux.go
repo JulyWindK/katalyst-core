@@ -23,14 +23,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 
 	"github.com/prometheus/procfs"
 
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
-	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	"github.com/kubewharf/katalyst-core/pkg/util/procfs/common"
+)
+
+const (
+	IrqRootPath    = "/proc/irq"
+	InterruptsFile = "/proc/interrupts"
 )
 
 type manager struct {
@@ -129,6 +134,11 @@ func (m *manager) GetNetStat() ([]procfs.NetStat, error) {
 	return m.procfs.NetStat()
 }
 
+// GetNetSoftnetStat returns the net softnet stat stats of the host.
+func (m *manager) GetNetSoftnetStat() ([]procfs.SoftnetStat, error) {
+	return m.procfs.NetSoftnetStat()
+}
+
 // GetNetTCP returns the net tcp stats of the host.
 func (m *manager) GetNetTCP() (procfs.NetTCP, error) {
 	return m.procfs.NetTCP()
@@ -156,12 +166,23 @@ func (m *manager) GetSoftirqs() (procfs.Softirqs, error) {
 
 // GetProcInterrupts returns the proc interrupts stats of the host.
 func (m *manager) GetProcInterrupts() (procfs.Interrupts, error) {
-	data, err := ReadFileNoStat("/proc/interrupts")
+	data, err := ReadFileNoStat(InterruptsFile)
 	if err != nil {
 		general.Errorf("[Porcfs] get /proc/interrupts failed, err: %v", err)
 		return nil, err
 	}
 	return parseInterrupts(bytes.NewReader(data))
+}
+
+// GetPorcInterruptAffinityCPUs returns the proc interrupts affinity cpus of the given irq number.
+func (m *manager) GetPorcInterruptAffinityCPUs(irq int) (string, error) {
+	irqProcDir := fmt.Sprintf("%s/%d", IrqRootPath, irq)
+	if _, err := os.Stat(irqProcDir); err != nil && os.IsNotExist(err) {
+		return "", fmt.Errorf("%d is not exist", irq)
+	}
+
+	smpAffinityListPath := path.Join(irqProcDir, "smp_affinity_list")
+	return smpAffinityListPath, nil
 }
 
 // GetPSIStatsForResource returns the psi stats of the given resource.
@@ -175,26 +196,16 @@ func (m *manager) GetSchedStat() (*procfs.Schedstat, error) {
 }
 
 // ApplyProcInterrupts apply the proc interrupts for the given irq number and cpuset.
-func (m *manager) ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) error {
+func (m *manager) ApplyProcInterrupts(irqNumber int, cpuset string) error {
 	if irqNumber < 0 {
 		return fmt.Errorf("invalid IRQ number: %d ", irqNumber)
 	}
 
-	cpus := cpuset.ToSliceInt()
-	for cpu := range cpus {
-		if cpu < 0 {
-			return fmt.Errorf("invalid cpu number: %d", cpu)
-		}
-	}
-
-	data := cpuset.String()
-	general.Infof("[DEBUG]ApplyProcInterrupts apply data:%v ", data)
-
 	dir := fmt.Sprintf("/proc/irq/%d", irqNumber)
-	if err, applied, oldData := common.InstrumentedWriteFileIfChange(dir, "smp_affinity_list", data); err != nil {
+	if err, applied, oldData := common.InstrumentedWriteFileIfChange(dir, "smp_affinity_list", cpuset); err != nil {
 		return err
 	} else if applied {
-		general.Infof("[Procfs] apply proc interrupts successfully, irq number: %v, data: %v, old data: %v\n", irqNumber, data, oldData)
+		general.Infof("[Procfs] apply proc interrupts successfully, irq number: %v, data: %v, old data: %v\n", irqNumber, cpuset, oldData)
 	}
 
 	return nil
@@ -249,6 +260,11 @@ func parseInterrupts(r io.Reader) (procfs.Interrupts, error) {
 				},
 			}
 			continue
+		}
+
+		if len(parts) < cpuNum+2 {
+			general.Warningf("[Procfs] %w: Unexpected number of fields in interrupts (expected %d but got %d): Error Parsing File", cpuNum+2, len(parts), parts)
+			return nil, fmt.Errorf("%w: Unexpected number of fields in interrupts (expected %d but got %d): Error Parsing File", cpuNum+2, len(parts), parts)
 		}
 
 		intr := procfs.Interrupt{

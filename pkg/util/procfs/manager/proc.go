@@ -18,8 +18,6 @@ package manager
 
 import (
 	"github.com/prometheus/procfs"
-
-	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 )
 
 // GetCPUInfo returns the CPUInfo of the host.
@@ -72,6 +70,11 @@ func GetNetStat() ([]procfs.NetStat, error) {
 	return GetProcFSManager().GetNetStat()
 }
 
+// GetNetSoftnetStat returns the net softnet stat of the host.
+func GetNetSoftnetStat() ([]procfs.SoftnetStat, error) {
+	return GetProcFSManager().GetNetSoftnetStat()
+}
+
 // GetNetTCP returns the net TCP of the host.
 func GetNetTCP() (procfs.NetTCP, error) {
 	return GetProcFSManager().GetNetTCP()
@@ -102,6 +105,11 @@ func GetProcInterrupts() (procfs.Interrupts, error) {
 	return GetProcFSManager().GetProcInterrupts()
 }
 
+// GetPorcInterruptAffinityCPUs returns the proc interrupts affinity cpus of the host.
+func GetPorcInterruptAffinityCPUs(irq int) (string, error) {
+	return GetProcFSManager().GetPorcInterruptAffinityCPUs(irq)
+}
+
 // GetPSIStatsForResource returns the psi stats for the given resource.
 func GetPSIStatsForResource(resourceName string) (procfs.PSIStats, error) {
 	return GetProcFSManager().GetPSIStatsForResource(resourceName)
@@ -113,6 +121,6 @@ func GetSchedStat() (*procfs.Schedstat, error) {
 }
 
 // ApplyProcInterrupts applies the given cpuset to the given irq number.
-func ApplyProcInterrupts(irqNumber int, cpuset machine.CPUSet) error {
+func ApplyProcInterrupts(irqNumber int, cpuset string) error {
 	return GetProcFSManager().ApplyProcInterrupts(irqNumber, cpuset)
 }
