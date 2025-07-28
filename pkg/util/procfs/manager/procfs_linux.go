@@ -240,9 +240,12 @@ func parseInterrupts(r io.Reader) (procfs.Interrupts, error) {
 		return nil, errors.New("interrupts empty")
 	}
 	cpuNum := len(strings.Fields(scanner.Text())) // one header per cpu
+	general.Infof("[Porcfs] scanner text: %v", strings.Fields(scanner.Text()))
+	general.Infof("[Porcfs] cpu num: %v", cpuNum)
 
 	for scanner.Scan() {
 		parts := strings.Fields(scanner.Text())
+		general.Infof("[Porcfs] scanner parts: %v", parts)
 		if len(parts) == 0 { // skip empty lines
 			continue
 		}
