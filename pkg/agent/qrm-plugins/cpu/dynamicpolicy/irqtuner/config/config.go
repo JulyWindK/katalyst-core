@@ -376,5 +376,7 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 		}
 	}
 
+	conf.EnableIrqTuning = true
+
 	return conf
 }
