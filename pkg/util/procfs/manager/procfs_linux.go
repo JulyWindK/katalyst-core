@@ -270,6 +270,11 @@ func parseInterrupts(r io.Reader) (procfs.Interrupts, error) {
 			continue
 		}
 
+		if len(parts) < cpuNum+2 {
+			general.Warningf("[Procfs] %w: Unexpected number of fields in interrupts (expected %d but got %d): Error Parsing File", cpuNum+2, len(parts), parts)
+			return nil, fmt.Errorf("%w: Unexpected number of fields in interrupts (expected %d but got %d): Error Parsing File", cpuNum+2, len(parts), parts)
+		}
+
 		intr := procfs.Interrupt{
 			Values: parts[1 : cpuNum+1],
 		}
