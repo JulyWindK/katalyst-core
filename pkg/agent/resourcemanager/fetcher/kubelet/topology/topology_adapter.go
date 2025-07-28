@@ -480,8 +480,14 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 		errList = append(errList, err)
 	}
 
+	klog.Infof("[KFX]getZoneResources first zoneCapacity: %v", zoneCapacity)
+	klog.Infof("[KFX]getZoneResources first zoneAllocatable: %v", zoneAllocatable)
+
 	// process cache group zone node resources
 	reservedCPUs := machine.MustParse(p.reservedCPUs)
+	klog.Infof("[KFX]getZoneResources p.reservedCPUs:%v reservedCPUs: %v", p.reservedCPUs, reservedCPUs)
+	klog.Infof("[KFX]getZoneResources cacheGroupCPUsMap: %v", p.cacheGroupCPUsMap)
+
 	for cacheID, cpusets := range p.cacheGroupCPUsMap {
 		cacheGroupZone := util.GenerateCacheGroupZoneNode(cacheID)
 		// calculate capacity by the sum of cache group cpus
@@ -505,6 +511,9 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 		}
 	}
 
+	klog.Infof("[KFX]getZoneResources second zoneCapacity: %v", zoneCapacity)
+	klog.Infof("[KFX]getZoneResources second zoneAllocatable: %v", zoneAllocatable)
+
 	if len(errList) > 0 {
 		return nil, utilerrors.NewAggregate(errList)
 	}
@@ -521,6 +530,7 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 		}
 	}
 
+	klog.Infof("[KFX]getZoneResources resources: %+v", resources)
 	return resources, nil
 }
 
@@ -666,6 +676,7 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 			}
 
 			zoneNode, _, err := p.generateZoneNode(*quantity)
+			klog.Infof("[KFX]getZoneAttributes zoneNode: %+v", zoneNode)
 			if err != nil {
 				errList = append(errList, fmt.Errorf("get zone node from quantity %v failed: %v", quantity, err))
 				continue
@@ -690,7 +701,9 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 			zoneAttributes[zoneNode] = util.MergeAttributes(zoneAttributes[zoneNode], attrs)
 		}
 	}
+	klog.Infof("[KFX]getZoneAttributes first zoneAttributes: %v", zoneAttributes)
 
+	klog.Infof("[KFX]getZoneAttributes cacheGroupCPUsMap: %v", p.cacheGroupCPUsMap)
 	// generate the attributes of cache group zone node.
 	for groupID, cpus := range p.cacheGroupCPUsMap {
 		cacheGroupZoneNode := util.GenerateCacheGroupZoneNode(groupID)
@@ -707,6 +720,7 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 		return nil, utilerrors.NewAggregate(errList)
 	}
 
+	klog.Infof("[KFX]getZoneAttributes end zoneAttributes: %v", zoneAttributes)
 	return zoneAttributes, nil
 }
 
@@ -720,12 +734,16 @@ func (p *topologyAdapterImpl) generateNodeDistanceAttr(node util.ZoneNode) []nod
 	}
 
 	distanceInfos := p.numaDistanceMap[numaID]
+	klog.Infof("[KFX]generateNodeDistanceAttr numaID:%v distanceInfos: %+v", numaID, distanceInfos)
 	for _, distanceInfo := range distanceInfos {
 		attrs = append(attrs, nodev1alpha1.Attribute{
 			Name:  fmt.Sprintf("numa%d_distance", distanceInfo.NumaID),
 			Value: fmt.Sprintf("%d", distanceInfo.Distance),
 		})
 	}
+
+	klog.Infof("[KFX]generateNodeDistanceAttr attrs: %+v", attrs)
+
 	return attrs
 }
 
