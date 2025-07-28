@@ -27,6 +27,8 @@ import (
 	"strconv"
 	"strings"
 
+	"k8s.io/klog/v2"
+
 	"github.com/prometheus/procfs"
 
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
@@ -240,9 +242,15 @@ func parseInterrupts(r io.Reader) (procfs.Interrupts, error) {
 		return nil, errors.New("interrupts empty")
 	}
 	cpuNum := len(strings.Fields(scanner.Text())) // one header per cpu
+	general.Infof("[KFX] scanner text: %v", strings.Fields(scanner.Text()))
+	general.Infof("[KFX] cpu num: %v", cpuNum)
+	klog.Infof("[KFX] scanner text: %v", strings.Fields(scanner.Text()))
+	klog.Infof("[KFX] cpu num: %v", cpuNum)
 
 	for scanner.Scan() {
 		parts := strings.Fields(scanner.Text())
+		general.Infof("[KFX] len:%d scanner parts: %v", len(parts), parts)
+		klog.Infof("[KFX] len:%d scanner parts: %v", len(parts), parts)
 		if len(parts) == 0 { // skip empty lines
 			continue
 		}
