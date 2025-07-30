@@ -28,6 +28,7 @@ func (p *DynamicPolicy) SetIRQTuner(irqTuner irqtuner.Tuner) {
 // ListContainers retrieves the container info of all running containers.
 func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 	var cis []irqtuner.ContainerInfo
+	general.Infof("[KFX]irqtuner call ListContainer")
 
 	// 1. get container info from pod entries
 	for podUID, entry := range p.state.GetPodEntries() {
@@ -44,11 +45,13 @@ func (p *DynamicPolicy) ListContainers() ([]irqtuner.ContainerInfo, error) {
 		cis = append(cis, infos...)
 	}
 
+	general.Infof("[KFX]irqtuner ListContainers: %v", cis)
 	return cis, nil
 }
 
 func (p *DynamicPolicy) getPodContainerInfos(podUID string, entry state.ContainerEntries) ([]irqtuner.ContainerInfo, error) {
 	cis := make([]irqtuner.ContainerInfo, 0)
+	general.Infof("[KFX]irqtuner call getPodContainerInfos, podUID:%v entry:%v", podUID, entry)
 
 	if entry.IsPoolEntry() {
 		return cis, fmt.Errorf("this is a pool entry")
@@ -119,11 +122,14 @@ func (p *DynamicPolicy) getPodContainerInfos(podUID string, entry state.Containe
 		cis = append(cis, ci)
 	}
 
+	general.Infof("[KFX]irqtuner getPodContainerInfos: %+v", cis)
 	return cis, nil
 }
 
 // GetIRQForbiddenCores retrieves the cpu set of cores that are forbidden for irq binding.
 func (p *DynamicPolicy) GetIRQForbiddenCores() (machine.CPUSet, error) {
+	general.Infof("[KFX]irqtuner call GetIRQForbiddenCores")
+
 	forbiddenCores := machine.NewCPUSet()
 
 	// get irq forbidden cores from cpu plugin checkpoint
@@ -131,6 +137,8 @@ func (p *DynamicPolicy) GetIRQForbiddenCores() (machine.CPUSet, error) {
 	// TODO: add katabm cores
 
 	general.Infof("get the irq forbidden cores %v", forbiddenCores)
+
+	general.Infof("[KFX]get the irq forbidden cores %v", forbiddenCores)
 	return forbiddenCores, nil
 }
 
@@ -152,12 +160,14 @@ func (p *DynamicPolicy) GetExclusiveIRQCPUSet() (machine.CPUSet, error) {
 	}
 
 	general.Infof("get the current irq exclusive cpu set: %v", currentIRQCPUSet)
+	general.Infof("[KFX]get the current irq exclusive cpu set: %v", currentIRQCPUSet)
 	return currentIRQCPUSet, nil
 }
 
 // SetExclusiveIRQCPUSet sets the exclusive cpu set for Interrupt.
 func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 	general.Infof("set the current irq exclusive cpu set: %v", irqCPUSet)
+	general.Infof("[KFX]set the current irq exclusive cpu set: %v", irqCPUSet)
 
 	forbidden, err := p.GetIRQForbiddenCores()
 	if err != nil {
@@ -236,6 +246,7 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 
 	_ = p.emitter.StoreInt64(util.MetricNameSetExclusiveIRQCPUSize, int64(irqCPUSetSize), metrics.MetricTypeNameRaw)
 	general.Infof("persistent irq exclusive cpu set %v successful", irqCPUSet.String())
+	general.Infof("[KFX]persistent irq exclusive cpu set %v successful", irqCPUSet.String())
 
 	return nil
 }
