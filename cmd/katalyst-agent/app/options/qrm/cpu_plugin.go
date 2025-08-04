@@ -47,6 +47,7 @@ type CPUDynamicPolicyOptions struct {
 	CPUNUMAHintPreferLowThreshold             float64
 	SharedCoresNUMABindingResultAnnotationKey string
 	EnableMetricPreferredNumaAllocation       bool
+	EnableIRQTuner                            bool
 	*hintoptimizer.HintOptimizerOptions
 }
 
@@ -74,6 +75,7 @@ func NewCPUOptions() *CPUOptions {
 			},
 			SharedCoresNUMABindingResultAnnotationKey: consts.PodAnnotationNUMABindResultKey,
 			EnableMetricPreferredNumaAllocation:       false,
+			EnableIRQTuner:                            false,
 			HintOptimizerOptions:                      hintoptimizer.NewHintOptimizerOptions(),
 		},
 		CPUNativePolicyOptions: CPUNativePolicyOptions{
@@ -107,6 +109,8 @@ func (o *CPUOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 			"specific cgroup paths and it requires --enable-syncing-cpu-idle=true to make effect")
 	fs.BoolVar(&o.EnableMetricPreferredNumaAllocation, "enable-metric-preferred-numa-allocation", o.EnableMetricPreferredNumaAllocation,
 		"if set true, we will enable metric preferred numa")
+	fs.BoolVar(&o.EnableIRQTuner, "enable-irq-tuner", o.EnableIRQTuner,
+		"if set true, we will enable irq tuner")
 	fs.StringVar(&o.CPUAllocationOption, "cpu-allocation-option",
 		o.CPUAllocationOption, "The allocation option of cpu (packed/distributed). The default value is packed."+
 			"in cases where more than one NUMA node is required to satisfy the allocation.")
@@ -132,6 +136,7 @@ func (o *CPUOptions) ApplyTo(conf *qrmconfig.CPUQRMPluginConfig) error {
 	conf.EnableFullPhysicalCPUsOnly = o.EnableFullPhysicalCPUsOnly
 	conf.CPUAllocationOption = o.CPUAllocationOption
 	conf.EnableMetricPreferredNumaAllocation = o.EnableMetricPreferredNumaAllocation
+	conf.EnableIRQTuner = o.EnableIRQTuner
 	conf.SharedCoresNUMABindingResultAnnotationKey = o.SharedCoresNUMABindingResultAnnotationKey
 	if err := o.HintOptimizerOptions.ApplyTo(conf.HintOptimizerConfiguration); err != nil {
 		return err
