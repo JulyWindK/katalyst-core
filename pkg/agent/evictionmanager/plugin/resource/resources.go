@@ -43,6 +43,8 @@ const (
 
 type ResourcesGetter func(ctx context.Context) (v1.ResourceList, error)
 
+type PodRequestResourcesGetter func(pod *v1.Pod) v1.ResourceList
+
 type ThresholdGetter func(resourceName v1.ResourceName) *float64
 
 type GracePeriodGetter func() int64
@@ -56,6 +58,7 @@ type ResourcesEvictionPlugin struct {
 	// thresholdGetter is used to get the threshold of resources.
 	thresholdGetter                     ThresholdGetter
 	resourcesGetter                     ResourcesGetter
+	podRequestResourcesGetter           PodRequestResourcesGetter
 	deletionGracePeriodGetter           GracePeriodGetter
 	thresholdMetToleranceDurationGetter GracePeriodGetter
 
@@ -68,7 +71,7 @@ type ResourcesEvictionPlugin struct {
 }
 
 func NewResourcesEvictionPlugin(pluginName string, metaServer *metaserver.MetaServer,
-	emitter metrics.MetricEmitter, resourcesGetter ResourcesGetter, thresholdGetter ThresholdGetter,
+	emitter metrics.MetricEmitter, resourcesGetter ResourcesGetter, porRequestResourcesGetter PodRequestResourcesGetter, thresholdGetter ThresholdGetter,
 	deletionGracePeriodGetter GracePeriodGetter, thresholdMetToleranceDurationGetter GracePeriodGetter,
 	skipZeroQuantityResourceNames sets.String,
 	podFilter func(pod *v1.Pod) (bool, error),
@@ -79,6 +82,7 @@ func NewResourcesEvictionPlugin(pluginName string, metaServer *metaserver.MetaSe
 		emitter:                             emitter,
 		metaServer:                          metaServer,
 		resourcesGetter:                     resourcesGetter,
+		podRequestResourcesGetter:           porRequestResourcesGetter,
 		thresholdGetter:                     thresholdGetter,
 		deletionGracePeriodGetter:           deletionGracePeriodGetter,
 		thresholdMetToleranceDurationGetter: thresholdMetToleranceDurationGetter,
