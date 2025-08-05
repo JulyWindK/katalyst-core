@@ -20,6 +20,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/util/native"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/events"
 
@@ -53,7 +55,6 @@ func NewReclaimedResourcesEvictionPlugin(_ *client.GenericClientSet, _ events.Ev
 		}
 		return allocatable, nil
 	}
-
 	reclaimedThresholdGetter := func(resourceName v1.ResourceName) *float64 {
 		if threshold, ok := conf.GetDynamicConfiguration().EvictionThreshold[resourceName]; !ok {
 			return nil
@@ -74,6 +75,7 @@ func NewReclaimedResourcesEvictionPlugin(_ *client.GenericClientSet, _ events.Ev
 		metaServer,
 		emitter,
 		reclaimedResourcesGetter,
+		native.SumUpPodRequestResources,
 		reclaimedThresholdGetter,
 		deletionGracePeriodGetter,
 		thresholdMetToleranceDurationGetter,
