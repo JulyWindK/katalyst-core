@@ -103,12 +103,16 @@ func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ event
 }
 
 func (p *reclaimedNumaResourcesPlugin) Start() {
+	klog.Infof("[KFX] %s start", p.pluginName)
 	general.RegisterHeartbeatCheck(ReclaimedNumaResourcesEvictionPluginName, defaultHealthCheckTimeout, general.HealthzCheckStateNotReady, defaultHealthCheckTimeout)
 	return
 }
 
 func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*pluginapi.ThresholdMetResponse, error) {
 	activePods, err := p.metaServer.GetPodList(ctx, native.PodIsActive)
+	podNames := traversePodNames(activePods)
+	klog.Infof("[KFX]ThresholdMet %s get activePods %+v", p.pluginName, podNames)
+
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to list pods from metaServer: %v", err)
 		klog.Errorf("[%s] %s", p.pluginName, errMsg)
@@ -116,6 +120,8 @@ func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 	}
 
 	filteredPods := native.FilterPods(activePods, p.podFilter)
+	podNames = traversePodNames(filteredPods)
+	klog.Infof("[KFX]ThresholdMet %s get filteredPods %+v", p.pluginName, podNames)
 
 	klog.Infof("[%s] total %d filtered pods out-of %d running pods", p.pluginName, len(filteredPods), len(activePods))
 
@@ -132,6 +138,7 @@ func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 		klog.Errorf("[%s] %s", p.pluginName, errMsg)
 		return nil, fmt.Errorf(errMsg)
 	}
+	klog.Infof("[KFX]ThresholdMet %s get numa resource allocatable %+v", p.pluginName, allocatable)
 
 	emitNumaResourceMetrics(MetricsNamePodResource, allocatable, map[string]string{
 		"type": "allocatable",
@@ -154,6 +161,7 @@ func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 	usedNumaResources := make(map[string]v1.ResourceList)
 	for _, pod := range filteredPods {
 		numaID, err := parseNumaIDFormPod(pod)
+		klog.Infof("[KFX]ThresholdMet %s parse pod %v numaID %s", p.pluginName, pod.Name, numaID)
 		if err != nil || numaID == "" {
 			errMsg := fmt.Sprintf("failed to parse pod numaID: %v", err)
 			klog.Errorf("[%s] %s", p.pluginName, errMsg)
@@ -163,6 +171,9 @@ func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 		resources := native.SumUpPodRequestResources(pod)
 		usedResources := native.AddResources(usedNumaResources[numaID], resources)
 		usedNumaResources[numaID] = usedResources
+		klog.Infof("[KFX]ThresholdMet %s sumup pod %v resource %+v", p.pluginName, pod.Name, resources)
+		klog.Infof("[KFX]ThresholdMet %s parse usedResources %+v", p.pluginName, usedResources)
+		klog.Infof("[KFX]ThresholdMet %s parse usedNumaResources[%s] %+v", p.pluginName, numaID, usedNumaResources)
 
 		native.EmitResourceMetrics(MetricsNamePodResource, resources, map[string]string{
 			"pluginName": p.pluginName,
@@ -178,9 +189,11 @@ func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 		"type":       "used",
 	}, p.emitter)
 
+	klog.Infof("[KFX]ThresholdMet %s parse usedNumaResources: %+v", p.pluginName, usedNumaResources)
 	for numaID, usedResources := range usedNumaResources {
 		for resourceName, usedQuantity := range usedResources {
 			totalQuantity, ok := allocatable[numaID][resourceName]
+			klog.Infof("[KFX]ThresholdMet %s get numa[%s] resource[%s] totalQuantity %+v", p.pluginName, numaID, resourceName, totalQuantity)
 			if !ok {
 				klog.Warningf("[%s] used resource: %s doesn't exist in allocatable", p.pluginName, resourceName)
 				continue
@@ -194,16 +207,20 @@ func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 			}
 
 			used := float64((&usedQuantity).Value())
+			klog.Infof("[KFX]ThresholdMet %s get numa[%s] resource[%s] usedQuantity %+v", p.pluginName, numaID, resourceName, used)
 
 			// get resource threshold (i.e. tolerance) for each resource
 			// if nil, eviction will not be triggered.
 			thresholdRate := p.thresholdGetter(resourceName)
+			klog.Infof("[KFX]ThresholdMet %s get resource[%s] thresholdRate %+v", p.pluginName, resourceName, thresholdRate)
 			if thresholdRate == nil {
 				continue
 			}
 
 			thresholdValue := *thresholdRate * total
 			klog.Infof("[%s] numa %s resources %v: total %v, used %v, thresholdRate %v, thresholdValue: %v", p.pluginName, numaID,
+				resourceName, total, used, *thresholdRate, thresholdValue)
+			klog.Infof("[KFX]ThresholdMet[%s] numa %s resources %v: total %v, used %v, thresholdRate %v, thresholdValue: %v", p.pluginName, numaID,
 				resourceName, total, used, *thresholdRate, thresholdValue)
 
 			exceededValue := thresholdValue - used
@@ -237,8 +254,11 @@ func (p *reclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, r
 		klog.Warningf("[%s] GetTopEvictionPods got empty active pods list", p.pluginName)
 		return &pluginapi.GetTopEvictionPodsResponse{}, nil
 	}
-
+	podNames := traversePodNames(request.ActivePods)
+	klog.Infof("[KFX]GetTopEvictionPods %s get activePods %+v", p.pluginName, podNames)
 	activeFilteredPods := native.FilterPods(request.ActivePods, p.podFilter)
+	podNames = traversePodNames(activeFilteredPods)
+	klog.Infof("[KFX]GetTopEvictionPods %s get activeFilteredPods %+v", p.pluginName, podNames)
 
 	numaPodsMap := make(map[string][]*v1.Pod)
 	for _, pod := range activeFilteredPods {
@@ -249,6 +269,7 @@ func (p *reclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, r
 		}
 		numaPodsMap[numaID] = append(numaPodsMap[numaID], pod)
 	}
+	klog.Infof("[KFX]GetTopEvictionPods %s get numaPodsMap %+v", p.pluginName, numaPodsMap)
 
 	parseNumaScope := func(evictionScope string) (string, error) {
 		fields := strings.Split(evictionScope, "_")
@@ -261,12 +282,14 @@ func (p *reclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, r
 	}
 
 	evictionNumaID, err := parseNumaScope(request.EvictionScope)
+	klog.Infof("[KFX]GetTopEvictionPods %s parse evictionNumaID: %+v", p.pluginName, evictionNumaID)
 	if err != nil {
 		klog.Errorf("[%s] failed to parse eviction scope: %v", p.pluginName, err)
 		return nil, err
 	}
 
 	candidateEvictionPods := numaPodsMap[evictionNumaID]
+	klog.Infof("[KFX]GetTopEvictionPods %s before sort candidateEvictionPods %+v", p.pluginName, candidateEvictionPods)
 	sort.Slice(candidateEvictionPods, func(i, j int) bool {
 		valueI, valueJ := int64(0), int64(0)
 
@@ -279,6 +302,7 @@ func (p *reclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, r
 		}
 		return valueI > valueJ
 	})
+	klog.Infof("[KFX]GetTopEvictionPods %s after sort candidateEvictionPods %+v", p.pluginName, candidateEvictionPods)
 
 	retLen := general.MinUInt64(request.TopN, uint64(len(candidateEvictionPods)))
 
@@ -288,7 +312,9 @@ func (p *reclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, r
 			GracePeriodSeconds: gracePeriod,
 		}
 	}
-
+	targetPods := candidateEvictionPods[:retLen]
+	podNames = traversePodNames(targetPods)
+	klog.Infof("[KFX]GetTopEvictionPods %s get TargetPods: %+v", p.pluginName, podNames)
 	return &pluginapi.GetTopEvictionPodsResponse{
 		TargetPods:      candidateEvictionPods[:retLen],
 		DeletionOptions: deletionOptions,
@@ -333,4 +359,12 @@ func emitNumaResourceMetrics(name string, numaResourceList map[string]v1.Resourc
 		tags["numa"] = numaID
 		native.EmitResourceMetrics(name, resourceList, tags, emitter)
 	}
+}
+
+func traversePodNames(pods []*v1.Pod) []string {
+	podNames := make([]string, 0, len(pods))
+	for _, pod := range pods {
+		podNames = append(podNames, pod.Namespace+"/"+pod.Name)
+	}
+	return podNames
 }
