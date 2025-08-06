@@ -167,7 +167,7 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 			klog.Errorf("[%s] %s", p.pluginName, errMsg)
 			return nil, fmt.Errorf(errMsg)
 		}
-		if _, ok := usedNumaResources[numaID]; !ok {
+		if _, ok := allocatable[numaID]; !ok {
 			klog.Warningf("[%s]the parsed numa id %s is invalid", p.pluginName, numaID)
 			continue
 		}
