@@ -42,7 +42,7 @@ import (
 
 const ReclaimedNumaResourcesEvictionPluginName = "reclaimed-numa-resource-pressure-eviction-plugin"
 
-type reclaimedNumaResourcesPlugin struct {
+type ReclaimedNumaResourcesPlugin struct {
 	*process.StopControl
 	*ResourcesEvictionPlugin
 }
@@ -96,19 +96,19 @@ func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ event
 		conf.CheckReclaimedQoSForPod,
 	)
 
-	return &reclaimedNumaResourcesPlugin{
+	return &ReclaimedNumaResourcesPlugin{
 		StopControl:             process.NewStopControl(time.Time{}),
 		ResourcesEvictionPlugin: p,
 	}
 }
 
-func (p *reclaimedNumaResourcesPlugin) Start() {
+func (p *ReclaimedNumaResourcesPlugin) Start() {
 	klog.Infof("[KFX] %s start", p.pluginName)
 	general.RegisterHeartbeatCheck(ReclaimedNumaResourcesEvictionPluginName, defaultHealthCheckTimeout, general.HealthzCheckStateNotReady, defaultHealthCheckTimeout)
 	return
 }
 
-func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*pluginapi.ThresholdMetResponse, error) {
+func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*pluginapi.ThresholdMetResponse, error) {
 	activePods, err := p.metaServer.GetPodList(ctx, native.PodIsActive)
 	podNames := traversePodNames(activePods)
 	klog.Infof("[KFX]ThresholdMet %s get activePods %+v", p.pluginName, podNames)
@@ -245,7 +245,7 @@ func (p *reclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 	}, nil
 }
 
-func (p *reclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, request *pluginapi.GetTopEvictionPodsRequest) (*pluginapi.GetTopEvictionPodsResponse, error) {
+func (p *ReclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, request *pluginapi.GetTopEvictionPodsRequest) (*pluginapi.GetTopEvictionPodsResponse, error) {
 	if request == nil {
 		return nil, fmt.Errorf("GetTopEvictionPods got nil request")
 	}
