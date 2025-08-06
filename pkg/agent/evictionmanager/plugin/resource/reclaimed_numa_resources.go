@@ -167,6 +167,10 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 			klog.Errorf("[%s] %s", p.pluginName, errMsg)
 			return nil, fmt.Errorf(errMsg)
 		}
+		if _, ok := usedNumaResources[numaID]; !ok {
+			klog.Warningf("[%s]the parsed numa id %s is invalid", p.pluginName, numaID)
+			continue
+		}
 
 		resources := native.SumUpPodRequestResources(pod)
 		usedResources := native.AddResources(usedNumaResources[numaID], resources)
