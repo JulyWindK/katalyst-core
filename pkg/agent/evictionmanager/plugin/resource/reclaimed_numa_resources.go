@@ -161,6 +161,7 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 		}
 
 		resources := p.podRequestResourcesGetter(pod)
+		klog.Infof("[%s] podRequestResourcesGetter: resources %+v", p.pluginName, resources)
 		usedResources := native.AddResources(usedNumaResources[numaID], resources)
 		usedNumaResources[numaID] = usedResources
 
@@ -171,7 +172,8 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 			"type":       "pod",
 		}, p.emitter)
 	}
-	klog.Infof("[%s] resources: allocatable %+v usedResources %+v", p.pluginName, allocatable, usedNumaResources)
+	klog.Infof("[%s] resources: allocatable %+v", p.pluginName, allocatable)
+	klog.Infof("[%s] resources: usedResources %+v", p.pluginName, usedNumaResources)
 
 	emitNumaResourceMetrics(MetricsNamePodResource, usedNumaResources, map[string]string{
 		"pluginName": p.pluginName,
