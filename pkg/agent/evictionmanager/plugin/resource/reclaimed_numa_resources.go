@@ -183,12 +183,14 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 	for numaID, usedResources := range usedNumaResources {
 		for resourceName, usedQuantity := range usedResources {
 			totalQuantity, ok := allocatable[numaID][resourceName]
+			klog.Infof("[%s]allocatable numaID:%v resourceName:%v, totalQuantity:%v", p.pluginName, numaID, resourceName, totalQuantity)
 			if !ok {
 				klog.Warningf("[%s] used resource: %s doesn't exist in allocatable", p.pluginName, resourceName)
 				continue
 			}
 
 			total := float64((&totalQuantity).Value())
+			klog.Infof("[%s]for total:%v", p.pluginName, total)
 
 			if total <= 0 && p.skipZeroQuantityResourceNames.Has(string(resourceName)) {
 				klog.Warningf("[%s] skip resource: %s with total: %.2f", p.pluginName, total)
@@ -196,9 +198,11 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 			}
 
 			used := float64((&usedQuantity).Value())
+			klog.Infof("[%s]for total:%v used:%v", p.pluginName, total, used)
 			// get resource threshold (i.e. tolerance) for each resource
 			// if nil, eviction will not be triggered.
 			thresholdRate := p.thresholdGetter(resourceName)
+			klog.Infof("[%s]thresholdGetter resourceName:%v thresholdRate:%v", p.pluginName, resourceName, *thresholdRate)
 			if thresholdRate == nil {
 				continue
 			}
