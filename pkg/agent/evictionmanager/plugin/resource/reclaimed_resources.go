@@ -20,8 +20,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/kubewharf/katalyst-core/pkg/util/native"
-
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/events"
 
@@ -30,6 +28,7 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/config"
 	"github.com/kubewharf/katalyst-core/pkg/metaserver"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
+	"github.com/kubewharf/katalyst-core/pkg/util/native"
 	"github.com/kubewharf/katalyst-core/pkg/util/process"
 )
 
