@@ -42,9 +42,17 @@ import (
 
 const ReclaimedNumaResourcesEvictionPluginName = "reclaimed-numa-resource-pressure-eviction-plugin"
 
+// NumaResourcesGetter return the resource status of numa granularity, where the key is numaID.
+type NumaResourcesGetter func(ctx context.Context) (map[string]v1.ResourceList, error)
+
+type PodRequestResourcesGetter func(pod *v1.Pod) v1.ResourceList
+
 type ReclaimedNumaResourcesPlugin struct {
 	*process.StopControl
 	*ResourcesEvictionPlugin
+
+	NumaResourcesGetter       NumaResourcesGetter
+	PodRequestResourcesGetter PodRequestResourcesGetter
 }
 
 func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ events.EventRecorder,
@@ -54,18 +62,7 @@ func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ event
 		return nil, nil
 	}
 	numaResourcesGetter := func(ctx context.Context) (map[string]v1.ResourceList, error) {
-		cnr, err := metaServer.GetCNR(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get cnr from metaServer: %v", err)
-		}
-
-		allocatable := make(map[string]v1.ResourceList)
-
-		for _, zone := range cnr.Status.TopologyZone {
-			getNumaResourceAllocatableFromTopologyZone(zone, allocatable)
-		}
-
-		return allocatable, nil
+		return GetNumaResourceAllocatable(ctx, metaServer)
 	}
 
 	reclaimedThresholdGetter := func(resourceName v1.ResourceName) *float64 {
@@ -88,7 +85,6 @@ func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ event
 		metaServer,
 		emitter,
 		reclaimedResourcesGetter,
-		numaResourcesGetter,
 		reclaimedThresholdGetter,
 		deletionGracePeriodGetter,
 		thresholdMetToleranceDurationGetter,
@@ -97,8 +93,10 @@ func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ event
 	)
 
 	return &ReclaimedNumaResourcesPlugin{
-		StopControl:             process.NewStopControl(time.Time{}),
-		ResourcesEvictionPlugin: p,
+		StopControl:               process.NewStopControl(time.Time{}),
+		ResourcesEvictionPlugin:   p,
+		NumaResourcesGetter:       numaResourcesGetter,
+		PodRequestResourcesGetter: native.SumUpPodRequestResources,
 	}
 }
 
@@ -125,7 +123,7 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 		}, nil
 	}
 
-	allocatable, err := p.numaResourcesGetter(ctx)
+	allocatable, err := p.NumaResourcesGetter(ctx)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get resources: %v", err)
 		klog.Errorf("[%s] %s", p.pluginName, errMsg)
@@ -164,7 +162,7 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 			continue
 		}
 
-		resources := native.SumUpPodRequestResources(pod)
+		resources := p.PodRequestResourcesGetter(pod)
 		usedResources := native.AddResources(usedNumaResources[numaID], resources)
 		usedNumaResources[numaID] = usedResources
 
@@ -273,7 +271,7 @@ func (p *ReclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, r
 	sort.Slice(candidateEvictionPods, func(i, j int) bool {
 		valueI, valueJ := int64(0), int64(0)
 
-		resourceI, resourceJ := native.SumUpPodRequestResources(candidateEvictionPods[i]), native.SumUpPodRequestResources(candidateEvictionPods[j])
+		resourceI, resourceJ := p.PodRequestResourcesGetter(candidateEvictionPods[i]), p.PodRequestResourcesGetter(candidateEvictionPods[j])
 		if quantity, ok := resourceI[v1.ResourceName(request.EvictionScope)]; ok {
 			valueI = (&quantity).Value()
 		}
@@ -296,6 +294,21 @@ func (p *ReclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, r
 		TargetPods:      candidateEvictionPods[:retLen],
 		DeletionOptions: deletionOptions,
 	}, nil
+}
+
+func GetNumaResourceAllocatable(ctx context.Context, metaServer *metaserver.MetaServer) (map[string]v1.ResourceList, error) {
+	cnr, err := metaServer.GetCNR(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get cnr from metaServer: %v", err)
+	}
+
+	allocatable := make(map[string]v1.ResourceList)
+
+	for _, zone := range cnr.Status.TopologyZone {
+		getNumaResourceAllocatableFromTopologyZone(zone, allocatable)
+	}
+
+	return allocatable, nil
 }
 
 func getNumaResourceAllocatableFromTopologyZone(zone *v1alpha1.TopologyZone, allocatable map[string]v1.ResourceList) {
