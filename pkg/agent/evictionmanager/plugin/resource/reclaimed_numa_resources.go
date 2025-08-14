@@ -42,9 +42,17 @@ import (
 
 const ReclaimedNumaResourcesEvictionPluginName = "reclaimed-numa-resource-pressure-eviction-plugin"
 
+// NumaResourcesGetter return the resource status of numa granularity, where the key is numaID.
+type NumaResourcesGetter func(ctx context.Context) (map[string]v1.ResourceList, error)
+
+type PodRequestResourcesGetter func(pod *v1.Pod) v1.ResourceList
+
 type ReclaimedNumaResourcesPlugin struct {
 	*process.StopControl
 	*ResourcesEvictionPlugin
+
+	NumaResourcesGetter       NumaResourcesGetter
+	PodRequestResourcesGetter PodRequestResourcesGetter
 }
 
 func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ events.EventRecorder,
@@ -88,7 +96,6 @@ func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ event
 		metaServer,
 		emitter,
 		reclaimedResourcesGetter,
-		numaResourcesGetter,
 		reclaimedThresholdGetter,
 		deletionGracePeriodGetter,
 		thresholdMetToleranceDurationGetter,
@@ -97,8 +104,10 @@ func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ event
 	)
 
 	return &ReclaimedNumaResourcesPlugin{
-		StopControl:             process.NewStopControl(time.Time{}),
-		ResourcesEvictionPlugin: p,
+		StopControl:               process.NewStopControl(time.Time{}),
+		ResourcesEvictionPlugin:   p,
+		NumaResourcesGetter:       numaResourcesGetter,
+		PodRequestResourcesGetter: native.SumUpPodRequestResources,
 	}
 }
 
@@ -125,7 +134,7 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 		}, nil
 	}
 
-	allocatable, err := p.numaResourcesGetter(ctx)
+	allocatable, err := p.NumaResourcesGetter(ctx)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to get resources: %v", err)
 		klog.Errorf("[%s] %s", p.pluginName, errMsg)
@@ -164,7 +173,7 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 			continue
 		}
 
-		resources := native.SumUpPodRequestResources(pod)
+		resources := p.PodRequestResourcesGetter(pod)
 		usedResources := native.AddResources(usedNumaResources[numaID], resources)
 		usedNumaResources[numaID] = usedResources
 
@@ -273,7 +282,7 @@ func (p *ReclaimedNumaResourcesPlugin) GetTopEvictionPods(ctx context.Context, r
 	sort.Slice(candidateEvictionPods, func(i, j int) bool {
 		valueI, valueJ := int64(0), int64(0)
 
-		resourceI, resourceJ := native.SumUpPodRequestResources(candidateEvictionPods[i]), native.SumUpPodRequestResources(candidateEvictionPods[j])
+		resourceI, resourceJ := p.PodRequestResourcesGetter(candidateEvictionPods[i]), p.PodRequestResourcesGetter(candidateEvictionPods[j])
 		if quantity, ok := resourceI[v1.ResourceName(request.EvictionScope)]; ok {
 			valueI = (&quantity).Value()
 		}
