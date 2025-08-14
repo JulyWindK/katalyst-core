@@ -67,6 +67,7 @@ func NewReclaimedNumaResourcesEvictionPlugin(_ *client.GenericClientSet, _ event
 		if threshold, ok := conf.GetDynamicConfiguration().EvictionThreshold[resourceName]; !ok {
 			return nil
 		} else {
+			klog.Infof("[%s]GetDynamicConfiguration EvictionThreshold %s threshold:%v", ReclaimedNumaResourcesEvictionPluginName, resourceName, threshold)
 			return &threshold
 		}
 	}
@@ -202,8 +203,8 @@ func (p *ReclaimedNumaResourcesPlugin) ThresholdMet(ctx context.Context) (*plugi
 			// get resource threshold (i.e. tolerance) for each resource
 			// if nil, eviction will not be triggered.
 			thresholdRate := p.thresholdGetter(resourceName)
-			klog.Infof("[%s]thresholdGetter resourceName:%v thresholdRate:%v", p.pluginName, resourceName, *thresholdRate)
 			if thresholdRate == nil {
+				klog.Infof("[%s]thresholdGetter resourceName %s threshold rate is nil", p.pluginName, resourceName)
 				continue
 			}
 
