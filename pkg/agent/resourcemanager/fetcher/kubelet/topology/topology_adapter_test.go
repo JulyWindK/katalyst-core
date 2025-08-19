@@ -2032,6 +2032,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 						{
 							Type: nodev1alpha1.TopologyTypeNuma,
 							Name: "0",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
 									"cpu":                                 resource.MustParse("24"),
@@ -2084,6 +2090,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 						{
 							Type: nodev1alpha1.TopologyTypeNuma,
 							Name: "1",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
 									"cpu":                                 resource.MustParse("24"),
@@ -2514,6 +2526,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 						{
 							Type: nodev1alpha1.TopologyTypeNuma,
 							Name: "0",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "10,20",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
 									"gpu":    resource.MustParse("2"),
@@ -2620,6 +2638,12 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 						{
 							Type: nodev1alpha1.TopologyTypeNuma,
 							Name: "1",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "20,10",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
 									"cpu":    resource.MustParse("24"),

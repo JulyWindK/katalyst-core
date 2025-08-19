@@ -24,8 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kubewharf/katalyst-core/pkg/config/agent"
-
 	"github.com/fsnotify/fsnotify"
 	info "github.com/google/cadvisor/info/v1"
 	"github.com/pkg/errors"
@@ -41,6 +39,7 @@ import (
 	nodev1alpha1 "github.com/kubewharf/katalyst-api/pkg/apis/node/v1alpha1"
 	apiconsts "github.com/kubewharf/katalyst-api/pkg/consts"
 	"github.com/kubewharf/katalyst-api/pkg/utils"
+	"github.com/kubewharf/katalyst-core/pkg/config/agent"
 	"github.com/kubewharf/katalyst-core/pkg/config/generic"
 	"github.com/kubewharf/katalyst-core/pkg/metaserver"
 	metaserverpod "github.com/kubewharf/katalyst-core/pkg/metaserver/agent/pod"
@@ -730,7 +729,10 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 }
 
 func (p *topologyAdapterImpl) generateNodeDistanceAttr(node util.ZoneNode) []nodev1alpha1.Attribute {
-	var attrs []nodev1alpha1.Attribute
+	var (
+		distances []int
+		attrs     []nodev1alpha1.Attribute
+	)
 
 	numaID, err := strconv.Atoi(node.Meta.Name)
 	if err != nil {
@@ -741,11 +743,13 @@ func (p *topologyAdapterImpl) generateNodeDistanceAttr(node util.ZoneNode) []nod
 	distanceInfos := p.numaDistanceMap[numaID]
 	klog.Infof("[KFX]generateNodeDistanceAttr numaID:%v distanceInfos: %+v", numaID, distanceInfos)
 	for _, distanceInfo := range distanceInfos {
-		attrs = append(attrs, nodev1alpha1.Attribute{
-			Name:  fmt.Sprintf("numa%d_distance", distanceInfo.NumaID),
-			Value: fmt.Sprintf("%d", distanceInfo.Distance),
-		})
+		distances = append(distances, distanceInfo.Distance)
 	}
+
+	attrs = append(attrs, nodev1alpha1.Attribute{
+		Name:  "numa_distance",
+		Value: general.IntSliceToString(distances),
+	})
 
 	klog.Infof("[KFX]generateNodeDistanceAttr attrs: %+v", attrs)
 
