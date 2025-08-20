@@ -32,12 +32,12 @@ func NewLowThroughputThresholdConfig() *LowThroughputThresholdConfig {
 
 func (c *LowThroughputThresholdConfig) ApplyConfiguration(conf *crd.DynamicConfigCRD) {
 	if itc := conf.IRQTuningConfiguration; itc != nil &&
-		itc.Spec.Config.ThrouputClassSwitch != nil &&
-		itc.Spec.Config.ThrouputClassSwitch.LowThroughputThresholds != nil {
-		config := itc.Spec.Config.ThrouputClassSwitch.LowThroughputThresholds
+		itc.Spec.Config.ThroughputClassSwitch != nil &&
+		itc.Spec.Config.ThroughputClassSwitch.LowThroughputThresholds != nil {
+		config := itc.Spec.Config.ThroughputClassSwitch.LowThroughputThresholds
 
-		if config.RxPPSThresh != nil {
-			c.RxPPSThresh = *config.RxPPSThresh
+		if config.RxPPSThreshold != nil {
+			c.RxPPSThresh = *config.RxPPSThreshold
 		}
 		if config.SuccessiveCount != nil {
 			c.SuccessiveCount = *config.SuccessiveCount
