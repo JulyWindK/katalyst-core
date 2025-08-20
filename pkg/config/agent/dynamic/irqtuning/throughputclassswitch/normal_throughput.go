@@ -32,12 +32,12 @@ func NewNormalThroughputThresholdConfig() *NormalThroughputThresholdConfig {
 
 func (c *NormalThroughputThresholdConfig) ApplyConfiguration(conf *crd.DynamicConfigCRD) {
 	if itc := conf.IRQTuningConfiguration; itc != nil &&
-		itc.Spec.Config.ThrouputClassSwitch != nil {
-		config := itc.Spec.Config.ThrouputClassSwitch
+		itc.Spec.Config.ThroughputClassSwitch != nil {
+		config := itc.Spec.Config.ThroughputClassSwitch
 
 		if config.NormalThroughputThresholds != nil {
-			if config.NormalThroughputThresholds.RxPPSThresh != nil {
-				c.RxPPSThresh = *config.NormalThroughputThresholds.RxPPSThresh
+			if config.NormalThroughputThresholds.RxPPSThreshold != nil {
+				c.RxPPSThresh = *config.NormalThroughputThresholds.RxPPSThreshold
 			}
 			if config.NormalThroughputThresholds.SuccessiveCount != nil {
 				c.SuccessiveCount = *config.NormalThroughputThresholds.SuccessiveCount

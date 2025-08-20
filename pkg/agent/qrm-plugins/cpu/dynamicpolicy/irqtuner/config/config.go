@@ -389,24 +389,24 @@ func ValidateIrqTuningDynamicConfig(dynamicConf *dynconfig.Configuration) error 
 		return fmt.Errorf("invalid CoresExpectedCPUUtil: %d", conf.CoresExpectedCPUUtil)
 	}
 
-	if conf.ThrouputClassSwitchConf != nil {
-		if conf.ThrouputClassSwitchConf.LowThresholdConfig != nil {
-			if conf.ThrouputClassSwitchConf.LowThresholdConfig.SuccessiveCount <= 0 {
-				return fmt.Errorf("invalid ThrouputClassSwitchConf.LowThresholdConfig.SuccessiveCount: %d", conf.ThrouputClassSwitchConf.LowThresholdConfig.SuccessiveCount)
+	if conf.ThroughputClassSwitchConf != nil {
+		if conf.ThroughputClassSwitchConf.LowThresholdConfig != nil {
+			if conf.ThroughputClassSwitchConf.LowThresholdConfig.SuccessiveCount <= 0 {
+				return fmt.Errorf("invalid ThrouputClassSwitchConf.LowThresholdConfig.SuccessiveCount: %d", conf.ThroughputClassSwitchConf.LowThresholdConfig.SuccessiveCount)
 			}
 		}
 
-		if conf.ThrouputClassSwitchConf.NormalThresholdConfig != nil {
-			if conf.ThrouputClassSwitchConf.NormalThresholdConfig.SuccessiveCount <= 0 {
-				return fmt.Errorf("invalid NormalThresholdConfig.LowThresholdConfig.SuccessiveCount: %d", conf.ThrouputClassSwitchConf.NormalThresholdConfig.SuccessiveCount)
+		if conf.ThroughputClassSwitchConf.NormalThresholdConfig != nil {
+			if conf.ThroughputClassSwitchConf.NormalThresholdConfig.SuccessiveCount <= 0 {
+				return fmt.Errorf("invalid NormalThresholdConfig.LowThresholdConfig.SuccessiveCount: %d", conf.ThroughputClassSwitchConf.NormalThresholdConfig.SuccessiveCount)
 			}
 		}
 
-		if conf.ThrouputClassSwitchConf.LowThresholdConfig != nil &&
-			conf.ThrouputClassSwitchConf.NormalThresholdConfig != nil {
-			if conf.ThrouputClassSwitchConf.LowThresholdConfig.RxPPSThresh >= conf.ThrouputClassSwitchConf.NormalThresholdConfig.RxPPSThresh {
+		if conf.ThroughputClassSwitchConf.LowThresholdConfig != nil &&
+			conf.ThroughputClassSwitchConf.NormalThresholdConfig != nil {
+			if conf.ThroughputClassSwitchConf.LowThresholdConfig.RxPPSThresh >= conf.ThroughputClassSwitchConf.NormalThresholdConfig.RxPPSThresh {
 				return fmt.Errorf("ThrouputClassSwitchConf.LowThresholdConfig.RxPPSThresh: %d greater-equal ThrouputClassSwitchConf.NormalThresholdConfig.RxPPSThresh: %d",
-					conf.ThrouputClassSwitchConf.LowThresholdConfig.RxPPSThresh, conf.ThrouputClassSwitchConf.NormalThresholdConfig.RxPPSThresh)
+					conf.ThroughputClassSwitchConf.LowThresholdConfig.RxPPSThresh, conf.ThroughputClassSwitchConf.NormalThresholdConfig.RxPPSThresh)
 			}
 		}
 	}
@@ -418,12 +418,12 @@ func ValidateIrqTuningDynamicConfig(dynamicConf *dynconfig.Configuration) error 
 			return fmt.Errorf("invalid LoadBalanceConf.SuccessiveTuningInterval: %d", lbConf.SuccessiveTuningInterval)
 		}
 
-		if lbConf.PingPongIntervalThresh < 1 {
-			return fmt.Errorf("invalid LoadBalanceConf.PingPongIntervalThresh: %d", lbConf.PingPongIntervalThresh)
+		if lbConf.PingPongIntervalThreshold < 1 {
+			return fmt.Errorf("invalid LoadBalanceConf.PingPongIntervalThresh: %d", lbConf.PingPongIntervalThreshold)
 		}
 
-		if lbConf.PingPongCountThresh < 1 {
-			return fmt.Errorf("invalid LoadBalanceConf.PingPongCountThresh: %d", lbConf.PingPongCountThresh)
+		if lbConf.PingPongCountThreshold < 1 {
+			return fmt.Errorf("invalid LoadBalanceConf.PingPongCountThresh: %d", lbConf.PingPongCountThreshold)
 		}
 
 		if lbConf.IRQsTunedNumMaxEachTime < 1 {
@@ -435,27 +435,27 @@ func ValidateIrqTuningDynamicConfig(dynamicConf *dynconfig.Configuration) error 
 		}
 
 		if lbConf.Thresholds != nil {
-			if lbConf.Thresholds.CPUUtilThresh <= 0 || lbConf.Thresholds.CPUUtilThresh >= 100 {
-				return fmt.Errorf("invalid LoadBalanceConf.Thresholds.CPUUtilThresh: %d", lbConf.Thresholds.CPUUtilThresh)
+			if lbConf.Thresholds.CPUUtilThreshold <= 0 || lbConf.Thresholds.CPUUtilThreshold >= 100 {
+				return fmt.Errorf("invalid LoadBalanceConf.Thresholds.CPUUtilThresh: %d", lbConf.Thresholds.CPUUtilThreshold)
 			}
 
-			if lbConf.Thresholds.CPUUtilThresh <= conf.CoresExpectedCPUUtil {
+			if lbConf.Thresholds.CPUUtilThreshold <= conf.CoresExpectedCPUUtil {
 				return fmt.Errorf("LoadBalanceConf.Thresholds.CPUUtilThresh %d less-equal CoresExpectedCPUUtil: %d",
-					lbConf.Thresholds.CPUUtilThresh, conf.CoresExpectedCPUUtil)
+					lbConf.Thresholds.CPUUtilThreshold, conf.CoresExpectedCPUUtil)
 			}
 
 			if conf.CoresAdjustConf != nil && conf.CoresAdjustConf.IncConf != nil && conf.CoresAdjustConf.IncConf.Thresholds != nil {
 				// LoadBalanceConf.Thresholds.CPUUtilThresh (threshold of balancing irqs) should greater than
 				// CoresAdjustConf.IncConf.Thresholds.AvgCPUUtil (threshthreshold of increasing irq cores),
 				// it's meaningless to let LoadBalanceConf.Thresholds.CPUUtilThresh less-equal CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh.
-				if lbConf.Thresholds.CPUUtilThresh <= conf.CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh {
+				if lbConf.Thresholds.CPUUtilThreshold <= conf.CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThreshold {
 					return fmt.Errorf("LoadBalanceConf.Thresholds.CPUUtilThresh %d less-equal CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh %d",
-						lbConf.Thresholds.CPUUtilThresh, conf.CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh)
+						lbConf.Thresholds.CPUUtilThreshold, conf.CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThreshold)
 				}
 			}
 
-			if lbConf.Thresholds.CPUUtilGapThresh <= 0 || lbConf.Thresholds.CPUUtilGapThresh >= 100 {
-				return fmt.Errorf("invalid LoadBalanceConf.Thresholds.CPUUtilGapThresh: %d", lbConf.Thresholds.CPUUtilGapThresh)
+			if lbConf.Thresholds.CPUUtilGapThreshold <= 0 || lbConf.Thresholds.CPUUtilGapThreshold >= 100 {
+				return fmt.Errorf("invalid LoadBalanceConf.Thresholds.CPUUtilGapThresh: %d", lbConf.Thresholds.CPUUtilGapThreshold)
 			}
 		}
 	}
@@ -487,18 +487,18 @@ func ValidateIrqTuningDynamicConfig(dynamicConf *dynconfig.Configuration) error 
 			}
 
 			if incConf.Thresholds != nil {
-				if incConf.FullThresh <= incConf.Thresholds.AvgCPUUtilThresh {
+				if incConf.FullThresh <= incConf.Thresholds.AvgCPUUtilThreshold {
 					return fmt.Errorf("CoresAdjustConf.IncConf.FullThresh %d less-equal CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh %d",
-						incConf.FullThresh, incConf.Thresholds.AvgCPUUtilThresh)
+						incConf.FullThresh, incConf.Thresholds.AvgCPUUtilThreshold)
 				}
 
-				if incConf.Thresholds.AvgCPUUtilThresh <= 0 || incConf.Thresholds.AvgCPUUtilThresh >= 100 {
-					return fmt.Errorf("invalid CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh %d", incConf.Thresholds.AvgCPUUtilThresh)
+				if incConf.Thresholds.AvgCPUUtilThreshold <= 0 || incConf.Thresholds.AvgCPUUtilThreshold >= 100 {
+					return fmt.Errorf("invalid CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh %d", incConf.Thresholds.AvgCPUUtilThreshold)
 				}
 
-				if incConf.Thresholds.AvgCPUUtilThresh <= conf.CoresExpectedCPUUtil {
+				if incConf.Thresholds.AvgCPUUtilThreshold <= conf.CoresExpectedCPUUtil {
 					return fmt.Errorf("CoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh %d less-equal CoresExpectedCPUUtil %d",
-						incConf.Thresholds.AvgCPUUtilThresh, conf.CoresExpectedCPUUtil)
+						incConf.Thresholds.AvgCPUUtilThreshold, conf.CoresExpectedCPUUtil)
 				}
 			}
 		}
@@ -523,13 +523,13 @@ func ValidateIrqTuningDynamicConfig(dynamicConf *dynconfig.Configuration) error 
 			}
 
 			if decConf.Thresholds != nil {
-				if decConf.Thresholds.AvgCPUUtilThresh <= 0 || decConf.Thresholds.AvgCPUUtilThresh >= 100 {
-					return fmt.Errorf("invalid CoresAdjustConf.DecConf.Thresholds.AvgCPUUtilThresh: %d", decConf.Thresholds.AvgCPUUtilThresh)
+				if decConf.Thresholds.AvgCPUUtilThreshold <= 0 || decConf.Thresholds.AvgCPUUtilThreshold >= 100 {
+					return fmt.Errorf("invalid CoresAdjustConf.DecConf.Thresholds.AvgCPUUtilThresh: %d", decConf.Thresholds.AvgCPUUtilThreshold)
 				}
 
-				if decConf.Thresholds.AvgCPUUtilThresh >= conf.CoresExpectedCPUUtil {
+				if decConf.Thresholds.AvgCPUUtilThreshold >= conf.CoresExpectedCPUUtil {
 					return fmt.Errorf("CoresAdjustConf.DecConf.Thresholds.AvgCPUUtilThresh %d greater-equal CoresExpectedCPUUtil %d",
-						decConf.Thresholds.AvgCPUUtilThresh, conf.CoresExpectedCPUUtil)
+						decConf.Thresholds.AvgCPUUtilThreshold, conf.CoresExpectedCPUUtil)
 				}
 			}
 		}
@@ -557,9 +557,9 @@ func ValidateIrqTuningDynamicConfig(dynamicConf *dynconfig.Configuration) error 
 
 			if exclConf.Thresholds.EnableThresholds != nil &&
 				exclConf.Thresholds.DisableThresholds != nil {
-				if exclConf.Thresholds.DisableThresholds.RxPPSThresh >= exclConf.Thresholds.EnableThresholds.RxPPSThresh {
+				if exclConf.Thresholds.DisableThresholds.RxPPSThreshold >= exclConf.Thresholds.EnableThresholds.RxPPSThreshold {
 					return fmt.Errorf("CoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh: %d greater-equal CoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh: %d",
-						exclConf.Thresholds.DisableThresholds.RxPPSThresh, exclConf.Thresholds.EnableThresholds.RxPPSThresh)
+						exclConf.Thresholds.DisableThresholds.RxPPSThreshold, exclConf.Thresholds.EnableThresholds.RxPPSThreshold)
 				}
 			}
 		}
@@ -606,8 +606,8 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 
 		conf.IrqCoresExpectedCpuUtil = dynamicConf.IRQTuningConfiguration.CoresExpectedCPUUtil
 
-		if dynamicConf.IRQTuningConfiguration.ThrouputClassSwitchConf != nil {
-			throughputClassSwitchConf := dynamicConf.IRQTuningConfiguration.ThrouputClassSwitchConf
+		if dynamicConf.IRQTuningConfiguration.ThroughputClassSwitchConf != nil {
+			throughputClassSwitchConf := dynamicConf.IRQTuningConfiguration.ThroughputClassSwitchConf
 			if throughputClassSwitchConf.LowThresholdConfig != nil {
 				conf.ThrouputClassSwitchConf.LowThroughputThresholds.RxPPSThresh = throughputClassSwitchConf.LowThresholdConfig.RxPPSThresh
 				conf.ThrouputClassSwitchConf.LowThroughputThresholds.SuccessiveCount = throughputClassSwitchConf.LowThresholdConfig.SuccessiveCount
@@ -622,19 +622,19 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 		conf.ReniceIrqCoresKsoftirqd = dynamicConf.IRQTuningConfiguration.ReniceKsoftirqd
 		conf.IrqCoresKsoftirqdNice = dynamicConf.IRQTuningConfiguration.KsoftirqdNice
 
-		if dynamicConf.IRQTuningConfiguration.CoreNetOverLoadThresh != nil {
-			conf.IrqCoreNetOverLoadThresh.IrqCoreSoftNetTimeSqueezeRatio = dynamicConf.IRQTuningConfiguration.CoreNetOverLoadThresh.SoftNetTimeSqueezeRatio
+		if dynamicConf.IRQTuningConfiguration.CoreNetOverLoadThreshold != nil {
+			conf.IrqCoreNetOverLoadThresh.IrqCoreSoftNetTimeSqueezeRatio = dynamicConf.IRQTuningConfiguration.CoreNetOverLoadThreshold.SoftNetTimeSqueezeRatio
 		}
 
 		if dynamicConf.IRQTuningConfiguration.LoadBalanceConf != nil {
 			dynLoadBalanceConf := dynamicConf.IRQTuningConfiguration.LoadBalanceConf
 			conf.IrqLoadBalanceConf.SuccessiveTuningInterval = dynLoadBalanceConf.SuccessiveTuningInterval
 			if dynLoadBalanceConf.Thresholds != nil {
-				conf.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilThresh = dynLoadBalanceConf.Thresholds.CPUUtilThresh
-				conf.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilGapThresh = dynLoadBalanceConf.Thresholds.CPUUtilGapThresh
+				conf.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilThresh = dynLoadBalanceConf.Thresholds.CPUUtilThreshold
+				conf.IrqLoadBalanceConf.Thresholds.IrqCoreCpuUtilGapThresh = dynLoadBalanceConf.Thresholds.CPUUtilGapThreshold
 			}
-			conf.IrqLoadBalanceConf.PingPongIntervalThresh = dynLoadBalanceConf.PingPongIntervalThresh
-			conf.IrqLoadBalanceConf.PingPongCountThresh = dynLoadBalanceConf.PingPongCountThresh
+			conf.IrqLoadBalanceConf.PingPongIntervalThresh = dynLoadBalanceConf.PingPongIntervalThreshold
+			conf.IrqLoadBalanceConf.PingPongCountThresh = dynLoadBalanceConf.PingPongCountThreshold
 			conf.IrqLoadBalanceConf.IrqsTunedNumMaxEachTime = dynLoadBalanceConf.IRQsTunedNumMaxEachTime
 			conf.IrqLoadBalanceConf.IrqCoresTunedNumMaxEachTime = dynLoadBalanceConf.IRQCoresTunedNumMaxEachTime
 		}
@@ -648,7 +648,7 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 				conf.IrqCoresAdjustConf.IrqCoresIncConf.SuccessiveIncInterval = dynCoresAdjustConf.IncConf.SuccessiveIncInterval
 				conf.IrqCoresAdjustConf.IrqCoresIncConf.IrqCoresCpuFullThresh = dynCoresAdjustConf.IncConf.FullThresh
 				if dynCoresAdjustConf.IncConf.Thresholds != nil {
-					conf.IrqCoresAdjustConf.IrqCoresIncConf.Thresholds.IrqCoresAvgCpuUtilThresh = dynCoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThresh
+					conf.IrqCoresAdjustConf.IrqCoresIncConf.Thresholds.IrqCoresAvgCpuUtilThresh = dynCoresAdjustConf.IncConf.Thresholds.AvgCPUUtilThreshold
 				}
 			}
 
@@ -657,7 +657,7 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 				conf.IrqCoresAdjustConf.IrqCoresDecConf.PingPongAdjustInterval = dynCoresAdjustConf.DecConf.PingPongAdjustInterval
 				conf.IrqCoresAdjustConf.IrqCoresDecConf.SinceLastBalanceInterval = dynCoresAdjustConf.DecConf.SinceLastBalanceInterval
 				if dynCoresAdjustConf.DecConf.Thresholds != nil {
-					conf.IrqCoresAdjustConf.IrqCoresDecConf.Thresholds.IrqCoresAvgCpuUtilThresh = dynCoresAdjustConf.DecConf.Thresholds.AvgCPUUtilThresh
+					conf.IrqCoresAdjustConf.IrqCoresDecConf.Thresholds.IrqCoresAvgCpuUtilThresh = dynCoresAdjustConf.DecConf.Thresholds.AvgCPUUtilThreshold
 				}
 				conf.IrqCoresAdjustConf.IrqCoresDecConf.DecCoresMaxEachTime = dynCoresAdjustConf.DecConf.DecCoresMaxEachTime
 			}
@@ -667,11 +667,11 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 			dynCoresExclusionConf := dynamicConf.IRQTuningConfiguration.CoresExclusionConf
 			if dynCoresExclusionConf.Thresholds != nil {
 				if dynCoresExclusionConf.Thresholds.EnableThresholds != nil {
-					conf.IrqCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh = dynCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh
+					conf.IrqCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThresh = dynCoresExclusionConf.Thresholds.EnableThresholds.RxPPSThreshold
 					conf.IrqCoresExclusionConf.Thresholds.EnableThresholds.SuccessiveCount = dynCoresExclusionConf.Thresholds.EnableThresholds.SuccessiveCount
 				}
 				if dynCoresExclusionConf.Thresholds.DisableThresholds != nil {
-					conf.IrqCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh = dynCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh
+					conf.IrqCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThresh = dynCoresExclusionConf.Thresholds.DisableThresholds.RxPPSThreshold
 					conf.IrqCoresExclusionConf.Thresholds.DisableThresholds.SuccessiveCount = dynCoresExclusionConf.Thresholds.DisableThresholds.SuccessiveCount
 				}
 				conf.IrqCoresExclusionConf.SuccessiveSwitchInterval = dynCoresExclusionConf.SuccessiveSwitchInterval
