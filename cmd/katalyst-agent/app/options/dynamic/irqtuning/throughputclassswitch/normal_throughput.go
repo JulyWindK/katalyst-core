@@ -36,7 +36,7 @@ func NewNormalThroughputThresholdOptions() *NormalThroughputThresholdOptions {
 
 func (o *NormalThroughputThresholdOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	fs := fss.FlagSet("normal-throughput-thresholds")
-	fs.Uint64Var(&o.RxPPSThresh, "rx-pps-thresh", o.RxPPSThresh, "rx pps threshold")
+	fs.Uint64Var(&o.RxPPSThresh, "rx-pps-threshold", o.RxPPSThresh, "rx pps threshold")
 	fs.IntVar(&o.SuccessiveCount, "successive-count", o.SuccessiveCount, "successive count")
 }
 
