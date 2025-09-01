@@ -26,6 +26,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	info "github.com/google/cadvisor/info/v1"
+	"github.com/klauspost/cpuid/v2"
 	"github.com/pkg/errors"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -479,28 +480,30 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 		errList = append(errList, err)
 	}
 
-	// process cache group zone node resources
-	reservedCPUs := machine.MustParse(p.reservedCPUs)
-	for cacheID, cpusets := range p.cacheGroupCPUsMap {
-		cacheGroupZone := util.GenerateCacheGroupZoneNode(cacheID)
-		// calculate capacity by the sum of cache group cpus
-		capacity, err := resource.ParseQuantity(fmt.Sprintf("%d", cpusets.Len()))
-		if err != nil {
-			errList = append(errList, err)
-		}
-		// calculate the allocatable amount by deducting the reserved cpus
-		cacheGroupCPUSets := machine.NewCPUSet(cpusets.List()...)
-		allocatableCPUSets := cacheGroupCPUSets.Difference(reservedCPUs)
-		allocatable, err := resource.ParseQuantity(fmt.Sprintf("%d", allocatableCPUSets.Size()))
-		if err != nil {
-			errList = append(errList, err)
-		}
+	if p.metaServer.CPUInfo.CPUVendor == cpuid.AMD {
+		// process cache group zone node resources
+		reservedCPUs := machine.MustParse(p.reservedCPUs)
+		for cacheID, cpusets := range p.cacheGroupCPUsMap {
+			cacheGroupZone := util.GenerateCacheGroupZoneNode(cacheID)
+			// calculate capacity by the sum of cache group cpus
+			capacity, err := resource.ParseQuantity(fmt.Sprintf("%d", cpusets.Len()))
+			if err != nil {
+				errList = append(errList, err)
+			}
+			// calculate the allocatable amount by deducting the reserved cpus
+			cacheGroupCPUSets := machine.NewCPUSet(cpusets.List()...)
+			allocatableCPUSets := cacheGroupCPUSets.Difference(reservedCPUs)
+			allocatable, err := resource.ParseQuantity(fmt.Sprintf("%d", allocatableCPUSets.Size()))
+			if err != nil {
+				errList = append(errList, err)
+			}
 
-		zoneAllocatable[cacheGroupZone] = &v1.ResourceList{
-			"cpu": allocatable,
-		}
-		zoneCapacity[cacheGroupZone] = &v1.ResourceList{
-			"cpu": capacity,
+			zoneAllocatable[cacheGroupZone] = &v1.ResourceList{
+				"cpu": allocatable,
+			}
+			zoneCapacity[cacheGroupZone] = &v1.ResourceList{
+				"cpu": capacity,
+			}
 		}
 	}
 
