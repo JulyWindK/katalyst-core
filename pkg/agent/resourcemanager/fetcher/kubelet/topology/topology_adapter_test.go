@@ -177,7 +177,7 @@ func generateTestMetaServer(podList ...*v1.Pod) *metaserver.MetaServer {
 	m := &metaserver.MetaServer{
 		MetaAgent: &agent.MetaAgent{
 			PodFetcher:          &pod.PodFetcherStub{PodList: podList},
-			KatalystMachineInfo: &machine.KatalystMachineInfo{},
+			KatalystMachineInfo: &machine.KatalystMachineInfo{MachineInfo: &info.MachineInfo{}},
 		},
 	}
 
@@ -1193,7 +1193,11 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 					util.GenerateNumaZoneNode(0): util.GenerateSocketZoneNode(0),
 					util.GenerateNumaZoneNode(1): util.GenerateSocketZoneNode(1),
 				},
-				metaServer: generateTestMetaServer(),
+				metaServer: func() *metaserver.MetaServer {
+					m := generateTestMetaServer()
+					m.CPUVendorID = "AuthenticAMD"
+					return m
+				}(),
 			},
 			wantZoneResources: map[util.ZoneNode]nodev1alpha1.Resources{
 				{
@@ -1363,7 +1367,11 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 					util.GenerateNumaZoneNode(0): util.GenerateSocketZoneNode(0),
 					util.GenerateNumaZoneNode(1): util.GenerateSocketZoneNode(1),
 				},
-				metaServer: generateTestMetaServer(),
+				metaServer: func() *metaserver.MetaServer {
+					m := generateTestMetaServer()
+					m.CPUVendorID = "AuthenticAMD"
+					return m
+				}(),
 			},
 			wantZoneResources: map[util.ZoneNode]nodev1alpha1.Resources{
 				{
@@ -1912,6 +1920,7 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 		numaCacheGroupZoneNodeMap map[util.ZoneNode][]util.ZoneNode
 		numaDistanceMap           map[int][]machine.NumaDistanceInfo
 		cacheGroupCPUsMap         map[int]sets.Int
+		cpuVendor                 string
 	}
 	tests := []struct {
 		name    string
@@ -2263,6 +2272,7 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 					2: sets.NewInt(2, 6, 10, 14, 18, 22, 26, 30),
 					3: sets.NewInt(3, 7, 11, 15, 19, 23, 27, 31),
 				},
+				cpuVendor: "AuthenticAMD",
 			},
 			want: []*nodev1alpha1.TopologyZone{
 				{
@@ -2906,6 +2916,8 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 				numaDistanceMap:           tt.fields.numaDistanceMap,
 				cacheGroupCPUsMap:         tt.fields.cacheGroupCPUsMap,
 			}
+			p.metaServer.MetaAgent.MachineInfo.CPUVendorID = tt.fields.cpuVendor
+
 			got, err := p.GetTopologyZones(context.TODO())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetTopologyZones() error = %v, wantErr %v", err, tt.wantErr)
