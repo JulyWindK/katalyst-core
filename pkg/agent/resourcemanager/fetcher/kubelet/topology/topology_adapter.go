@@ -675,11 +675,7 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 			}
 
 			if _, ok := zoneAttributes[zoneNode]; !ok {
-				if zoneNode.Meta.Type == nodev1alpha1.TopologyTypeNuma {
-					zoneAttributes[zoneNode] = p.generateNodeDistanceAttr(zoneNode)
-				} else {
-					zoneAttributes[zoneNode] = util.ZoneAttributes{}
-				}
+				zoneAttributes[zoneNode] = util.ZoneAttributes{}
 			}
 
 			var attrs []nodev1alpha1.Attribute
@@ -694,6 +690,11 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 		}
 	}
 
+	// generate the attributes of numa zone node
+	for numaNode, _ := range p.numaSocketZoneNodeMap {
+		zoneAttributes[numaNode] = p.generateNodeDistanceAttr(numaNode)
+	}
+
 	// generate the attributes of cache group zone node.
 	for groupID, cpus := range p.cacheGroupCPUsMap {
 		cacheGroupZoneNode := util.GenerateCacheGroupZoneNode(groupID)
@@ -701,7 +702,7 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 		zoneAttributes[cacheGroupZoneNode] = util.ZoneAttributes{
 			nodev1alpha1.Attribute{
 				Name:  "cpu_lists",
-				Value: general.IntSliceToString(cpus.List()),
+				Value: machine.NewCPUSet(cpus.List()...).String(),
 			},
 		}
 	}
@@ -714,7 +715,10 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 }
 
 func (p *topologyAdapterImpl) generateNodeDistanceAttr(node util.ZoneNode) []nodev1alpha1.Attribute {
-	var attrs []nodev1alpha1.Attribute
+	var (
+		distances []int
+		attrs     []nodev1alpha1.Attribute
+	)
 
 	numaID, err := strconv.Atoi(node.Meta.Name)
 	if err != nil {
@@ -724,11 +728,14 @@ func (p *topologyAdapterImpl) generateNodeDistanceAttr(node util.ZoneNode) []nod
 
 	distanceInfos := p.numaDistanceMap[numaID]
 	for _, distanceInfo := range distanceInfos {
-		attrs = append(attrs, nodev1alpha1.Attribute{
-			Name:  fmt.Sprintf("numa%d_distance", distanceInfo.NumaID),
-			Value: fmt.Sprintf("%d", distanceInfo.Distance),
-		})
+		distances = append(distances, distanceInfo.Distance)
 	}
+
+	attrs = append(attrs, nodev1alpha1.Attribute{
+		Name:  "numa_distance",
+		Value: general.IntSliceToString(distances),
+	})
+
 	return attrs
 }
 
