@@ -696,14 +696,16 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 	}
 
 	// generate the attributes of cache group zone node.
-	for groupID, cpus := range p.cacheGroupCPUsMap {
-		cacheGroupZoneNode := util.GenerateCacheGroupZoneNode(groupID)
+	if p.metaServer.CPUInfo.CPUVendor == cpuid.AMD {
+		for groupID, cpus := range p.cacheGroupCPUsMap {
+			cacheGroupZoneNode := util.GenerateCacheGroupZoneNode(groupID)
 
-		zoneAttributes[cacheGroupZoneNode] = util.ZoneAttributes{
-			nodev1alpha1.Attribute{
-				Name:  "cpu_lists",
-				Value: machine.NewCPUSet(cpus.List()...).String(),
-			},
+			zoneAttributes[cacheGroupZoneNode] = util.ZoneAttributes{
+				nodev1alpha1.Attribute{
+					Name:  "cpu_lists",
+					Value: machine.NewCPUSet(cpus.List()...).String(),
+				},
+			}
 		}
 	}
 
