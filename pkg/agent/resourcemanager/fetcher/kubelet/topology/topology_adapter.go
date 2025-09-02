@@ -239,6 +239,7 @@ func (p *topologyAdapterImpl) GetTopologyZones(parentCtx context.Context) ([]*no
 	}
 
 	// add cache group zone node into topology zone generator by numaCacheGroupZoneNodeMap
+	klog.Infof("[KFX]p.metaServer.CPUInfo.CPUVendor:%v  cpuid.AMD:%v flag:%v", p.metaServer.CPUInfo.CPUVendor, cpuid.AMD, p.metaServer.CPUInfo.CPUVendor == cpuid.AMD)
 	if p.metaServer.CPUInfo.CPUVendor == cpuid.AMD {
 		err = p.addCacheGroupZoneNodes(topologyZoneGenerator)
 		if err != nil {
