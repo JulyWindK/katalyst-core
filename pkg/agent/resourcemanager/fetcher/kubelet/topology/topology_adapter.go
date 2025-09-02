@@ -696,6 +696,7 @@ func (p *topologyAdapterImpl) getZoneAttributes(allocatableResources *podresv1.A
 	}
 
 	// generate the attributes of cache group zone node.
+	klog.Infof("[KFX]vendor:%v", p.metaServer.CPUInfo.CPUVendor)
 	if p.metaServer.CPUInfo.CPUVendor == cpuid.AMD {
 		for groupID, cpus := range p.cacheGroupCPUsMap {
 			cacheGroupZoneNode := util.GenerateCacheGroupZoneNode(groupID)
