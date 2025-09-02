@@ -17,6 +17,7 @@ limitations under the License.
 package irqtuning
 
 import (
+	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/options/dynamic/irqtuning/rpsexcludeirqcore"
 	"k8s.io/apimachinery/pkg/util/errors"
 	cliflag "k8s.io/component-base/cli/flag"
 
@@ -49,6 +50,8 @@ type IRQTuningOptions struct {
 	// CoresExpectedCPUUtil is the expected CPU utilization of cores.
 	CoresExpectedCPUUtil int
 
+	// RPSExcludeIRQCoresThreshold describes the threshold of excluding irq cores for rps.
+	RPSExcludeIRQCoresThreshold *rpsexcludeirqcore.RPSExcludeIRQCoresThreshold
 	// ThroughputClassSwitchOptions describes the switch configuration for a throughput class.
 	ThroughputClassSwitchOptions *throughputclassswitch.ThroughputClassSwitchOptions
 	// Threshold description for interrupting core network overLoad.
@@ -73,6 +76,7 @@ func NewIRQTuningOptions() *IRQTuningOptions {
 		KsoftirqdNice:           -20,
 		CoresExpectedCPUUtil:    50,
 
+		RPSExcludeIRQCoresThreshold:  rpsexcludeirqcore.NewRPSExcludeIRQCoresThreshold(),
 		ThroughputClassSwitchOptions: throughputclassswitch.NewThroughputClassSwitchOptions(),
 		CoreNetOverLoadThreshold:     netoverload.NewIRQCoreNetOverloadThresholdOptions(),
 		LoadBalanceOptions:           loadbalance.NewIRQLoadBalanceOptions(),
@@ -93,6 +97,7 @@ func (o *IRQTuningOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	fs.IntVar(&o.KsoftirqdNice, "ksoftirqd-nice", o.KsoftirqdNice, "ksoftirqd nice")
 	fs.IntVar(&o.CoresExpectedCPUUtil, "cores-expected-cpu-util", o.CoresExpectedCPUUtil, "irq cores expected cpu util")
 
+	o.RPSExcludeIRQCoresThreshold.AddFlags(fss)
 	o.ThroughputClassSwitchOptions.AddFlags(fss)
 	o.CoreNetOverLoadThreshold.AddFlags(fss)
 	o.LoadBalanceOptions.AddFlags(fss)
@@ -115,6 +120,7 @@ func (o *IRQTuningOptions) ApplyTo(c *irqdynamicconf.IRQTuningConfiguration) err
 
 	c.CoresExpectedCPUUtil = o.CoresExpectedCPUUtil
 
+	errList = append(errList, o.RPSExcludeIRQCoresThreshold.ApplyTo(c.RPSExcludeIRQCoresThreshold))
 	errList = append(errList, o.ThroughputClassSwitchOptions.ApplyTo(c.ThroughputClassSwitchConf))
 	errList = append(errList, o.CoreNetOverLoadThreshold.ApplyTo(c.CoreNetOverLoadThreshold))
 	errList = append(errList, o.LoadBalanceOptions.ApplyTo(c.LoadBalanceConf))
