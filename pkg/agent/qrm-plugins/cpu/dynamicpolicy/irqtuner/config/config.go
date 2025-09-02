@@ -393,9 +393,9 @@ func ValidateIrqTuningDynamicConfig(dynamicConf *dynconfig.Configuration) error 
 		return fmt.Errorf("invalid EnableRPSCPUVSNicsQueue: %f, less-than EnableRPSCPUVSNicsQueueMin %d", conf.EnableRPSCPUVSNicsQueue, EnableRPSCPUVSNicsQueueMin)
 	}
 
-	if conf.RPSExcludeIrqCoresThreshold != nil {
-		if conf.RPSExcludeIrqCoresThreshold.RPSCoresVSIrqCoresRatio < RPSExcludeIrqCoresThresholdMin {
-			return fmt.Errorf("invalid RPSExcludeIrqCoresThreshold.RPSCoresVSIrqCoresRatio: %f, less-than RPSExcludeIrqCoresThresholdMin %d", conf.RPSExcludeIrqCoresThreshold.RPSCoresVSIrqCoresRatio, RPSExcludeIrqCoresThresholdMin)
+	if conf.RPSExcludeIRQCoresThreshold != nil {
+		if conf.RPSExcludeIRQCoresThreshold.RPSCoresVSIRQCoresRatio < RPSExcludeIrqCoresThresholdMin {
+			return fmt.Errorf("invalid RPSExcludeIrqCoresThreshold.RPSCoresVSIrqCoresRatio: %f, less-than RPSExcludeIrqCoresThresholdMin %d", conf.RPSExcludeIRQCoresThreshold.RPSCoresVSIRQCoresRatio, RPSExcludeIrqCoresThresholdMin)
 		}
 	}
 
@@ -610,8 +610,8 @@ func ConvertDynamicConfigToIrqTuningConfig(dynamicConf *dynconfig.Configuration)
 
 		conf.EnableRPS = dynamicConf.IRQTuningConfiguration.EnableRPS
 		conf.EnableRPSCPUVSNicsQueue = dynamicConf.IRQTuningConfiguration.EnableRPSCPUVSNicsQueue
-		if dynamicConf.RPSExcludeIrqCoresThreshold != nil {
-			conf.RPSExcludeIrqCoresThreshold.RPSCoresVSIrqCoresRatio = dynamicConf.RPSExcludeIrqCoresThreshold.RPSCoresVSIrqCoresRatio
+		if dynamicConf.RPSExcludeIRQCoresThreshold != nil {
+			conf.RPSExcludeIrqCoresThreshold.RPSCoresVSIrqCoresRatio = dynamicConf.RPSExcludeIRQCoresThreshold.RPSCoresVSIRQCoresRatio
 		}
 
 		switch dynamicConf.IRQTuningConfiguration.NICAffinityPolicy {
