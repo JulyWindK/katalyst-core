@@ -22,3 +22,7 @@ package manager
 func IsCgroupPath(_ string) bool {
 	return false
 }
+
+func GetCgroupPids(cgroupPath string) ([]int, error) {
+	return []int{}, nil
+}
