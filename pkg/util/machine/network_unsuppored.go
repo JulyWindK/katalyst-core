@@ -29,8 +29,8 @@ func GetExtraNetworkInfo(_ *global.MachineInfoConfiguration) (*ExtraNetworkInfo,
 	return &ExtraNetworkInfo{}, nil
 }
 
-func DoNetNS(nsName, nsAbsPath string, cb func(sysFsDir string, nsAbsPath string) error) error {
-	return cb("", nsAbsPath)
+func DoNetNS(nsName, netNSDirAbsPath string, cb func(sysFsDir string) error) error {
+	return cb("")
 }
 
 func GetNetDevRxPackets(nic *NicBasicInfo) (uint64, error) {

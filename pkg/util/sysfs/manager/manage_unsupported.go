@@ -1,5 +1,5 @@
-//go:build linux
-// +build linux
+//go:build !linux && !windows
+// +build !linux,!windows
 
 /*
 Copyright 2022 The Katalyst Authors.
@@ -19,12 +19,12 @@ limitations under the License.
 
 package manager
 
-import "github.com/prometheus/procfs/sysfs"
+type SysFSManager interface {
+	GetNicRxQueueRPS(sysPath, nic string, queue int) (string, error)
 
-func GetSystemCPUs() ([]sysfs.CPU, error) {
-	return GetSysFsManager().GetSystemCPUs()
+	SetNicRxQueueRPS(sysPath, nic string, queue int, rpsConf string) error
 }
 
-func GetCPUTopology(string string) (*sysfs.CPUTopology, error) {
-	return GetSysFsManager().GetCPUTopology(string)
+func GetSysFsManager() SysFSManager {
+	return nil
 }
