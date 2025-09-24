@@ -415,6 +415,9 @@ func (m *EvictionManger) collectEvictionResult(ctx context.Context, pods []*v1.P
 	logConfirmedThresholdMet(thresholdsMet)
 
 	// track when a condition was last observed
+	for key, condition := range collector.currentConditions {
+		general.Infof("[KFX]collector.currentConditions  %v condition: %s", key, condition.String())
+	}
 	conditionsLastObservedAt := conditionsLastObservedAt(collector.currentConditions, m.conditionsLastObservedAt, now)
 	// conditions report true if it has been observed within the transition period window
 	conditions := conditionsObservedSince(conditionsLastObservedAt, m.conf.ConditionTransitionPeriod, now)
@@ -460,6 +463,7 @@ func (m *EvictionManger) collectEvictionResult(ctx context.Context, pods []*v1.P
 			EvictionScope:            threshold.EvictionScope,
 			CandidateEvictionRecords: candidateEvictionRecords,
 		})
+		general.Infof("[KFX]collectEvictionResult plugin: %s GetTopEvictionPods resp: %v", pluginName, resp)
 
 		m.endpointLock.RUnlock()
 		if err != nil {
@@ -799,12 +803,12 @@ func logConfirmedConditions(conditions map[string]*pluginapi.Condition) {
 		general.Infof(" there is no condition confirmed")
 	}
 
-	for _, condition := range conditions {
+	for key, condition := range conditions {
 		if condition == nil {
 			continue
 		}
 
-		general.Infof(" confirmed condition: %s", condition.String())
+		general.Infof("%v confirmed condition: %s", key, condition.String())
 	}
 }
 

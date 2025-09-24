@@ -73,6 +73,9 @@ func (m *EvictionManger) getNodeTaintsFromConditions() []v1.Taint {
 	defer m.conditionLock.RUnlock()
 
 	taints := make([]v1.Taint, 0, len(m.conditions))
+	for key, condition := range m.conditions {
+		klog.Infof("[KFX]getNodeTaintsFromConditions %v condition: %v", key, condition)
+	}
 
 	for conditionName, condition := range m.conditions {
 		if condition == nil {
@@ -166,9 +169,11 @@ func (m *EvictionManger) reportConditionsAsNodeTaints(ctx context.Context) {
 	}
 
 	taints := m.getNodeTaintsFromConditions()
+	klog.Infof("[KFX]reportConditionsAsNodeTaints get taints from condition: %v", taints)
 
 	// Get exist taints of node.
 	nodeTaints := taintutils.TaintSetFilter(node.Spec.Taints, isEvictionManagerTaint)
+	klog.Infof("[KFX]reportConditionsAsNodeTaints nodeTaints: %v", nodeTaints)
 	taintsToAdd, taintsToDel := taintutils.TaintSetDiff(taints, nodeTaints)
 	// If nothing to add not delete, return true directly.
 	if len(taintsToAdd) == 0 && len(taintsToDel) == 0 {
