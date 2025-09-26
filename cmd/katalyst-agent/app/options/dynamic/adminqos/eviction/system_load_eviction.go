@@ -27,6 +27,7 @@ type SystemLoadPressureEvictionOptions struct {
 	HardThreshold          int64
 	HistorySize            int64
 	SyncPeriod             int64
+	MetricValidTime        int64
 	CoolDownTime           int64
 	GracePeriod            int64
 	ThresholdMetPercentage float64
@@ -38,6 +39,7 @@ func NewSystemLoadPressureEvictionOptions() *SystemLoadPressureEvictionOptions {
 		HardThreshold:          600,
 		HistorySize:            10,
 		SyncPeriod:             30,
+		MetricValidTime:        300,
 		CoolDownTime:           300,
 		GracePeriod:            30,
 		ThresholdMetPercentage: 0.8,
@@ -55,6 +57,8 @@ func (s *SystemLoadPressureEvictionOptions) AddFlags(fss *cliflag.NamedFlagSets)
 		"the plugin will store")
 	fs.Int64Var(&s.SyncPeriod, "system-load-pressure-sync-period", s.SyncPeriod, "the interval of the plugin fetch "+
 		"the load information")
+	fs.Int64Var(&s.MetricValidTime, "system-load-pressure-metric-valid-time", s.MetricValidTime, "the valid time of the load metric, "+
+		"which is used to calculate the system load")
 	fs.Int64Var(&s.CoolDownTime, "system-load-pressure-cool-down-period", s.CoolDownTime, "the cool down"+
 		"time of the plugin evict pods")
 	fs.Int64Var(&s.GracePeriod, "system-load-pressure-evict-grace-period", s.GracePeriod, "the grace"+
@@ -68,6 +72,7 @@ func (s *SystemLoadPressureEvictionOptions) ApplyTo(c *eviction.SystemLoadEvicti
 	c.HardThreshold = s.HardThreshold
 	c.HistorySize = s.HistorySize
 	c.SyncPeriod = s.SyncPeriod
+	c.MetricValidTime = s.MetricValidTime
 	c.CoolDownTime = s.CoolDownTime
 	c.GracePeriod = s.GracePeriod
 	c.ThresholdMetPercentage = s.ThresholdMetPercentage

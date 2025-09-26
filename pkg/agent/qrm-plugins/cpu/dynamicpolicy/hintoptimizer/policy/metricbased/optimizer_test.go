@@ -198,8 +198,8 @@ func TestMetricBasedHintOptimizer_OptimizeHints(t *testing.T) {
 				numaMetrics: func() map[int]cpuUtil.SubEntries {
 					nm := map[int]cpuUtil.SubEntries{
 						0: {
-							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPUUsageRatioThreshold]: cpuUtil.CreateMetricRing(1),
-							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPULoadRatioThreshold]:  cpuUtil.CreateMetricRing(1),
+							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPUUsageRatioThreshold]: cpuUtil.CreateMetricRing(1, 5*time.Minute),
+							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPULoadRatioThreshold]:  cpuUtil.CreateMetricRing(1, 5*time.Minute),
 						},
 					}
 					// NUMA 0: current usage 1.0 + request 0.1 = 1.1. Allocatable = 2. Ratio = 1.1/2 = 0.55 (below threshold 0.8)
@@ -331,12 +331,12 @@ func TestMetricBasedHintOptimizer_OptimizeHints(t *testing.T) {
 				numaMetrics: func() map[int]cpuUtil.SubEntries {
 					nm := map[int]cpuUtil.SubEntries{
 						0: {
-							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPUUsageRatioThreshold]: cpuUtil.CreateMetricRing(1),
-							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPULoadRatioThreshold]:  cpuUtil.CreateMetricRing(1),
+							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPUUsageRatioThreshold]: cpuUtil.CreateMetricRing(1, 5*time.Minute),
+							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPULoadRatioThreshold]:  cpuUtil.CreateMetricRing(1, 5*time.Minute),
 						},
 						1: {
-							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPUUsageRatioThreshold]: cpuUtil.CreateMetricRing(1),
-							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPULoadRatioThreshold]:  cpuUtil.CreateMetricRing(1),
+							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPUUsageRatioThreshold]: cpuUtil.CreateMetricRing(1, 5*time.Minute),
+							metricthreshold.ThresholdNameToResourceName[metricthreshold.NUMACPULoadRatioThreshold]:  cpuUtil.CreateMetricRing(1, 5*time.Minute),
 						},
 					}
 					// NUMA 0: current usage 1.0 + request 0.5 = 1.5. Allocatable = 2. Ratio = 1.5/2 = 0.75 (over threshold 0.5)
@@ -432,7 +432,7 @@ func TestMetricBasedHintOptimizer_isNUMAOverThreshold(t *testing.T) {
 				numaMetrics: map[int]cpuUtil.SubEntries{
 					0: {
 						consts.MetricCPUUsageContainer: func() *cpuUtil.MetricRing {
-							r := cpuUtil.CreateMetricRing(1)
+							r := cpuUtil.CreateMetricRing(1, 5*time.Minute)
 							r.Push(&cpuUtil.MetricSnapshot{Info: cpuUtil.MetricInfo{Value: 3.0}, Time: time.Now().UnixNano()})
 							return r
 						}(),
@@ -456,7 +456,7 @@ func TestMetricBasedHintOptimizer_isNUMAOverThreshold(t *testing.T) {
 				numaMetrics: map[int]cpuUtil.SubEntries{
 					0: {
 						consts.MetricCPUUsageContainer: func() *cpuUtil.MetricRing {
-							r := cpuUtil.CreateMetricRing(1)
+							r := cpuUtil.CreateMetricRing(1, 5*time.Minute)
 							r.Push(&cpuUtil.MetricSnapshot{Info: cpuUtil.MetricInfo{Value: 1.0}, Time: time.Now().UnixNano()})
 							return r
 						}(),
@@ -518,7 +518,7 @@ func TestMetricBasedHintOptimizer_isNUMAOverThreshold(t *testing.T) {
 			fields: fields{
 				numaMetrics: map[int]cpuUtil.SubEntries{
 					0: {
-						consts.MetricCPUUsageContainer: cpuUtil.CreateMetricRing(1),
+						consts.MetricCPUUsageContainer: cpuUtil.CreateMetricRing(1, 5*time.Minute),
 					},
 				},
 				reservedCPUs: machine.NewCPUSet(0, 1, 2, 3), // Reserve all CPUs on NUMA 0
@@ -630,8 +630,8 @@ func TestMetricBasedHintOptimizer_collectNUMAMetrics(t *testing.T) {
 		metaServer: metaServer,
 		state:      stateImpl,
 		numaMetrics: map[int]cpuUtil.SubEntries{
-			0: {consts.MetricCPUUsageContainer: cpuUtil.CreateMetricRing(1)},
-			1: {consts.MetricCPUUsageContainer: cpuUtil.CreateMetricRing(1)},
+			0: {consts.MetricCPUUsageContainer: cpuUtil.CreateMetricRing(1, 5*time.Minute)},
+			1: {consts.MetricCPUUsageContainer: cpuUtil.CreateMetricRing(1, 5*time.Minute)},
 		},
 		metricSampleTime:  10 * time.Minute,
 		metricSampleCount: 1,

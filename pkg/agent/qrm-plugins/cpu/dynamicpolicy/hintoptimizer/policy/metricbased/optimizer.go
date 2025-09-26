@@ -205,7 +205,7 @@ func (o *metricBasedHintOptimizer) collectNUMAMetrics() {
 			}
 
 			if subEntries[resourceName] == nil {
-				subEntries[resourceName] = cpuUtil.CreateMetricRing(o.metricSampleCount)
+				subEntries[resourceName] = cpuUtil.CreateMetricRing(o.metricSampleCount, o.metricSampleTime)
 			}
 
 			subEntries[resourceName].Push(&cpuUtil.MetricSnapshot{

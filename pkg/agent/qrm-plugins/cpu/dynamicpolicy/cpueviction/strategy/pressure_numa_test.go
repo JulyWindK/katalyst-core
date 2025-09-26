@@ -184,6 +184,7 @@ func TestNumaCPUPressureEviction_update(t *testing.T) {
 				conf: conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         1,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: conf.DynamicAgentConfiguration.GetDynamicConfiguration().ThresholdMetPercentage,
 					GracePeriod:            conf.DynamicAgentConfiguration.GetDynamicConfiguration().DeletionGracePeriod,
 					ExpandFactor:           1.2,
@@ -192,7 +193,9 @@ func TestNumaCPUPressureEviction_update(t *testing.T) {
 					store.SetContainerNumaMetric("pod1", "container", 0,
 						consts.MetricCPUUsageContainer, utilmetric.MetricData{Value: 2})
 				},
-				metricsHistory: util.NewMetricHistory(conf.DynamicAgentConfiguration.GetDynamicConfiguration().LoadMetricRingSize),
+				metricsHistory: util.NewMetricHistory(conf.DynamicAgentConfiguration.GetDynamicConfiguration().LoadMetricRingSize,
+					time.Duration(conf.DynamicAgentConfiguration.GetDynamicConfiguration().NumaCPUPressureEvictionConfiguration.MetricValidTime)*time.Second,
+				),
 			},
 			want: want{
 				metricsHistory: &util.NumaMetricHistory{},
@@ -224,6 +227,7 @@ func TestNumaCPUPressureEviction_update(t *testing.T) {
 				conf: conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         1,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: conf.DynamicAgentConfiguration.GetDynamicConfiguration().NumaCPUPressureEvictionConfiguration.ThresholdMetPercentage,
 					GracePeriod:            conf.DynamicAgentConfiguration.GetDynamicConfiguration().DeletionGracePeriod,
 					ExpandFactor:           1.2,
@@ -232,7 +236,9 @@ func TestNumaCPUPressureEviction_update(t *testing.T) {
 					store.SetContainerNumaMetric("pod1", "container", 0,
 						consts.MetricCPUUsageContainer, utilmetric.MetricData{Value: 2})
 				},
-				metricsHistory: util.NewMetricHistory(conf.DynamicAgentConfiguration.GetDynamicConfiguration().LoadMetricRingSize),
+				metricsHistory: util.NewMetricHistory(conf.DynamicAgentConfiguration.GetDynamicConfiguration().LoadMetricRingSize,
+					time.Duration(conf.DynamicAgentConfiguration.GetDynamicConfiguration().NumaCPUPressureEvictionConfiguration.MetricValidTime)*time.Second,
+				),
 			},
 			want: want{
 				metricsHistory: &util.NumaMetricHistory{
@@ -493,6 +499,7 @@ func TestNumaCPUPressureEviction_GetTopEvictionPods(t *testing.T) {
 				conf:    conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         2,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: 0.5,
 					GracePeriod:            -1,
 					ExpandFactor:           1.2,
@@ -547,6 +554,7 @@ func TestNumaCPUPressureEviction_GetTopEvictionPods(t *testing.T) {
 				conf:    conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         2,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: 0.5,
 					GracePeriod:            -1,
 					ExpandFactor:           1.2,
@@ -623,6 +631,7 @@ func TestNumaCPUPressureEviction_GetTopEvictionPods(t *testing.T) {
 				conf:    conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         2,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: 0.5,
 					GracePeriod:            -1,
 					ExpandFactor:           1.2,
@@ -697,6 +706,7 @@ func TestNumaCPUPressureEviction_GetTopEvictionPods(t *testing.T) {
 				conf:    conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         2,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: 0.5,
 					GracePeriod:            30,
 					ExpandFactor:           1.2,
@@ -865,6 +875,7 @@ func TestNumaCPUPressureEviction_ThresholdMet(t *testing.T) {
 				conf: conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         2,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: 0.5,
 					GracePeriod:            -1,
 					ExpandFactor:           1.2,
@@ -947,6 +958,7 @@ func TestNumaCPUPressureEviction_ThresholdMet(t *testing.T) {
 				conf: conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         2,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: 0.5,
 					GracePeriod:            -1,
 					ExpandFactor:           1.2,
@@ -1153,6 +1165,7 @@ func TestNumaCPUPressureEviction_calOverloadNumaCount(t *testing.T) {
 				conf: conf,
 				numaPressureConfig: &rules.NumaPressureConfig{
 					MetricRingSize:         2,
+					MetricValidTime:        300,
 					ThresholdMetPercentage: 0.5,
 					GracePeriod:            -1,
 					ExpandFactor:           1.2,
@@ -1202,7 +1215,8 @@ func TestNumaCPUPressureEviction_calOverloadNumaCount(t *testing.T) {
 							},
 						},
 					},
-					RingSize: 2,
+					RingSize:  2,
+					ValidTime: 5 * time.Minute,
 				},
 				thresholds: map[string]float64{
 					consts.MetricCPUUsageContainer: 0.8,
