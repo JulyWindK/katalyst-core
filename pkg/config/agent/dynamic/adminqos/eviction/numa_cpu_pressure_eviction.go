@@ -17,6 +17,8 @@ limitations under the License.
 package eviction
 
 import (
+	"time"
+
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/crd"
 )
 
@@ -24,6 +26,7 @@ type NumaCPUPressureEvictionConfiguration struct {
 	EnableEviction                 bool
 	ThresholdMetPercentage         float64
 	MetricRingSize                 int
+	MetricValidTime                time.Duration
 	GracePeriod                    int64
 	ThresholdExpandFactor          float64
 	CandidateCount                 int
@@ -52,6 +55,10 @@ func (n *NumaCPUPressureEvictionConfiguration) ApplyConfiguration(conf *crd.Dyna
 
 		if config.MetricRingSize != nil {
 			n.MetricRingSize = *config.MetricRingSize
+		}
+
+		if config.MetricValidTime != nil {
+			n.MetricValidTime = config.MetricValidTime.Duration
 		}
 
 		if config.GracePeriod != nil {

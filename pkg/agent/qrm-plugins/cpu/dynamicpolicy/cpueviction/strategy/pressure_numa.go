@@ -115,7 +115,7 @@ func NewCPUPressureUsageEviction(emitter metrics.MetricEmitter, metaServer *meta
 		metaServer:         metaServer,
 		conf:               conf,
 		numaPressureConfig: numaPressureConfig,
-		metricsHistory:     util.NewMetricHistory(numaPressureConfig.MetricRingSize),
+		metricsHistory:     util.NewMetricHistory(numaPressureConfig.MetricRingSize, numaPressureConfig.MetricValidTime),
 		syncPeriod:         15 * time.Second,
 		extras:             make(map[string]interface{}),
 		filterer:           filterer,
@@ -456,6 +456,7 @@ func (p *NumaCPUPressureEviction) getEvictOptions() rules.EvictOptions {
 func getNumaPressureConfig(conf *dynamic.Configuration) *rules.NumaPressureConfig {
 	return &rules.NumaPressureConfig{
 		MetricRingSize:                 conf.NumaCPUPressureEvictionConfiguration.MetricRingSize,
+		MetricValidTime:                conf.NumaCPUPressureEvictionConfiguration.MetricValidTime,
 		ThresholdMetPercentage:         conf.NumaCPUPressureEvictionConfiguration.ThresholdMetPercentage,
 		GracePeriod:                    conf.NumaCPUPressureEvictionConfiguration.GracePeriod,
 		ExpandFactor:                   conf.NumaCPUPressureEvictionConfiguration.ThresholdExpandFactor,

@@ -17,6 +17,8 @@ limitations under the License.
 package rules
 
 import (
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/util"
@@ -62,6 +64,7 @@ type State struct {
 
 type NumaPressureConfig struct {
 	MetricRingSize                 int
+	MetricValidTime                time.Duration
 	ThresholdMetPercentage         float64
 	GracePeriod                    int64
 	ExpandFactor                   float64

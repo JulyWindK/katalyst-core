@@ -522,7 +522,7 @@ func (p *CPUPressureLoadEviction) pushMetric(dynamicConfig *dynamic.Configuratio
 	}
 
 	if p.metricsHistory[metricName][entryName][subEntryName] == nil {
-		p.metricsHistory[metricName][entryName][subEntryName] = util.CreateMetricRing(dynamicConfig.LoadMetricRingSize)
+		p.metricsHistory[metricName][entryName][subEntryName] = util.CreateMetricRing(dynamicConfig.LoadMetricRingSize, dynamicConfig.LoadMetricValidTime)
 	}
 
 	p.metricsHistory[metricName][entryName][subEntryName].Push(snapshot)

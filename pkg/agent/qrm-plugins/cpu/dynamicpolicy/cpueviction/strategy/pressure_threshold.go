@@ -67,7 +67,7 @@ func (p *NumaCPUPressureEviction) pullThresholds(_ context.Context) {
 
 	if p.metricsHistory.RingSize != numaPressureConfig.MetricRingSize {
 		general.Infof("update metricsHistory ring size to %v", numaPressureConfig.MetricRingSize)
-		p.metricsHistory = util.NewMetricHistory(numaPressureConfig.MetricRingSize)
+		p.metricsHistory = util.NewMetricHistory(numaPressureConfig.MetricRingSize, numaPressureConfig.MetricValidTime)
 	}
 }
 
