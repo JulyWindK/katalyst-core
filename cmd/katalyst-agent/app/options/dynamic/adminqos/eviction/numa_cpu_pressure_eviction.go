@@ -26,6 +26,7 @@ type NumaCPUPressureEvictionOptions struct {
 	EnableEviction                 bool
 	ThresholdMetPercentage         float64
 	MetricRingSize                 int
+	MetricValidTime                int64
 	GracePeriod                    int64
 	ThresholdExpandFactor          float64
 	CandidateCount                 int
@@ -41,6 +42,7 @@ func NewNumaCPUPressureEvictionOptions() NumaCPUPressureEvictionOptions {
 		EnableEviction:                 false,
 		ThresholdMetPercentage:         0.7,
 		MetricRingSize:                 4,
+		MetricValidTime:                300,
 		GracePeriod:                    60,
 		ThresholdExpandFactor:          1.1,
 		CandidateCount:                 2,
@@ -61,6 +63,8 @@ func (o *NumaCPUPressureEvictionOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 		"The percentage of NUMA nodes whose CPU pressure meets the threshold to trigger eviction")
 	fs.IntVar(&o.MetricRingSize, "numa-cpu-pressure-eviction-metric-ring-size", o.MetricRingSize,
 		"The size of the metric ring for NUMA CPU pressure")
+	fs.Int64Var(&o.MetricValidTime, "numa-cpu-pressure-eviction-metric-valid-time", o.MetricValidTime,
+		"The valid time of the metric for NUMA CPU pressure")
 	fs.Int64Var(&o.GracePeriod, "numa-cpu-pressure-eviction-grace-period", o.GracePeriod,
 		"The grace period (in seconds) before evicting pods due to NUMA CPU pressure")
 	fs.Float64Var(&o.ThresholdExpandFactor, "numa-cpu-pressure-eviction-threshold-expand-factor", o.ThresholdExpandFactor,
@@ -83,6 +87,7 @@ func (o *NumaCPUPressureEvictionOptions) ApplyTo(c *eviction.NumaCPUPressureEvic
 	c.EnableEviction = o.EnableEviction
 	c.ThresholdMetPercentage = o.ThresholdMetPercentage
 	c.MetricRingSize = o.MetricRingSize
+	c.MetricValidTime = o.MetricValidTime
 	c.GracePeriod = o.GracePeriod
 	c.ThresholdExpandFactor = o.ThresholdExpandFactor
 	c.CandidateCount = o.CandidateCount

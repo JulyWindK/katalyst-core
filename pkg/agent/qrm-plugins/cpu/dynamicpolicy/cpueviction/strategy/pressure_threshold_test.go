@@ -19,6 +19,7 @@ package strategy
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -96,8 +97,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(true, false, true),
 				enabled: false,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -112,8 +114,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(true, false, false),
 				enabled: false,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -128,8 +131,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(true, true, true),
 				enabled: false,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -144,8 +148,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(true, true, false),
 				enabled: false,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -160,8 +165,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(false, false, false),
 				enabled: false,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -176,8 +182,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(false, true, false),
 				enabled: false,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -192,8 +199,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(false, false, true),
 				enabled: false,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -208,8 +216,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(false, true, true),
 				enabled: false,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -224,8 +233,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(true, false, true),
 				enabled: true,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -240,8 +250,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(true, false, false),
 				enabled: true,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -256,8 +267,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(true, true, true),
 				enabled: true,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -287,8 +299,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(false, false, false),
 				enabled: true,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -303,8 +316,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(false, true, false),
 				enabled: true,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -319,8 +333,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(false, false, true),
 				enabled: true,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -335,8 +350,9 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:    generatePluginConfig(false, true, true),
 				enabled: true,
 				numaPressureConfig: &rules.NumaPressureConfig{
-					ExpandFactor:   1,
-					MetricRingSize: 2,
+					ExpandFactor:    1,
+					MetricRingSize:  2,
+					MetricValidTime: 300,
 				},
 			},
 			setFakeMetric: func(store *metric.FakeMetricsFetcher) {
@@ -376,7 +392,7 @@ func TestNumaCPUPressureEviction_pullThresholds(t *testing.T) {
 				conf:               tt.fields.conf,
 				numaPressureConfig: tt.fields.numaPressureConfig,
 				thresholds:         tt.fields.thresholds,
-				metricsHistory:     util.NewMetricHistory(tt.fields.numaPressureConfig.MetricRingSize),
+				metricsHistory:     util.NewMetricHistory(tt.fields.numaPressureConfig.MetricRingSize, time.Duration(tt.fields.numaPressureConfig.MetricValidTime)*time.Second),
 				enabled:            tt.fields.enabled,
 				metaServer:         ms,
 			}

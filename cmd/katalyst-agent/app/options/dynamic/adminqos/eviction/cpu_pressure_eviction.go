@@ -30,6 +30,7 @@ const (
 	defaultLoadLowerBoundRatio             = 1.0
 	defaultLoadThresholdMetPercentage      = 0.8
 	defaultLoadMetricSize                  = 10
+	defaultLoadMetricValidTime             = 5 * time.Minute
 	defaultLoadEvictionCoolDownTime        = 300 * time.Second
 	defaultEnableSuppressionEviction       = false
 	defaultMaxSuppressionToleranceRate     = 5
@@ -44,6 +45,7 @@ type CPUPressureEvictionOptions struct {
 	LoadLowerBoundRatio             float64
 	LoadThresholdMetPercentage      float64
 	LoadMetricRingSize              int
+	LoadMetricValidTime             time.Duration
 	LoadEvictionCoolDownTime        time.Duration
 	EnableSuppressionEviction       bool
 	MaxSuppressionToleranceRate     float64
@@ -60,6 +62,7 @@ func NewCPUPressureEvictionOptions() *CPUPressureEvictionOptions {
 		LoadLowerBoundRatio:             defaultLoadLowerBoundRatio,
 		LoadThresholdMetPercentage:      defaultLoadThresholdMetPercentage,
 		LoadMetricRingSize:              defaultLoadMetricSize,
+		LoadMetricValidTime:             defaultLoadMetricValidTime,
 		LoadEvictionCoolDownTime:        defaultLoadEvictionCoolDownTime,
 		EnableSuppressionEviction:       defaultEnableSuppressionEviction,
 		MaxSuppressionToleranceRate:     defaultMaxSuppressionToleranceRate,
@@ -86,6 +89,8 @@ func (o *CPUPressureEvictionOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 			", the eviction or node taint will be triggered")
 	fs.IntVar(&o.LoadMetricRingSize, "eviction-load-metric-ring-size", o.LoadMetricRingSize,
 		"the size of the metric ring, which is used to calculate the load of the target cpuset pool")
+	fs.DurationVar(&o.LoadMetricValidTime, "eviction-load-metric-valid-time", o.LoadMetricValidTime,
+		"the valid time of the load metric, if the load metric is not updated for this duration, it will be considered invalid")
 	fs.DurationVar(&o.LoadEvictionCoolDownTime, "eviction-load-cool-down-time", o.LoadEvictionCoolDownTime,
 		"the cool-down time of cpu pressure eviction, if the cpu pressure eviction is triggered, "+
 			"the cpu pressure eviction will be disabled for the cool-down time")
@@ -107,6 +112,7 @@ func (o *CPUPressureEvictionOptions) ApplyTo(c *eviction.CPUPressureEvictionConf
 	c.LoadLowerBoundRatio = o.LoadLowerBoundRatio
 	c.LoadThresholdMetPercentage = o.LoadThresholdMetPercentage
 	c.LoadMetricRingSize = o.LoadMetricRingSize
+	c.LoadMetricValidTime = o.LoadMetricValidTime
 	c.LoadEvictionCoolDownTime = o.LoadEvictionCoolDownTime
 	c.EnableSuppressionEviction = o.EnableSuppressionEviction
 	c.MaxSuppressionToleranceRate = o.MaxSuppressionToleranceRate

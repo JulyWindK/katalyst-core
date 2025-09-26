@@ -28,6 +28,7 @@ type CPUPressureEvictionConfiguration struct {
 	LoadLowerBoundRatio                  float64
 	LoadThresholdMetPercentage           float64
 	LoadMetricRingSize                   int
+	LoadMetricValidTime                  time.Duration
 	LoadEvictionCoolDownTime             time.Duration
 	EnableSuppressionEviction            bool
 	MaxSuppressionToleranceRate          float64
@@ -64,6 +65,10 @@ func (c *CPUPressureEvictionConfiguration) ApplyConfiguration(conf *crd.DynamicC
 
 		if config.LoadMetricRingSize != nil {
 			c.LoadMetricRingSize = *config.LoadMetricRingSize
+		}
+
+		if config.LoadMetricValidTime != nil {
+			c.LoadMetricValidTime = config.LoadMetricValidTime.Duration
 		}
 
 		if config.LoadEvictionCoolDownTime != nil {

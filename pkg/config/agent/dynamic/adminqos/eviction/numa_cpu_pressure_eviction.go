@@ -24,6 +24,7 @@ type NumaCPUPressureEvictionConfiguration struct {
 	EnableEviction                 bool
 	ThresholdMetPercentage         float64
 	MetricRingSize                 int
+	MetricValidTime                int64
 	GracePeriod                    int64
 	ThresholdExpandFactor          float64
 	CandidateCount                 int
@@ -52,6 +53,10 @@ func (n *NumaCPUPressureEvictionConfiguration) ApplyConfiguration(conf *crd.Dyna
 
 		if config.MetricRingSize != nil {
 			n.MetricRingSize = *config.MetricRingSize
+		}
+
+		if config.MetricValidTime != nil {
+			n.MetricValidTime = *config.MetricValidTime
 		}
 
 		if config.GracePeriod != nil {

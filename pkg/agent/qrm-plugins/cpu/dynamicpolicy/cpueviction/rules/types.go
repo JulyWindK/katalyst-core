@@ -62,6 +62,7 @@ type State struct {
 
 type NumaPressureConfig struct {
 	MetricRingSize                 int
+	MetricValidTime                int64
 	ThresholdMetPercentage         float64
 	GracePeriod                    int64
 	ExpandFactor                   float64

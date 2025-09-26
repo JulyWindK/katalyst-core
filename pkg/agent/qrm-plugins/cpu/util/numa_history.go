@@ -26,14 +26,16 @@ const (
 
 type NumaMetricHistory struct {
 	// numa -> pod -> metric -> ring
-	Inner    map[int]map[string]map[string]*MetricRing
-	RingSize int
+	Inner     map[int]map[string]map[string]*MetricRing
+	RingSize  int
+	ValidTime time.Duration
 }
 
-func NewMetricHistory(ringSize int) *NumaMetricHistory {
+func NewMetricHistory(ringSize int, validTime time.Duration) *NumaMetricHistory {
 	return &NumaMetricHistory{
-		Inner:    make(map[int]map[string]map[string]*MetricRing),
-		RingSize: ringSize,
+		Inner:     make(map[int]map[string]map[string]*MetricRing),
+		RingSize:  ringSize,
+		ValidTime: validTime,
 	}
 }
 
@@ -47,7 +49,7 @@ func (m *NumaMetricHistory) Push(numaID int, podUID string, metricName string, p
 		m.Inner[numaID][podUID] = make(map[string]*MetricRing)
 	}
 	if m.Inner[numaID][podUID][metricName] == nil {
-		m.Inner[numaID][podUID][metricName] = CreateMetricRing(m.RingSize)
+		m.Inner[numaID][podUID][metricName] = CreateMetricRing(m.RingSize, m.ValidTime)
 	}
 	snapshot := &MetricSnapshot{
 		Info: MetricInfo{

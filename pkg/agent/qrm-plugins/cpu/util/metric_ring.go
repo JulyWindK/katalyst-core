@@ -19,6 +19,7 @@ package util
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/commonstate"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
@@ -41,6 +42,7 @@ type MetricRing struct {
 	Queue        []*MetricSnapshot
 	CurrentIndex int
 
+	ValidTime time.Duration
 	sync.RWMutex
 }
 
@@ -57,6 +59,18 @@ type Entries map[string]SubEntries
 type PoolMetricCollectHandler func(dynamicConfig *dynamic.Configuration, poolsUnderPressure bool,
 	metricName string, metricValue float64, poolName string,
 	poolSize int, collectTime int64, allowSharedCoresOverlapReclaimedCores bool)
+
+func (ring *MetricRing) IsValid(snapshot *MetricSnapshot) bool {
+	if snapshot == nil {
+		return false
+	}
+
+	if time.Now().UnixNano()-snapshot.Time > ring.ValidTime.Nanoseconds() {
+		return false
+	}
+
+	return true
+}
 
 func (ring *MetricRing) AvgAfterTimestampWithCountBound(ts int64, countBound int) (float64, error) {
 	ring.RLock()
@@ -83,7 +97,7 @@ func (ring *MetricRing) Sum() float64 {
 
 	sum := 0.0
 	for _, snapshot := range ring.Queue {
-		if snapshot != nil {
+		if ring.IsValid(snapshot) {
 			sum += snapshot.Info.Value
 		}
 	}
@@ -91,7 +105,7 @@ func (ring *MetricRing) Sum() float64 {
 }
 
 func (ring *MetricRing) Avg() float64 {
-	length := len(ring.Queue)
+	length := ring.Len()
 	if length == 0 {
 		return 0
 	}
@@ -119,7 +133,7 @@ func (ring *MetricRing) Len() int {
 
 	count := 0
 	for _, snapshot := range ring.Queue {
-		if snapshot == nil {
+		if !ring.IsValid(snapshot) {
 			continue
 		}
 		count++
@@ -133,7 +147,7 @@ func (ring *MetricRing) Count() (softOverCount, hardOverCount int) {
 	defer ring.RUnlock()
 
 	for _, snapshot := range ring.Queue {
-		if snapshot == nil {
+		if !ring.IsValid(snapshot) {
 			continue
 		}
 
@@ -155,7 +169,7 @@ func (ring *MetricRing) OverCount(threshold float64) (overCount int) {
 	defer ring.RUnlock()
 
 	for _, snapshot := range ring.Queue {
-		if snapshot == nil {
+		if !ring.IsValid(snapshot) {
 			continue
 		}
 
@@ -166,10 +180,11 @@ func (ring *MetricRing) OverCount(threshold float64) (overCount int) {
 	return
 }
 
-func CreateMetricRing(size int) *MetricRing {
+func CreateMetricRing(size int, validTime time.Duration) *MetricRing {
 	return &MetricRing{
 		MaxLen:       size,
 		Queue:        make([]*MetricSnapshot, size),
 		CurrentIndex: -1,
+		ValidTime:    validTime,
 	}
 }

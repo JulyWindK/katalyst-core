@@ -18,6 +18,7 @@ package strategy
 
 import (
 	"context"
+	"time"
 
 	util "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/cpu/util"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/metricthreshold"
@@ -67,7 +68,7 @@ func (p *NumaCPUPressureEviction) pullThresholds(_ context.Context) {
 
 	if p.metricsHistory.RingSize != numaPressureConfig.MetricRingSize {
 		general.Infof("update metricsHistory ring size to %v", numaPressureConfig.MetricRingSize)
-		p.metricsHistory = util.NewMetricHistory(numaPressureConfig.MetricRingSize)
+		p.metricsHistory = util.NewMetricHistory(numaPressureConfig.MetricRingSize, time.Duration(numaPressureConfig.MetricValidTime)*time.Second)
 	}
 }
 

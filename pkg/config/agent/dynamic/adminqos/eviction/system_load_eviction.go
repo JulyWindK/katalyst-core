@@ -29,6 +29,8 @@ type SystemLoadEvictionPluginConfiguration struct {
 	HistorySize int64
 	// SyncPeriod is the interval in seconds of the plugin fetch the load information
 	SyncPeriod int64
+	// MetricValidTime is the valid time of the load metric, which is used to calculate the system load
+	MetricValidTime int64
 	// CoolDownTimeInSeconds is the cool-down time of the plugin evict pods
 	CoolDownTime int64
 	// GracePeriod is the grace period of pod deletion
@@ -60,6 +62,10 @@ func (l *SystemLoadEvictionPluginConfiguration) ApplyConfiguration(conf *crd.Dyn
 
 		if config.SyncPeriod != nil {
 			l.SyncPeriod = *config.SyncPeriod
+		}
+
+		if config.MetricValidTime != nil {
+			l.MetricValidTime = *config.MetricValidTime
 		}
 
 		if config.CoolDownTime != nil {
