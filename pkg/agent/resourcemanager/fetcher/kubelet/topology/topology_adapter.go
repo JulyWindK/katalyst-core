@@ -188,6 +188,8 @@ func (p *topologyAdapterImpl) GetTopologyZones(parentCtx context.Context) ([]*no
 		klog.Infof("list pod Resources: %s\n allocatable Resources: %s", string(listPodResourcesResponseStr),
 			string(allocatableResourcesResponseStr))
 	}
+	klog.Infof("[KFX]list pod Resources: %s\n allocatable Resources: %s", string(listPodResourcesResponseStr),
+		string(allocatableResourcesResponseStr))
 
 	// validate pod Resources server response to make sure report topology status is correct
 	if err = p.validatePodResourcesServerResponse(allocatableResources, listPodResourcesResponse); err != nil {
@@ -445,6 +447,7 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 	zoneCapacity := make(map[util.ZoneNode]*v1.ResourceList)
 
 	zoneAllocatable, err = p.addContainerDevices(zoneAllocatable, allocatableResources.Devices)
+	klog.Infof("[KFX]getZoneResources zoneAllocatable:%v  (after addContainerDevices: %v)", zoneAllocatable, allocatableResources.Devices)
 	if err != nil {
 		return nil, err
 	}
@@ -452,10 +455,12 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 	// todo: the capacity and allocatable are equally now because the response includes all
 	// 		devices which don't consider them whether is healthy
 	zoneCapacity, err = p.addContainerDevices(zoneCapacity, allocatableResources.Devices)
+	klog.Infof("[KFX]getZoneResources zoneCapacity:%v  (after addContainerDevices: %v)", zoneCapacity, allocatableResources.Devices)
 	if err != nil {
 		return nil, err
 	}
 
+	klog.Infof("[KFX]getZoneResources allocatableResources.Resources:%v", allocatableResources.Resources)
 	// calculate Resources capacity and allocatable
 	for _, resources := range allocatableResources.Resources {
 		if resources == nil {
@@ -464,12 +469,14 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 
 		resourceName := v1.ResourceName(resources.ResourceName)
 		zoneCapacity, err = p.addTopologyAwareQuantity(zoneCapacity, resourceName, resources.TopologyAwareCapacityQuantityList)
+		klog.Infof("[KFX]getZoneResources zoneCapacity:%v  (after addTopologyAwareQuantity[%v]: %v)", zoneCapacity, resourceName, resources.TopologyAwareCapacityQuantityList)
 		if err != nil {
 			errList = append(errList, err)
 			continue
 		}
 
 		zoneAllocatable, err = p.addTopologyAwareQuantity(zoneAllocatable, resourceName, resources.TopologyAwareAllocatableQuantityList)
+		klog.Infof("[KFX]getZoneResources zoneAllocatable:%v  (after addTopologyAwareQuantity[%v]: %v)", zoneAllocatable, resourceName, resources.TopologyAwareAllocatableQuantityList)
 		if err != nil {
 			errList = append(errList, err)
 			continue
@@ -522,6 +529,7 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 	resources := make(map[util.ZoneNode]nodev1alpha1.Resources)
 	for zone, capacity := range zoneCapacity {
 		allocatable, ok := zoneAllocatable[zone]
+		klog.Infof("[KFX]getZoneResources zone %v capacity:%v allocatable:%v", zone, capacity, allocatable)
 		if !ok {
 			return nil, fmt.Errorf("zone %v capacity found but allocatable is not found", zone)
 		}
@@ -531,6 +539,8 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 			Allocatable: allocatable,
 		}
 	}
+
+	klog.Infof("[KFX]getZoneResources final resources:%v", resources)
 
 	return resources, nil
 }
