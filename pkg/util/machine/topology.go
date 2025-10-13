@@ -661,7 +661,7 @@ func GetThreadSiblingInfo(machineInfo *info.MachineInfo) map[int]int {
 
 	for _, node := range machineInfo.Topology {
 		for _, core := range node.Cores {
-			klog.Infof("[KFX]GetThreadSiblingInfo node=%v, core=%v, threads=%v", node, core, core.Threads)
+			klog.Infof("[KFX]GetThreadSiblingInfo node=%v, core=%v, threads=%v", node.Id, core.Id, core.Threads)
 			if len(core.Threads) == 2 {
 				threadSiblingMap[core.Threads[0]] = core.Threads[1]
 			}
