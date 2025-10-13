@@ -1010,7 +1010,7 @@ func addZoneQuantity(zoneResourceList map[util.ZoneNode]*v1.ResourceList, zoneNo
 
 	quantity, resourceOk := resourceList[resourceName]
 	if !resourceOk {
-		quantity = resource.Quantity{}
+		quantity = resource.Quantity{Format: resource.BinarySI}
 		resourceList[resourceName] = quantity
 	}
 
