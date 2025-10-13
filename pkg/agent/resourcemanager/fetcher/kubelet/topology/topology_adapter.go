@@ -756,6 +756,7 @@ func (p *topologyAdapterImpl) generateNumaNodeThreadTopologyAttr(node util.ZoneN
 	}
 	numaCPUSets := p.metaServer.KatalystMachineInfo.NUMAToCPUs[numaID]
 
+	klog.Infof("[KFX]generateNumaNodeThreadTopologyAttr numaID: %v", numaID)
 	klog.Infof("[KFX]generateNumaNodeThreadTopologyAttr numaCPUSets: %v", numaCPUSets)
 	klog.Infof("[KFX]generateNumaNodeThreadTopologyAttr p.threadSiblingMap: %v", p.threadSiblingMap)
 	var threadTopology string
