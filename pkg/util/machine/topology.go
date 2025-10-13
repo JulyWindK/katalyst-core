@@ -665,8 +665,10 @@ func GetThreadSiblingInfo(machineInfo *info.MachineInfo) map[int]int {
 			if len(core.Threads) == 2 {
 				threadSiblingMap[core.Threads[0]] = core.Threads[1]
 			}
+			klog.Infof("[KFX]GetThreadSiblingInfo len(core.Threads): %v core.Threads[0]=%v core.Threads[1]=%v", len(core.Threads), core.Threads[0], core.Threads[1])
 		}
 	}
+	klog.Infof("[KFX]GetThreadSiblingInfo threadSiblingMap: %v", threadSiblingMap)
 
 	return threadSiblingMap
 }
