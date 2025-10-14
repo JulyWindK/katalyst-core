@@ -659,6 +659,9 @@ func GetThreadSiblingInfo(machineInfo *info.MachineInfo) map[int]int {
 		return threadSiblingMap
 	}
 
+	klog.Infof("GetThreadSiblingInfo got machineInfo: %+v", machineInfo)
+	klog.Infof("GetThreadSiblingInfo got NumCores: %+v  NumPhysicalCores: %+v", machineInfo.NumCores, machineInfo.NumPhysicalCores)
+
 	for _, node := range machineInfo.Topology {
 		for _, core := range node.Cores {
 			klog.Infof("[KFX]GetThreadSiblingInfo node=%v, core=%v, threads=%v", node.Id, core.Id, core.Threads)
