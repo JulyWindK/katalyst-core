@@ -447,7 +447,6 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 	zoneCapacity := make(map[util.ZoneNode]*v1.ResourceList)
 
 	zoneAllocatable, err = p.addContainerDevices(zoneAllocatable, allocatableResources.Devices)
-	klog.Infof("[KFX]getZoneResources zoneAllocatable:%v  (after addContainerDevices: %v)", zoneAllocatable, allocatableResources.Devices)
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +454,6 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 	// todo: the capacity and allocatable are equally now because the response includes all
 	// 		devices which don't consider them whether is healthy
 	zoneCapacity, err = p.addContainerDevices(zoneCapacity, allocatableResources.Devices)
-	klog.Infof("[KFX]getZoneResources zoneCapacity:%v  (after addContainerDevices: %v)", zoneCapacity, allocatableResources.Devices)
 	if err != nil {
 		return nil, err
 	}
@@ -1013,11 +1011,14 @@ func addZoneQuantity(zoneResourceList map[util.ZoneNode]*v1.ResourceList, zoneNo
 
 	quantity, resourceOk := resourceList[resourceName]
 	if !resourceOk {
-		quantity = resource.Quantity{Format: resource.BinarySI}
+		quantity = resource.Quantity{}
 		resourceList[resourceName] = quantity
 	}
 
 	quantity.Add(value)
+	if strings.HasPrefix(string(resourceName), v1.ResourceHugePagesPrefix) {
+		quantity.Format = resource.BinarySI
+	}
 	resourceList[resourceName] = quantity
 
 	return zoneResourceList
