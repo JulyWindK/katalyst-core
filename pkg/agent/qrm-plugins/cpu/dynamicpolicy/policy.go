@@ -227,6 +227,9 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		return false, nil, err
 	}
 
+	if conf.IRQTunerServiceConflict {
+		_ = wrappedEmitter.StoreInt64(util.MetricNameIrqTunerServiceConflict, 1, metrics.MetricTypeNameRaw)
+	}
 	if conf.EnableIRQTuner {
 		irqTuner, err := irqtuingcontroller.NewIrqTuningController(conf.AgentConfiguration, policyImplement, policyImplement.emitter, policyImplement.machineInfo)
 		if err != nil {

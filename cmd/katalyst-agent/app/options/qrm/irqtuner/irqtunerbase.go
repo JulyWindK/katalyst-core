@@ -24,6 +24,7 @@ import (
 
 type IRQTunerOptions struct {
 	EnableIRQTuner                          bool
+	IRQTunerServiceConflict                 bool
 	ForbiddenContainerRuntimeClass          []string
 	ForbiddenContainerRuntimeAnnotationKeys []string
 	ForbiddenContainerRuntimeAnnotationsVal string
@@ -39,6 +40,8 @@ func (o *IRQTunerOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	fs := fss.FlagSet("irq_tuner")
 
 	fs.BoolVar(&o.EnableIRQTuner, "enable-irq-tuner", o.EnableIRQTuner, "if set true, we will enable irq tuner")
+	fs.BoolVar(&o.IRQTunerServiceConflict, "irq-tuner-service-conflict", o.IRQTunerServiceConflict,
+		"if set true, it means there is a service that conflicts with irq tuner")
 	fs.StringSliceVar(&o.ForbiddenContainerRuntimeClass, "forbidden-container-runtime-class", o.ForbiddenContainerRuntimeClass,
 		"the container runtime class that irq tuner will forbid")
 	fs.StringSliceVar(&o.ForbiddenContainerRuntimeAnnotationKeys, "forbidden-container-runtime-annotation-keys", o.ForbiddenContainerRuntimeAnnotationKeys,
@@ -49,6 +52,7 @@ func (o *IRQTunerOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 
 func (o *IRQTunerOptions) ApplyTo(conf *irqtuner.IRQTunerConfiguration) error {
 	conf.EnableIRQTuner = o.EnableIRQTuner
+	conf.IRQTunerServiceConflict = o.IRQTunerServiceConflict
 	for _, rc := range o.ForbiddenContainerRuntimeClass {
 		conf.ForbiddenContainerRuntimeClass = append(conf.ForbiddenContainerRuntimeClass, rc)
 	}

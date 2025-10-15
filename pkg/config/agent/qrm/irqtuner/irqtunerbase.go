@@ -18,6 +18,7 @@ package irqtuner
 
 type IRQTunerConfiguration struct {
 	EnableIRQTuner                          bool
+	IRQTunerServiceConflict                 bool
 	ForbiddenContainerRuntimeClass          []string
 	ForbiddenContainerRuntimeAnnotationKeys []string
 	ForbiddenContainerRuntimeAnnotationsVal string

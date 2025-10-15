@@ -68,6 +68,7 @@ const (
 
 	// metrics for irq tuning
 	MetricNameIrqTuningEnabled                        = "irq_tuning_enabled"
+	MetricNameIrqTunerServiceConflict                 = "irq_tuner_service_conflict"
 	MetricNameIrqTuningPolicy                         = "irq_tuning_policy"
 	MetricNameIrqTuningNicsCount                      = "irq_tuning_nics_count"
 	MetricNameIrqTuningLowThroughputNicsCount         = "irq_tuning_low_throughput_nics_count"
