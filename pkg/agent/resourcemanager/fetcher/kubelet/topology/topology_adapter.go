@@ -903,6 +903,9 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 			}
 
 			socketID := p.metaServer.NUMANodeIDToSocketID[int(node.ID)]
+			if _, ok := deviceSocketLevelQuantity[string(resourceName)]; !ok {
+				deviceSocketLevelQuantity[string(resourceName)] = make(map[int]*resource.Quantity)
+			}
 			deviceSocketLevelQuantity[string(resourceName)][socketID].Add(oneQuantity)
 		}
 	}
