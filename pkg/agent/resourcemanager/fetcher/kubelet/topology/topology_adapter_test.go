@@ -1650,6 +1650,7 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 		listPodResources      *podresv1.ListPodResourcesResponse
 		allocatableResources  *podresv1.AllocatableResourcesResponse
 		numaSocketZoneNodeMap map[util.ZoneNode]util.ZoneNode
+		threadSiblingMap      map[int]int
 	}
 	tests := []struct {
 		name    string
@@ -1777,6 +1778,16 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 					util.GenerateNumaZoneNode(0): util.GenerateSocketZoneNode(0),
 					util.GenerateNumaZoneNode(1): util.GenerateSocketZoneNode(1),
 				},
+				threadSiblingMap: map[int]int{
+					0: 3,
+					1: 2,
+					2: 1,
+					3: 0,
+					4: 7,
+					5: 6,
+					6: 5,
+					7: 4,
+				},
 			},
 			want: []*nodev1alpha1.TopologyZone{
 				{
@@ -1790,6 +1801,14 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 								{
 									Name:  "numa_distance",
 									Value: "",
+								},
+								{
+									Name:  "reserved_cpu_list",
+									Value: "",
+								},
+								{
+									Name:  "thread_topology_info",
+									Value: "0:3,1:2,2:1,3:0",
 								},
 							},
 							Resources: nodev1alpha1.Resources{
@@ -1849,6 +1868,14 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 									Name:  "numa_distance",
 									Value: "",
 								},
+								{
+									Name:  "reserved_cpu_list",
+									Value: "",
+								},
+								{
+									Name:  "thread_topology_info",
+									Value: "4:7,5:6,6:5,7:4",
+								},
 							},
 							Resources: nodev1alpha1.Resources{
 								Capacity: &v1.ResourceList{
@@ -1898,7 +1925,15 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 				resourceNameToZoneTypeMap: map[string]string{
 					"resource.katalyst.kubewharf.io/rdma": "NIC",
 				},
+				threadSiblingMap: tt.fields.threadSiblingMap,
 			}
+			p.metaServer.KatalystMachineInfo.CPUTopology = &machine.CPUTopology{
+				NUMAToCPUs: machine.NUMANodeInfo{
+					0: machine.NewCPUSet(0, 1, 2, 3),
+					1: machine.NewCPUSet(4, 5, 6, 7),
+				},
+			}
+
 			got, err := p.GetTopologyZones(context.TODO())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetTopologyZones() error = %v, wantErr %v", err, tt.wantErr)
@@ -1920,6 +1955,7 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 		numaCacheGroupZoneNodeMap map[util.ZoneNode][]util.ZoneNode
 		numaDistanceMap           map[int][]machine.NumaDistanceInfo
 		cacheGroupCPUsMap         map[int]sets.Int
+		threadSiblingMap          map[int]int
 		cpuVendor                 string
 	}
 	tests := []struct {
@@ -2272,6 +2308,16 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 					2: sets.NewInt(2, 6, 10, 14, 18, 22, 26, 30),
 					3: sets.NewInt(3, 7, 11, 15, 19, 23, 27, 31),
 				},
+				threadSiblingMap: map[int]int{
+					0: 3,
+					1: 2,
+					2: 1,
+					3: 0,
+					4: 7,
+					5: 6,
+					6: 5,
+					7: 4,
+				},
 				cpuVendor: "AuthenticAMD",
 			},
 			want: []*nodev1alpha1.TopologyZone{
@@ -2286,6 +2332,14 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 								{
 									Name:  "numa_distance",
 									Value: "10,20",
+								},
+								{
+									Name:  "reserved_cpu_list",
+									Value: "",
+								},
+								{
+									Name:  "thread_topology_info",
+									Value: "0:3,1:2,2:1,3:0",
 								},
 							},
 							Resources: nodev1alpha1.Resources{
@@ -2398,6 +2452,14 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 								{
 									Name:  "numa_distance",
 									Value: "20,10",
+								},
+								{
+									Name:  "reserved_cpu_list",
+									Value: "",
+								},
+								{
+									Name:  "thread_topology_info",
+									Value: "4:7,5:6,6:5,7:4",
 								},
 							},
 							Resources: nodev1alpha1.Resources{
@@ -2823,6 +2885,16 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 					util.GenerateNumaZoneNode(0): util.GenerateSocketZoneNode(0),
 					util.GenerateNumaZoneNode(1): util.GenerateSocketZoneNode(1),
 				},
+				threadSiblingMap: map[int]int{
+					0: 3,
+					1: 2,
+					2: 1,
+					3: 0,
+					4: 7,
+					5: 6,
+					6: 5,
+					7: 4,
+				},
 			},
 			want: []*nodev1alpha1.TopologyZone{
 				{
@@ -2832,6 +2904,20 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 						{
 							Type: "Numa",
 							Name: "0",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "",
+								},
+								{
+									Name:  "reserved_cpu_list",
+									Value: "",
+								},
+								{
+									Name:  "thread_topology_info",
+									Value: "0:3,1:2,2:1,3:0",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Allocatable: &v1.ResourceList{
 									"gpu":    resource.MustParse("2"),
@@ -2868,6 +2954,20 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 						{
 							Type: "Numa",
 							Name: "1",
+							Attributes: []nodev1alpha1.Attribute{
+								{
+									Name:  "numa_distance",
+									Value: "",
+								},
+								{
+									Name:  "reserved_cpu_list",
+									Value: "",
+								},
+								{
+									Name:  "thread_topology_info",
+									Value: "4:7,5:6,6:5,7:4",
+								},
+							},
 							Resources: nodev1alpha1.Resources{
 								Allocatable: &v1.ResourceList{
 									"cpu":    resource.MustParse("24"),
@@ -2915,8 +3015,15 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 				numaCacheGroupZoneNodeMap: tt.fields.numaCacheGroupZoneNodeMap,
 				numaDistanceMap:           tt.fields.numaDistanceMap,
 				cacheGroupCPUsMap:         tt.fields.cacheGroupCPUsMap,
+				threadSiblingMap:          tt.fields.threadSiblingMap,
 			}
 			p.metaServer.MetaAgent.MachineInfo.CPUVendorID = tt.fields.cpuVendor
+			p.metaServer.KatalystMachineInfo.CPUTopology = &machine.CPUTopology{
+				NUMAToCPUs: machine.NUMANodeInfo{
+					0: machine.NewCPUSet(0, 1, 2, 3),
+					1: machine.NewCPUSet(4, 5, 6, 7),
+				},
+			}
 
 			got, err := p.GetTopologyZones(context.TODO())
 			if (err != nil) != tt.wantErr {
