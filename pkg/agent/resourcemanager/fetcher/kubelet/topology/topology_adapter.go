@@ -112,6 +112,9 @@ type topologyAdapterImpl struct {
 	// needValidationResources is the resources needed to be validated
 	needValidationResources []string
 
+	// needAggregateReportingDevices is the devices needed to be aggregated reporting
+	needAggregateReportingDevices []string
+
 	// reservedCPUs is the cpus reserved
 	reservedCPUs string
 }
@@ -154,6 +157,7 @@ func NewPodResourcesServerTopologyAdapter(metaServer *metaserver.MetaServer, qos
 		podResourcesFilter:             podResourcesFilter,
 		resourceNameToZoneTypeMap:      resourceNameToZoneTypeMap,
 		needValidationResources:        needValidationResources,
+		needAggregateReportingDevices:  agentConf.NeedAggregateReportingDevices,
 		reservedCPUs:                   agentConf.ReservedCPUList,
 	}, nil
 }
@@ -867,6 +871,7 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 	containerDevices []*podresv1.ContainerDevices,
 ) (map[util.ZoneNode]*v1.ResourceList, error) {
 	var errList []error
+	deviceSocketLevelQuantity := make(map[string]map[int]*resource.Quantity)
 
 	if zoneResources == nil {
 		zoneResources = make(map[util.ZoneNode]*v1.ResourceList)
@@ -896,11 +901,33 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 					zoneResources = addZoneQuantity(zoneResources, deviceNode, resourceName, oneQuantity)
 				}
 			}
+
+			socketID := p.metaServer.NUMANodeIDToSocketID[int(node.ID)]
+			deviceSocketLevelQuantity[string(resourceName)][socketID].Add(oneQuantity)
+		}
+	}
+
+	for _, resourceName := range p.needAggregateReportingDevices {
+		socketQuantity, ok := deviceSocketLevelQuantity[resourceName]
+		if !ok {
+			continue
+		}
+		for socketID, quantity := range socketQuantity {
+			zoneNode := util.GenerateSocketZoneNode(socketID)
+			zoneResources = addZoneQuantity(zoneResources, zoneNode, v1.ResourceName(resourceName), *quantity)
 		}
 	}
 
 	if len(errList) > 0 {
 		return nil, utilerrors.NewAggregate(errList)
+	}
+
+	return zoneResources, nil
+}
+
+func (p *topologyAdapterImpl) aggregateReportDevices(zoneResources map[util.ZoneNode]*v1.ResourceList, containerDevices []*podresv1.ContainerDevices) (map[util.ZoneNode]*v1.ResourceList, error) {
+	if zoneResources == nil {
+		zoneResources = make(map[util.ZoneNode]*v1.ResourceList)
 	}
 
 	return zoneResources, nil
