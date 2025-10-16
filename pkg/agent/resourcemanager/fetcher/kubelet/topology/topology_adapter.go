@@ -192,7 +192,6 @@ func (p *topologyAdapterImpl) GetTopologyZones(parentCtx context.Context) ([]*no
 		klog.Infof("list pod Resources: %s\n allocatable Resources: %s", string(listPodResourcesResponseStr),
 			string(allocatableResourcesResponseStr))
 	}
-	klog.Infof("[kFX] getTopologyZones allocatableResources: %v", string(allocatableResourcesResponseStr))
 
 	// validate pod Resources server response to make sure report topology status is correct
 	if err = p.validatePodResourcesServerResponse(allocatableResources, listPodResourcesResponse); err != nil {
@@ -445,7 +444,6 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 	if allocatableResources == nil {
 		return nil, fmt.Errorf("allocatable Resources is nil")
 	}
-	klog.Infof("[KFX]getZoneResources allocatableResources: %v", allocatableResources)
 
 	zoneAllocatable := make(map[util.ZoneNode]*v1.ResourceList)
 	zoneCapacity := make(map[util.ZoneNode]*v1.ResourceList)
@@ -454,6 +452,7 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 	if err != nil {
 		return nil, err
 	}
+	klog.Infof("[KFX]getZoneResources zoneAllocatable: %+v", zoneAllocatable)
 
 	// todo: the capacity and allocatable are equally now because the response includes all
 	// 		devices which don't consider them whether is healthy
@@ -883,7 +882,6 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 		if device == nil || device.Topology == nil {
 			continue
 		}
-		klog.Infof("[KFX] addContainerDevices device: %+v", device)
 		if p.skipDeviceNames != nil && p.skipDeviceNames.Has(device.ResourceName) {
 			continue
 		}
@@ -908,7 +906,7 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 			deviceSocketLevelQuantity[string(resourceName)][socketID].Add(oneQuantity)
 		}
 	}
-
+	klog.Infof("[KFX]addContainerDevices deviceSocketLevelQuantity: %+v", deviceSocketLevelQuantity)
 	for _, resourceName := range p.needAggregateReportingDevices {
 		socketQuantity, ok := deviceSocketLevelQuantity[resourceName]
 		if !ok {
@@ -916,6 +914,7 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 		}
 		for socketID, quantity := range socketQuantity {
 			zoneNode := util.GenerateSocketZoneNode(socketID)
+			klog.Infof("[KFX]addContainerDevices socketID: %+v quantity: %+v", socketID, quantity)
 			zoneResources = addZoneQuantity(zoneResources, zoneNode, v1.ResourceName(resourceName), *quantity)
 		}
 	}
