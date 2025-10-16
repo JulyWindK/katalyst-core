@@ -448,6 +448,7 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 	zoneAllocatable := make(map[util.ZoneNode]*v1.ResourceList)
 	zoneCapacity := make(map[util.ZoneNode]*v1.ResourceList)
 
+	klog.Infof("[KFX]getZoneResources addContainerDevices zoneAllocatable")
 	zoneAllocatable, err = p.addContainerDevices(zoneAllocatable, allocatableResources.Devices)
 	if err != nil {
 		return nil, err
@@ -456,9 +457,23 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 
 	// todo: the capacity and allocatable are equally now because the response includes all
 	// 		devices which don't consider them whether is healthy
+	klog.Infof("[KFX]getZoneResources addContainerDevices zoneCapacity")
 	zoneCapacity, err = p.addContainerDevices(zoneCapacity, allocatableResources.Devices)
 	if err != nil {
 		return nil, err
+	}
+	klog.Infof("[KFX]getZoneResources zoneCapacity: %+v", zoneCapacity)
+
+	if len(p.needAggregateReportingDevices) > 0 {
+		zoneAllocatable, err = p.aggregateReportDevicesToSocket(zoneAllocatable)
+		if err != nil {
+			return nil, err
+		}
+
+		zoneCapacity, err = p.aggregateReportDevicesToSocket(zoneCapacity)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// calculate Resources capacity and allocatable
@@ -872,12 +887,13 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 	containerDevices []*podresv1.ContainerDevices,
 ) (map[util.ZoneNode]*v1.ResourceList, error) {
 	var errList []error
-	deviceSocketLevelQuantity := make(map[string]map[int]*resource.Quantity)
 
 	if zoneResources == nil {
 		zoneResources = make(map[util.ZoneNode]*v1.ResourceList)
 	}
 
+	count := 0
+	deviceCount, numaCount, socketCount := make(map[string]int), make(map[int]int), make(map[int]int)
 	for _, device := range containerDevices {
 		if device == nil || device.Topology == nil {
 			continue
@@ -885,12 +901,16 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 		if p.skipDeviceNames != nil && p.skipDeviceNames.Has(device.ResourceName) {
 			continue
 		}
+		count++
 
 		resourceName := v1.ResourceName(device.ResourceName)
+		deviceCount[string(resourceName)]++
 		for _, node := range device.Topology.Nodes {
 			if node == nil {
 				continue
 			}
+			numaID := int(node.ID)
+			numaCount[numaID]++
 
 			zoneNode := util.GenerateNumaZoneNode(int(node.ID))
 			zoneResources = addZoneQuantity(zoneResources, zoneNode, resourceName, oneQuantity)
@@ -903,16 +923,47 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 			}
 
 			socketID := p.metaServer.NUMANodeIDToSocketID[int(node.ID)]
+			socketCount[socketID]++
+		}
+	}
+	klog.Infof("[KFX]addContainerDevices count: %v deviceCount: %+v numaCount: %+v socketCount: %+v", count, deviceCount, numaCount, socketCount)
+
+	if len(errList) > 0 {
+		return nil, utilerrors.NewAggregate(errList)
+	}
+
+	return zoneResources, nil
+}
+
+func (p *topologyAdapterImpl) aggregateReportDevicesToSocket(zoneResources map[util.ZoneNode]*v1.ResourceList) (map[util.ZoneNode]*v1.ResourceList, error) {
+	if zoneResources == nil {
+		zoneResources = make(map[util.ZoneNode]*v1.ResourceList)
+	}
+	deviceSocketLevelQuantity := make(map[string]map[int]*resource.Quantity)
+
+	for zoneNode, resourceList := range zoneResources {
+		if resourceList == nil || zoneNode.Meta.Type != nodev1alpha1.TopologyTypeNuma {
+			continue
+		}
+
+		nodeID, err := strconv.Atoi(zoneNode.Meta.Name)
+		if err != nil {
+			klog.Warningf("failed to convert numa %s to int: %v", zoneNode.Meta.Name, err)
+			continue
+		}
+
+		socketID := p.metaServer.NUMANodeIDToSocketID[nodeID]
+		for resourceName, quantity := range *resourceList {
 			if _, ok := deviceSocketLevelQuantity[string(resourceName)]; !ok {
 				deviceSocketLevelQuantity[string(resourceName)] = make(map[int]*resource.Quantity)
 			}
 			if _, ok := deviceSocketLevelQuantity[string(resourceName)][socketID]; !ok {
 				deviceSocketLevelQuantity[string(resourceName)][socketID] = &resource.Quantity{}
 			}
-			deviceSocketLevelQuantity[string(resourceName)][socketID].Add(oneQuantity)
+			deviceSocketLevelQuantity[string(resourceName)][socketID].Add(quantity)
 		}
 	}
-	klog.Infof("[KFX]addContainerDevices deviceSocketLevelQuantity: %+v", deviceSocketLevelQuantity)
+
 	for _, resourceName := range p.needAggregateReportingDevices {
 		socketQuantity, ok := deviceSocketLevelQuantity[resourceName]
 		if !ok {
@@ -923,18 +974,6 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 			klog.Infof("[KFX]addContainerDevices socketID: %+v quantity: %+v", socketID, quantity)
 			zoneResources = addZoneQuantity(zoneResources, zoneNode, v1.ResourceName(resourceName), *quantity)
 		}
-	}
-
-	if len(errList) > 0 {
-		return nil, utilerrors.NewAggregate(errList)
-	}
-
-	return zoneResources, nil
-}
-
-func (p *topologyAdapterImpl) aggregateReportDevices(zoneResources map[util.ZoneNode]*v1.ResourceList, containerDevices []*podresv1.ContainerDevices) (map[util.ZoneNode]*v1.ResourceList, error) {
-	if zoneResources == nil {
-		zoneResources = make(map[util.ZoneNode]*v1.ResourceList)
 	}
 
 	return zoneResources, nil
