@@ -905,7 +905,7 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 			continue
 		}
 		count++
-		klog.Infof("[KFX]addContainerDevices device %+v topology: %+v", device.ResourceName, device.Topology)
+		klog.Infof("[KFX]addContainerDevices device %+v topologggy: %+v", device.ResourceName, device.Topology)
 		resourceName := v1.ResourceName(device.ResourceName)
 		deviceCount[string(resourceName)]++
 		for _, node := range device.Topology.Nodes {
@@ -914,6 +914,7 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 			}
 			numaID := int(node.ID)
 			numaCount[numaID]++
+			klog.Infof("[KFX]addContainerDevices parse device %+v numaID: %v numaCount:%+v", device.ResourceName, numaID, numaCount)
 
 			zoneNode := util.GenerateNumaZoneNode(int(node.ID))
 			zoneResources = addZoneQuantity(zoneResources, zoneNode, resourceName, oneQuantity)
@@ -927,6 +928,7 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 
 			socketID := p.metaServer.NUMANodeIDToSocketID[int(node.ID)]
 			socketCount[socketID]++
+			klog.Infof("[KFX]addContainerDevices parse device %+v numaID %v to socketID: %v socketCount:%+v", device.ResourceName, numaID, socketID, socketCount)
 		}
 	}
 	klog.Infof("[KFX]addContainerDevices count: %v deviceCount: %+v numaCount: %+v socketCount: %+v", count, deviceCount, numaCount, socketCount)
