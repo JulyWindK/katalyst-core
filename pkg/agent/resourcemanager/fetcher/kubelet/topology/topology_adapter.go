@@ -892,6 +892,9 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 		zoneResources = make(map[util.ZoneNode]*v1.ResourceList)
 	}
 
+	klog.Infof("[KFX]aggregateReportDevicesToSocket NUMANodeIDToSocketID:%+v, NumNUMANodes:%v, NumSockets:%v", p.metaServer.NUMANodeIDToSocketID,
+		p.metaServer.NumNUMANodes, p.metaServer.KatalystMachineInfo.CPUTopology.NumSockets)
+
 	count := 0
 	deviceCount, numaCount, socketCount := make(map[string]int), make(map[int]int), make(map[int]int)
 	for _, device := range containerDevices {
@@ -902,7 +905,7 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 			continue
 		}
 		count++
-
+		klog.Infof("[KFX]addContainerDevices device %+v topology: %+v", device.ResourceName, device.Topology)
 		resourceName := v1.ResourceName(device.ResourceName)
 		deviceCount[string(resourceName)]++
 		for _, node := range device.Topology.Nodes {
