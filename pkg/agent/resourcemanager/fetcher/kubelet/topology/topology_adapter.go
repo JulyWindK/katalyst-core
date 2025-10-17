@@ -957,7 +957,12 @@ func (p *topologyAdapterImpl) aggregateReportDevicesToSocket(zoneResources map[u
 			continue
 		}
 
-		socketID := p.metaServer.NUMANodeIDToSocketID[nodeID]
+		socketID, ok := p.metaServer.NUMANodeIDToSocketID[nodeID]
+		if !ok {
+			klog.Warningf("failed to get socketID for numa %d", nodeID)
+			continue
+		}
+
 		for resourceName, quantity := range *resourceList {
 			if _, ok := deviceSocketLevelQuantity[string(resourceName)]; !ok {
 				deviceSocketLevelQuantity[string(resourceName)] = make(map[int]*resource.Quantity)
