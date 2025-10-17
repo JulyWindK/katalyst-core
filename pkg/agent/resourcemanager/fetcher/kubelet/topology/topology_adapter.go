@@ -926,8 +926,11 @@ func (p *topologyAdapterImpl) addContainerDevices(zoneResources map[util.ZoneNod
 				}
 			}
 
-			socketID := p.metaServer.NUMANodeIDToSocketID[int(node.ID)]
-			socketCount[socketID]++
+			socketID, ok := p.metaServer.NUMANodeIDToSocketID[int(node.ID)]
+			if ok {
+				socketCount[socketID]++
+			}
+
 			klog.Infof("[KFX]addContainerDevices parse device %+v numaID %v to socketID: %v socketCount:%+v", device.ResourceName, numaID, socketID, socketCount)
 		}
 	}
