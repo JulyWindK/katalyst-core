@@ -427,7 +427,7 @@ func (p *NumaSysCPUPressureEviction) updateNumaSysOverStat() {
 		if isNumaCPUUsageSoftOver && isNumaSysCPUUsageSoftOver {
 			general.Infof("[%s][DEBUG] append numa sys cpu over stat, numa %v, avg cpu usage %v, avg sys cpu usage %v, soft over %v, hard over %v, isNumaSysCPUUsageHardOver:%v",
 				p.pluginName, numaID, numaCPUUsageAvg, numaSysCPUUsageAvg, isNumaCPUUsageSoftOver, isNumaSysCPUUsageSoftOver, isNumaSysCPUUsageHardOver)
-			numaSysOverStats = append(p.numaSysOverStats, rules.NumaSysOverStat{
+			numaSysOverStats = append(numaSysOverStats, rules.NumaSysOverStat{
 				NumaID:             numaID,
 				NumaCPUUsageAvg:    numaCPUUsageAvg,
 				NumaSysCPUUsageAvg: numaSysCPUUsageAvg,
