@@ -240,6 +240,7 @@ func (c *MetricStore) GetCPUMetric(coreID int, metricName string) (MetricData, e
 func (c *MetricStore) GetContainerMetric(podUID, containerName, metricName string) (MetricData, error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
+	general.Infof("[DEBUG] GetContainerMetric podContainerMetricMap[%v] %v", podUID, c.podContainerMetricMap[podUID])
 	if c.podContainerMetricMap[podUID] != nil {
 		if c.podContainerMetricMap[podUID][containerName] != nil {
 			if data, ok := c.podContainerMetricMap[podUID][containerName][metricName]; ok {
@@ -256,6 +257,7 @@ func (c *MetricStore) GetContainerMetric(podUID, containerName, metricName strin
 func (c *MetricStore) GetContainerNumaMetric(podUID, containerName string, numaID int, metricName string) (MetricData, error) {
 	c.mutex.RLock()
 	defer c.mutex.RUnlock()
+	general.Infof("[DEBUG] GetContainerNumaMetric podContainerNumaMetricMap[%v] %v", podUID, c.podContainerNumaMetricMap[podUID])
 	if c.podContainerNumaMetricMap[podUID] != nil {
 		if c.podContainerNumaMetricMap[podUID][containerName] != nil {
 			if c.podContainerNumaMetricMap[podUID][containerName][numaID] != nil {
