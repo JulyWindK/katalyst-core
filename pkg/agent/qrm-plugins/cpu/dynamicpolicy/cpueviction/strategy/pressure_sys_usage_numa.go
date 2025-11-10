@@ -340,6 +340,7 @@ func (p *NumaSysCPUPressureEviction) sync(_ context.Context) {
 	for _, metricName := range metricLists {
 		// numa -> pod -> ring
 		for numaID := 0; numaID < p.metaServer.NumNUMANodes; numaID++ {
+			numaSize := p.metaServer.NUMAToCPUs.CPUSizeInNUMAs(numaID)
 			snbEntries := machineState[numaID].PodEntries
 
 			numaSum := 0.0
@@ -353,7 +354,7 @@ func (p *NumaSysCPUPressureEviction) sync(_ context.Context) {
 						general.Warningf("[%s] failed to get pod metric, numa %v, pod %v, metric %v err: %v",
 							p.pluginName, numaID, podUID, metricName, err)
 					}
-					podSum += val
+					podSum += val / float64(numaSize)
 				}
 				numaSum += podSum
 				general.Infof("[DEBUG][%s] get pod metric, numa %v, pod %v, metric %v, value %v",
