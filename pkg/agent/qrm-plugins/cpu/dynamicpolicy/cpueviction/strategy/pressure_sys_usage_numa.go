@@ -170,6 +170,9 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 	// If the overall CPU utilization of NUMA reaches the threshold and the utilization of the system also reaches the threshold,
 	// the eviction condition is considered to be met.
 	if isNumaCPUUsageHardOver && isNumaSysCPUUsageHardOver {
+		general.Infof("[%s] numa sys cpu pressure hard met, avgCPUUsage: %v, avgSysCPUUsage: %v, "+
+			"numaCPUUsageHardThreshold: %v, numaSysOverTotalUsageHardThreshold: %v", p.pluginName, avgCPUUsage, avgSysCPUUsage,
+			p.evictionConfig.NumaCPUUsageHardThreshold, p.evictionConfig.NumaSysOverTotalUsageHardThreshold)
 		_ = p.emitter.StoreFloat64(numaThresholdMetMetricsName, 1, metrics.MetricTypeNameRaw)
 		return &pluginapi.ThresholdMetResponse{
 			ThresholdValue:    1,
@@ -188,6 +191,9 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 
 	// If only the soft threshold is reached, the node will be tainted and cannot be scheduled for the time being.
 	if isNumaCPUUsageSoftOver && isNumaSysCPUUsageSoftOver {
+		general.Infof("[%s] numa sys cpu pressure soft met, avgCPUUsage: %v, avgSysCPUUsage: %v, "+
+			"numaCPUUsageSoftThreshold: %v, numaSysOverTotalUsageSoftThreshold: %v", p.pluginName, avgCPUUsage, avgSysCPUUsage,
+			p.evictionConfig.NumaCPUUsageSoftThreshold, p.evictionConfig.NumaSysOverTotalUsageSoftThreshold)
 		_ = p.emitter.StoreFloat64(numaThresholdMetMetricsName, 1, metrics.MetricTypeNameRaw)
 		return &pluginapi.ThresholdMetResponse{
 			ThresholdValue:    1,
