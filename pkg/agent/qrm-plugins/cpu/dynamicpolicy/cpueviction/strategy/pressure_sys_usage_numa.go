@@ -424,17 +424,17 @@ func (p *NumaSysCPUPressureEviction) updateNumaSysOverStat() {
 				metricTagIsOverload: strconv.FormatBool(isNumaSysCPUUsageHardOver),
 			})...)
 
-		numaSysOverStats = append(p.numaSysOverStats, rules.NumaSysOverStat{
-			NumaID:             numaID,
-			NumaCPUUsageAvg:    numaCPUUsageAvg,
-			NumaSysCPUUsageAvg: numaSysCPUUsageAvg,
+		if isNumaCPUUsageSoftOver && isNumaSysCPUUsageSoftOver {
+			numaSysOverStats = append(p.numaSysOverStats, rules.NumaSysOverStat{
+				NumaID:             numaID,
+				NumaCPUUsageAvg:    numaCPUUsageAvg,
+				NumaSysCPUUsageAvg: numaSysCPUUsageAvg,
 
-			IsNumaCPUUsageSoftOver:    isNumaCPUUsageSoftOver,
-			IsNumaCPUUsageHardOver:    isNumaCPUUsageHardOver,
-			IsNumaSysCPUUsageSoftOver: isNumaSysCPUUsageSoftOver,
-			IsNumaSysCPUUsageHardOver: isNumaSysCPUUsageHardOver,
-		})
-		if isNumaCPUUsageHardOver && isNumaSysCPUUsageHardOver {
+				IsNumaCPUUsageSoftOver:    isNumaCPUUsageSoftOver,
+				IsNumaCPUUsageHardOver:    isNumaCPUUsageHardOver,
+				IsNumaSysCPUUsageSoftOver: isNumaSysCPUUsageSoftOver,
+				IsNumaSysCPUUsageHardOver: isNumaSysCPUUsageHardOver,
+			})
 			numaSysOverCount++
 		}
 	}
