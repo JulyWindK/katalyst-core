@@ -955,7 +955,8 @@ func (m *MalachiteMetricsProvisioner) processContainerCPUData(podUID, containerN
 		cyclesOld, _            = m.metricStore.GetContainerMetric(podUID, containerName, consts.MetricCPUCyclesContainer)
 		instructionsOld, _      = m.metricStore.GetContainerMetric(podUID, containerName, consts.MetricCPUInstructionsContainer)
 	)
-
+	general.Infof("[DEBUG] processContainerCPUData, pod %v, container %v, cgStats %+v",
+		podUID, containerName, cgStats)
 	m.processContainerMemBandwidth(podUID, containerName, cgStats, metricLastUpdateTime.Value)
 	m.processContainerCPURelevantRate(podUID, containerName, cgStats, metricLastUpdateTime.Value)
 

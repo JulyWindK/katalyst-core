@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
+
 	"github.com/kubewharf/katalyst-core/pkg/util/syntax"
 )
 
@@ -95,6 +97,7 @@ func (c *MetricStore) SetNumaMetric(numaID int, metricName string, data MetricDa
 		c.numaMetricMap[numaID] = make(map[string]MetricData)
 	}
 	c.numaMetricMap[numaID][metricName] = data
+
 }
 
 func (c *MetricStore) SetDeviceMetric(deviceName string, metricName string, data MetricData) {
@@ -135,6 +138,7 @@ func (c *MetricStore) SetContainerMetric(podUID, containerName, metricName strin
 		c.podContainerMetricMap[podUID][containerName] = make(map[string]MetricData)
 	}
 	c.podContainerMetricMap[podUID][containerName][metricName] = data
+	general.Infof("[DEBUG] Set container metric %s, pod %v, container %v, value %v", metricName, podUID, containerName, data)
 }
 
 func (c *MetricStore) SetContainerNumaMetric(podUID, containerName string, numaID int, metricName string, data MetricData) {
@@ -153,6 +157,7 @@ func (c *MetricStore) SetContainerNumaMetric(podUID, containerName string, numaI
 		c.podContainerNumaMetricMap[podUID][containerName][numaID] = make(map[string]MetricData)
 	}
 	c.podContainerNumaMetricMap[podUID][containerName][numaID][metricName] = data
+	general.Infof("[DEBUG] Set container numa metric %s, pod %v, container %v, numa %v, value %v", metricName, podUID, containerName, numaID, data)
 }
 
 func (c *MetricStore) SetPodVolumeMetric(podUID, volumeName, metricName string, data MetricData) {
@@ -238,6 +243,7 @@ func (c *MetricStore) GetContainerMetric(podUID, containerName, metricName strin
 	if c.podContainerMetricMap[podUID] != nil {
 		if c.podContainerMetricMap[podUID][containerName] != nil {
 			if data, ok := c.podContainerMetricMap[podUID][containerName][metricName]; ok {
+				general.Infof("[DEBUG] Get container metric %s, pod %v, container %v, value %v", metricName, podUID, containerName, data)
 				return data, nil
 			} else {
 				return MetricData{}, errors.New(fmt.Sprintf("[MetricStore] load value failed, metric=%v, podUID=%v, containerName=%v", metricName, podUID, containerName))
@@ -254,6 +260,7 @@ func (c *MetricStore) GetContainerNumaMetric(podUID, containerName string, numaI
 		if c.podContainerNumaMetricMap[podUID][containerName] != nil {
 			if c.podContainerNumaMetricMap[podUID][containerName][numaID] != nil {
 				if data, ok := c.podContainerNumaMetricMap[podUID][containerName][numaID][metricName]; ok {
+					general.Infof("[DEBUG] Get container numa metric %s, pod %v, container %v, numa %v, value %v", metricName, podUID, containerName, numaID, data)
 					return data, nil
 				} else {
 					return MetricData{}, errors.New(fmt.Sprintf("[MetricStore] load value failed, metric=%v, podUID=%v, containerName=%v, numaID=%v", metricName, podUID, containerName, numaID))
