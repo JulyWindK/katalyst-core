@@ -153,6 +153,8 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 		}, nil
 	}
 
+	avgCPUUsage := p.numaSysOverStats[0].NumaCPUUsageAvg
+	avgSysCPUUsage := p.numaSysOverStats[0].NumaSysCPUUsageAvg
 	isNumaCPUUsageSoftOver := p.numaSysOverStats[0].IsNumaCPUUsageSoftOver
 	isNumaCPUUsageHardOver := p.numaSysOverStats[0].IsNumaCPUUsageHardOver
 	isNumaSysCPUUsageSoftOver := p.numaSysOverStats[0].IsNumaSysCPUUsageSoftOver
@@ -160,9 +162,9 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 
 	general.Infof("%s plugin,isNumaCPUUsageSoftOver: %v, isNumaCPUUsageHardOver: %v, overPercentage: %v",
 		p.pluginName, isNumaSysCPUUsageSoftOver, isNumaSysCPUUsageHardOver, p.evictionConfig.ThresholdMetPercentage)
-	general.Infof("%s plugin,isNumaSysCPUUsageSoftOver: %v, isNumaSysCPUUsageHardOver: %v, sysOverTotalUsageSoftThreshold: %v, "+
-		"sysOverTotalUsageHardThreshold: %v", p.pluginName, isNumaSysCPUUsageSoftOver, isNumaSysCPUUsageHardOver,
-		p.evictionConfig.NumaSysOverTotalUsageSoftThreshold, p.evictionConfig.NumaSysOverTotalUsageHardThreshold)
+	general.Infof("%s plugin,isNumaSysCPUUsageSoftOver: %v, isNumaSysCPUUsageHardOver: %v, avgCPUUsage: %v, avgSysCPUUsage: %v, "+
+		"sysOverTotalUsageSoftThreshold: %v, sysOverTotalUsageHardThreshold: %v", p.pluginName, isNumaSysCPUUsageSoftOver, isNumaSysCPUUsageHardOver,
+		avgCPUUsage, avgSysCPUUsage, p.evictionConfig.NumaSysOverTotalUsageSoftThreshold, p.evictionConfig.NumaSysOverTotalUsageHardThreshold)
 
 	// If the overall CPU utilization of NUMA reaches the threshold and the utilization of the system also reaches the threshold,
 	// the eviction condition is considered to be met.
@@ -390,6 +392,8 @@ func (p *NumaSysCPUPressureEviction) updateNumaSysOverStat() {
 		// Count the number of NUMA CPUs whose usage exceeds both hardware and software thresholds.
 		numaCPUUsageSoftOverCount, numaCPUUsageHardOverCount := numaCPUUsageMetric.Count()
 		numaCPUUsageAvg := numaCPUUsageMetric.Avg()
+		general.Infof("[%s]updateNumaSysOverStat calculate numa %v avg cpu usage %v, numaCPUUsageSoftOverCount %d, numaCPUUsageHardOverCount %d",
+			p.pluginName, numaID, numaCPUUsageAvg, numaCPUUsageSoftOverCount, numaCPUUsageHardOverCount)
 
 		// Judge whether the NUMA CPU usage exceeds the threshold.
 		numaCPUUsageSoftOverPercentage := float64(numaCPUUsageSoftOverCount) / float64(p.evictionConfig.MetricRingSize)
@@ -406,6 +410,7 @@ func (p *NumaSysCPUPressureEviction) updateNumaSysOverStat() {
 
 		// Calculate the ratio of the system CPU usage in the current numa to the total CPU usage.
 		percentage := numaSysCPUUsageAvg / numaCPUUsageAvg
+		general.Infof("[%s]updateNumaSysOverStat calculate numa %v avg sys cpu usage %v, avg cpu usage:%v, percentage %v", p.pluginName, numaID, numaSysCPUUsageAvg, numaCPUUsageAvg, percentage)
 
 		isNumaSysCPUUsageSoftOver := percentage >= p.evictionConfig.NumaSysOverTotalUsageSoftThreshold
 		isNumaSysCPUUsageHardOver := percentage >= p.evictionConfig.NumaSysOverTotalUsageHardThreshold
