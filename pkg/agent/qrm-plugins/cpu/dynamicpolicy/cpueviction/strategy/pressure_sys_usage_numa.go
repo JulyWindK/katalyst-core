@@ -348,6 +348,7 @@ func (p *NumaSysCPUPressureEviction) sync(_ context.Context) {
 				for containerName := range containerEntries {
 					general.Infof("[DEBUG][%s] start to get pod %v container %v metric %v", p.pluginName, podUID, containerName, metricName)
 					val, err := helper.GetContainerMetric(p.metaServer.MetricsFetcher, p.emitter, podUID, containerName, metricName, numaID)
+					general.Infof("[DEBUG][%s] get pod %v container %v metric %v, value %v, err:%v", p.pluginName, podUID, containerName, metricName, val, err)
 					if err != nil {
 						general.Warningf("[%s] failed to get pod metric, numa %v, pod %v, metric %v err: %v",
 							p.pluginName, numaID, podUID, metricName, err)

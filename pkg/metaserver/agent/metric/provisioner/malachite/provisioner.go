@@ -956,7 +956,7 @@ func (m *MalachiteMetricsProvisioner) processContainerCPUData(podUID, containerN
 		instructionsOld, _      = m.metricStore.GetContainerMetric(podUID, containerName, consts.MetricCPUInstructionsContainer)
 	)
 	general.Infof("[DEBUG] processContainerCPUData, pod %v, container %v, cgStats %+v",
-		podUID, containerName, cgStats)
+		podUID, containerName, cgStats.V2)
 	m.processContainerMemBandwidth(podUID, containerName, cgStats, metricLastUpdateTime.Value)
 	m.processContainerCPURelevantRate(podUID, containerName, cgStats, metricLastUpdateTime.Value)
 
@@ -1063,6 +1063,8 @@ func (m *MalachiteMetricsProvisioner) processContainerCPUData(podUID, containerN
 	} else if cgStats.CgroupType == "V2" && cgStats.V2 != nil {
 		cpu := cgStats.V2.Cpu
 		updateTime := time.Unix(cgStats.V2.Cpu.UpdateTime, 0)
+		general.Infof("[DEBUG] processContainerCPUData, pod %v, container %v, cgStats %+v",
+			podUID, containerName, cgStats.V2.Cpu)
 
 		// todo it's kind of confusing but the `cpu-usage-ratio` in `cgroup-level` actually represents `actual cores`,
 		//  we will always rename metric in local store to eliminate `ratio` to avoid ambiguity.
@@ -1160,7 +1162,8 @@ func (m *MalachiteMetricsProvisioner) processContainerCPUData(podUID, containerN
 				rate := (float64(usage) - numaCPUUsageOld.Value) / updateTime.Sub(*numaCPUUsageOld.Time).Seconds() / 1000000000
 				m.metricStore.SetContainerNumaMetric(podUID, containerName, numaID, consts.MetricsCPUUsageNUMAContainer, utilmetric.MetricData{Value: rate, Time: &updateTime})
 			}
-
+			general.Infof("[DEBUG] processContainerCPUData SetContainerNumaMetric, pod %v, container %v, numa %v, cpu usage %v",
+				podUID, containerName, numaID, usage)
 			m.metricStore.SetContainerNumaMetric(podUID, containerName, numaID, consts.MetricsCPUUsageCountNUMAContainer,
 				utilmetric.MetricData{Value: float64(usage), Time: &updateTime})
 		}

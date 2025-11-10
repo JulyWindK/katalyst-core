@@ -20,6 +20,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
+
 	utilmetric "github.com/kubewharf/katalyst-core/pkg/util/metric"
 )
 
@@ -38,6 +40,7 @@ type CheckMetricDataExpireFunc func(utilmetric.MetricData, error) (utilmetric.Me
 func checkMetricDataExpireFunc(metricsInsurancePeriod time.Duration) CheckMetricDataExpireFunc {
 	if metricsInsurancePeriod == 0 {
 		return func(metricData utilmetric.MetricData, err error) (utilmetric.MetricData, error) {
+			general.Infof("[DEBUG][checkMetricDataExpireFunc] metric data %v, err %v", metricData, err)
 			return metricData, err
 		}
 	}
