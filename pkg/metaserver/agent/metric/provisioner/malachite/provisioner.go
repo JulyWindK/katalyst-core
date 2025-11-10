@@ -1156,10 +1156,16 @@ func (m *MalachiteMetricsProvisioner) processContainerCPUData(podUID, containerN
 			numaID := m.cpuToNumaMap[cpuID]
 			numaCPUUsage[numaID] += usage
 		}
+		general.Infof("[DEBUG] processContainerCPUData, pod %v, container %v, numaCPUUsage %+v",
+			podUID, containerName, numaCPUUsage)
 		for numaID, usage := range numaCPUUsage {
 			numaCPUUsageOld, err := m.metricStore.GetContainerNumaMetric(podUID, containerName, numaID, consts.MetricsCPUUsageCountNUMAContainer)
+			general.Infof("[DEBUG] processContainerCPUDate get old metric pod %v, container %v, numaID %v, numaCPUUsageOld %+v",
+				podUID, containerName, numaID, numaCPUUsageOld)
 			if err == nil && numaCPUUsageOld.Time.Before(updateTime) {
 				rate := (float64(usage) - numaCPUUsageOld.Value) / updateTime.Sub(*numaCPUUsageOld.Time).Seconds() / 1000000000
+				general.Infof("[DEBUG] processContainerCPUDate set container numa metric pod %v, container %v, numaID %v, rate %v",
+					podUID, containerName, numaID, rate)
 				m.metricStore.SetContainerNumaMetric(podUID, containerName, numaID, consts.MetricsCPUUsageNUMAContainer, utilmetric.MetricData{Value: rate, Time: &updateTime})
 			}
 			general.Infof("[DEBUG] processContainerCPUData SetContainerNumaMetric, pod %v, container %v, numa %v, cpu usage %v",
