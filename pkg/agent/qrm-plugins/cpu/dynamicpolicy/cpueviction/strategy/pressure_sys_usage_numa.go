@@ -141,6 +141,7 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 			MetType: pluginapi.ThresholdMetType_NOT_MET,
 		}, nil
 	}
+	general.Infof("[%s]ThresholdMet  numaSysOverStats:%v", p.pluginName, p.numaSysOverStats)
 
 	if len(p.numaSysOverStats) == 0 {
 		_ = p.emitter.StoreFloat64(numaThresholdMetMetricsName, 0, metrics.MetricTypeNameRaw,
@@ -447,6 +448,7 @@ func (p *NumaSysCPUPressureEviction) updateNumaSysOverStat() {
 
 	p.numaSysOverStats = numaSysOverStats
 	p.overloadNumaCount = numaSysOverCount
+	general.Infof("[%s][DEBUG] Update numa sys cpu pressure stats %v", p.pluginName, p.numaSysOverStats)
 
 	_ = p.emitter.StoreInt64(numaSysOverloadCountMetricName, int64(numaSysOverCount), metrics.MetricTypeNameRaw)
 	general.Infof("[%s] Update numa sys cpu pressure overload count %v", p.pluginName, numaSysOverCount)
