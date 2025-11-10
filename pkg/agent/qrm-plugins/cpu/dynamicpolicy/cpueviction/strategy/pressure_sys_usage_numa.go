@@ -380,6 +380,7 @@ func (p *NumaSysCPUPressureEviction) sync(_ context.Context) {
 
 func (p *NumaSysCPUPressureEviction) updateNumaSysOverStat() {
 	var numaSysOverCount int
+	numaSysOverStats := make([]rules.NumaSysOverStat, 0)
 
 	for numaID, numaHis := range p.metricsHistory.Inner {
 		numaHisInner := numaHis[util.FakePodUID]
@@ -422,7 +423,7 @@ func (p *NumaSysCPUPressureEviction) updateNumaSysOverStat() {
 				metricTagIsOverload: strconv.FormatBool(isNumaSysCPUUsageHardOver),
 			})...)
 
-		p.numaSysOverStats = append(p.numaSysOverStats, rules.NumaSysOverStat{
+		numaSysOverStats = append(p.numaSysOverStats, rules.NumaSysOverStat{
 			NumaID:             numaID,
 			NumaCPUUsageAvg:    numaCPUUsageAvg,
 			NumaSysCPUUsageAvg: numaSysCPUUsageAvg,
@@ -437,13 +438,14 @@ func (p *NumaSysCPUPressureEviction) updateNumaSysOverStat() {
 		}
 	}
 
-	sort.SliceStable(p.numaSysOverStats, func(i, j int) bool {
+	sort.SliceStable(numaSysOverStats, func(i, j int) bool {
 		// Sort by the ratio of the system CPU usage in the current numa to the total CPU usage.
-		ratioI := p.numaSysOverStats[i].NumaSysCPUUsageAvg / p.numaSysOverStats[i].NumaCPUUsageAvg
-		ratioJ := p.numaSysOverStats[j].NumaSysCPUUsageAvg / p.numaSysOverStats[j].NumaCPUUsageAvg
+		ratioI := numaSysOverStats[i].NumaSysCPUUsageAvg / numaSysOverStats[i].NumaCPUUsageAvg
+		ratioJ := numaSysOverStats[j].NumaSysCPUUsageAvg / numaSysOverStats[j].NumaCPUUsageAvg
 		return ratioI > ratioJ
 	})
 
+	p.numaSysOverStats = numaSysOverStats
 	p.overloadNumaCount = numaSysOverCount
 
 	_ = p.emitter.StoreInt64(numaSysOverloadCountMetricName, int64(numaSysOverCount), metrics.MetricTypeNameRaw)
