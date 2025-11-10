@@ -430,6 +430,7 @@ func (m *EvictionManger) collectEvictionResult(ctx context.Context, pods []*v1.P
 	records := m.getEvictionRecords(ctx, collector.currentCandidatePods)
 
 	for pluginName, threshold := range thresholdsMet {
+		general.Infof("[DEBUG]collectEvictionResult thresholdsMet pluginName:%v threshold: %v", pluginName, threshold)
 		if threshold.MetType != pluginapi.ThresholdMetType_HARD_MET {
 			general.Infof(" the type: %s of met threshold from plugin: %s isn't  %s", threshold.MetType.String(), pluginName, pluginapi.ThresholdMetType_HARD_MET.String())
 			continue
@@ -441,6 +442,7 @@ func (m *EvictionManger) collectEvictionResult(ctx context.Context, pods []*v1.P
 		}
 
 		activePods := pods
+		general.Infof("[DEBUG]collectEvictionResult activePods len: %v", len(activePods))
 		candidateEvictionRecords := make([]*pluginapi.EvictionRecord, 0, len(threshold.CandidatePods))
 		if len(threshold.CandidatePods) > 0 {
 			// use candidate pods as active pods if they are not empty
@@ -453,6 +455,7 @@ func (m *EvictionManger) collectEvictionResult(ctx context.Context, pods []*v1.P
 				}
 			}
 		}
+		general.Infof("[DEBUG]collectEvictionResult activePods final len: %v  candidateEvictionRecords len: %v", len(activePods), len(candidateEvictionRecords))
 
 		resp, err := m.endpoints[pluginName].GetTopEvictionPods(context.Background(), &pluginapi.GetTopEvictionPodsRequest{
 			ActivePods:               activePods,
