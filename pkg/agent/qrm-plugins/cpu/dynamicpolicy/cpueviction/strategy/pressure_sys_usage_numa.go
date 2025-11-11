@@ -179,7 +179,7 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 			ObservedValue:     1,
 			ThresholdOperator: pluginapi.ThresholdOperator_GREATER_THAN,
 			MetType:           pluginapi.ThresholdMetType_HARD_MET,
-			EvictionScope:     targetMetric,
+			EvictionScope:     containerSysCPUUsageMetric,
 			Condition: &pluginapi.Condition{
 				ConditionType: pluginapi.ConditionType_NODE_CONDITION,
 				Effects:       []string{string(v1.TaintEffectNoSchedule)},
@@ -200,7 +200,7 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 			ObservedValue:     1,
 			ThresholdOperator: pluginapi.ThresholdOperator_GREATER_THAN,
 			MetType:           pluginapi.ThresholdMetType_SOFT_MET,
-			EvictionScope:     targetMetric,
+			EvictionScope:     containerSysCPUUsageMetric,
 			Condition: &pluginapi.Condition{
 				ConditionType: pluginapi.ConditionType_NODE_CONDITION,
 				Effects:       []string{string(v1.TaintEffectNoSchedule)},
