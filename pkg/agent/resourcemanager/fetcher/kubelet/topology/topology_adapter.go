@@ -78,6 +78,9 @@ type topologyAdapterImpl struct {
 	// qosConf is used to get pod qos configuration
 	qosConf *generic.QoSConfiguration
 
+	// agentConf is used to get reporter configuration
+	agentConf *agent.AgentConfiguration
+
 	// metaServer is used to fetch pod list to calculate numa allocation
 	metaServer *metaserver.MetaServer
 
@@ -156,6 +159,7 @@ func NewPodResourcesServerTopologyAdapter(metaServer *metaserver.MetaServer, qos
 		kubeletResourcePluginPaths:     kubeletResourcePluginPaths,
 		kubeletResourcePluginStateFile: kubeletResourcePluginStateFile,
 		qosConf:                        qosConf,
+		agentConf:                      agentConf,
 		metaServer:                     metaServer,
 		numaSocketZoneNodeMap:          numaSocketZoneNodeMap,
 		numaCacheGroupZoneNodeMap:      numaCacheGroupZoneNodeMap,
@@ -516,7 +520,7 @@ func (p *topologyAdapterImpl) getZoneResources(allocatableResources *podresv1.Al
 		errList = append(errList, err)
 	}
 
-	if strings.Contains(strings.ToLower(p.metaServer.MachineInfo.CPUVendorID), "amd") {
+	if p.agentConf.EnableReportL3CacheGroup && strings.Contains(strings.ToLower(p.metaServer.MachineInfo.CPUVendorID), "amd") {
 		// process cache group zone node resources
 		reservedCPUs := machine.MustParse(p.reservedCPUs)
 		for cacheID, cpusets := range p.cacheGroupCPUsMap {
@@ -756,7 +760,9 @@ func (p *topologyAdapterImpl) generateNumaNodeAttr(node util.ZoneNode) []nodev1a
 	var attrs []nodev1alpha1.Attribute
 
 	attrs = append(attrs, p.generateNodeDistanceAttr(node)...)
-	attrs = append(attrs, p.generateNumaNodeThreadTopologyAttr(node)...)
+	if p.agentConf.EnableReportThreadTopology {
+		attrs = append(attrs, p.generateNumaNodeThreadTopologyAttr(node)...)
+	}
 	attrs = append(attrs, p.generateNumaNodeResourceReservedAttr(node)...)
 
 	return attrs
