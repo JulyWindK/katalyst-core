@@ -175,8 +175,8 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 			p.evictionConfig.NumaCPUUsageHardThreshold, p.evictionConfig.NumaSysOverTotalUsageHardThreshold)
 		_ = p.emitter.StoreFloat64(numaThresholdMetMetricsName, 1, metrics.MetricTypeNameRaw)
 		return &pluginapi.ThresholdMetResponse{
-			ThresholdValue:    1,
-			ObservedValue:     1,
+			ThresholdValue:    p.evictionConfig.NumaSysOverTotalUsageHardThreshold,
+			ObservedValue:     avgSysCPUUsage / avgCPUUsage,
 			ThresholdOperator: pluginapi.ThresholdOperator_GREATER_THAN,
 			MetType:           pluginapi.ThresholdMetType_HARD_MET,
 			EvictionScope:     containerSysCPUUsageMetric,
@@ -196,8 +196,8 @@ func (p *NumaSysCPUPressureEviction) ThresholdMet(_ context.Context, req *plugin
 			p.evictionConfig.NumaCPUUsageSoftThreshold, p.evictionConfig.NumaSysOverTotalUsageSoftThreshold)
 		_ = p.emitter.StoreFloat64(numaThresholdMetMetricsName, 1, metrics.MetricTypeNameRaw)
 		return &pluginapi.ThresholdMetResponse{
-			ThresholdValue:    1,
-			ObservedValue:     1,
+			ThresholdValue:    p.evictionConfig.NumaSysOverTotalUsageSoftThreshold,
+			ObservedValue:     avgSysCPUUsage / avgCPUUsage,
 			ThresholdOperator: pluginapi.ThresholdOperator_GREATER_THAN,
 			MetType:           pluginapi.ThresholdMetType_SOFT_MET,
 			EvictionScope:     containerSysCPUUsageMetric,
