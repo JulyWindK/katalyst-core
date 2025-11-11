@@ -273,12 +273,12 @@ func (p *NumaSysCPUPressureEviction) GetTopEvictionPods(ctx context.Context, req
 	candidatePods := make([]*v1.Pod, 0)
 	numaID := p.numaSysOverStats[0].NumaID
 	for _, pod := range numaPodsMap[numaID] {
-		sysCPUUsage, err := helper.GetPodMetric(p.metaServer.MetricsFetcher, p.emitter, pod, containerSysCPUUsageMetric, numaID)
+		sysCPUUsage, err := helper.GetPodMetric(p.metaServer.MetricsFetcher, p.emitter, pod, containerSysCPUUsageMetric, -1)
 		if err != nil {
 			klog.Warningf("[%s] failed to get pod metric: %v", p.pluginName, err)
 			continue
 		}
-		cpuUsage, err := helper.GetPodMetric(p.metaServer.MetricsFetcher, p.emitter, pod, containerCPUUsageMetric, numaID)
+		cpuUsage, err := helper.GetPodMetric(p.metaServer.MetricsFetcher, p.emitter, pod, containerCPUUsageMetric, -1)
 		if err != nil {
 			klog.Warningf("[%s] failed to get pod metric: %v", p.pluginName, err)
 			continue
