@@ -287,6 +287,10 @@ func (p *NumaSysCPUPressureEviction) GetTopEvictionPods(ctx context.Context, req
 		// The current pod is evicted only when the proportion of sys CPU utilization exceeds a certain threshold.
 		if sysCPUUsage/cpuUsage >= p.evictionConfig.NumaSysOverTotalUsageEvictionThreshold {
 			candidatePods = append(candidatePods, pod)
+		} else {
+			klog.Infof("[%s] pod %v numa sys cpu pressure not met, avgCPUUsage: %v, avgSysCPUUsage: %v, "+
+				"numaSysOverTotalUsageEvictionThreshold: %v", p.pluginName, pod.Namespace+"/"+pod.Name, sysCPUUsage, cpuUsage,
+				p.evictionConfig.NumaSysOverTotalUsageEvictionThreshold)
 		}
 	}
 
