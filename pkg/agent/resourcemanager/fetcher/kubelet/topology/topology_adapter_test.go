@@ -1040,6 +1040,7 @@ func Test_getZoneAllocationsByPodResources(t *testing.T) {
 			p := &topologyAdapterImpl{
 				numaSocketZoneNodeMap: tt.args.numaSocketZoneNodeMap,
 				qosConf:               qosConf,
+				agentConf:             agentConf.NewAgentConfiguration(),
 				podResourcesFilter:    GenericPodResourcesFilter(qosConf),
 				metaServer: withExtraTopologyInfo(withServiceProfilingManager(generateTestMetaServer(tt.args.podList...),
 					tt.args.manager), tt.args.extraTopologyInfo),
@@ -1633,13 +1634,14 @@ func Test_getZoneResourcesByAllocatableResources(t *testing.T) {
 
 			p := &topologyAdapterImpl{
 				metaServer:            tt.args.metaServer,
+				agentConf:             agentConf.NewAgentConfiguration(),
 				numaSocketZoneNodeMap: tt.args.numaSocketZoneNodeMap,
 				cacheGroupCPUsMap:     tt.args.cacheGroupCPUsMap,
 				numaMBWCapacityMap:    tt.args.numaMBWCapacityMap,
 				numaMBWAllocatableMap: tt.args.numaMBWAllocatableMap,
 				reservedCPUs:          tt.args.reservedCPUs,
 			}
-
+			p.agentConf.EnableReportL3CacheGroup = true
 			zoneResourcesMap, err := p.getZoneResources(tt.args.allocatableResources)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getZoneResources() error = %v, wantErr %v", err, tt.wantErr)
@@ -1814,10 +1816,6 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 									Value: "",
 								},
 								{
-									Name:  "reserved_cpu_list",
-									Value: "",
-								},
-								{
 									Name:  "thread_topology_info",
 									Value: "0:3,1:2,2:1,3:0",
 								},
@@ -1932,6 +1930,7 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 				},
 				metaServer:            generateTestMetaServer(tt.fields.podList...),
 				qosConf:               generic.NewQoSConfiguration(),
+				agentConf:             agentConf.NewAgentConfiguration(),
 				numaSocketZoneNodeMap: tt.fields.numaSocketZoneNodeMap,
 				resourceNameToZoneTypeMap: map[string]string{
 					"resource.katalyst.kubewharf.io/rdma": "NIC",
@@ -1940,6 +1939,9 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones_ReportRDMATopol
 				numaMBWAllocatableMap: map[int]int64{},
 				threadSiblingMap:      tt.fields.threadSiblingMap,
 			}
+			p.agentConf.EnableReportL3CacheGroup = true
+			p.agentConf.EnableReportThreadTopology = true
+			p.agentConf.EnableReportCPUFlags = true
 			p.metaServer.KatalystMachineInfo.CPUTopology = &machine.CPUTopology{
 				NUMAToCPUs: machine.NUMANodeInfo{
 					0: machine.NewCPUSet(0, 1, 2, 3),
@@ -3024,6 +3026,7 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 				},
 				metaServer:                generateTestMetaServer(tt.fields.podList...),
 				qosConf:                   generic.NewQoSConfiguration(),
+				agentConf:                 agentConf.NewAgentConfiguration(),
 				numaSocketZoneNodeMap:     tt.fields.numaSocketZoneNodeMap,
 				numaCacheGroupZoneNodeMap: tt.fields.numaCacheGroupZoneNodeMap,
 				numaDistanceMap:           tt.fields.numaDistanceMap,
@@ -3032,6 +3035,9 @@ func Test_podResourcesServerTopologyAdapterImpl_GetTopologyZones(t *testing.T) {
 				numaMBWAllocatableMap:     map[int]int64{},
 				numaMBWCapacityMap:        map[int]int64{},
 			}
+			p.agentConf.EnableReportL3CacheGroup = true
+			p.agentConf.EnableReportThreadTopology = true
+			p.agentConf.EnableReportCPUFlags = true
 			p.metaServer.MetaAgent.MachineInfo.CPUVendorID = tt.fields.cpuVendor
 			p.metaServer.KatalystMachineInfo.CPUTopology = &machine.CPUTopology{
 				NUMAToCPUs: machine.NUMANodeInfo{
