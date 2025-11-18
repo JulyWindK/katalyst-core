@@ -305,11 +305,13 @@ func (n *NumaMemoryPressurePlugin) GetTopEvictionPods(_ context.Context, request
 	if dynamicConfig.EnableNumaLevelEviction && n.isUnderNumaPressure {
 		for numaID, action := range n.numaActionMap {
 			candidates := n.evictionHelper.getCandidates(request.ActivePods, numaID, dynamicConfig.NumaVictimMinimumUtilizationThreshold)
+			general.Infof("[DEBUG] GetTopEvictionPods candidates for numaID: %d, action: %d, candidates: %+v",
+				numaID, action, candidates)
 			n.evictionHelper.selectTopNPodsToEvictByMetrics(candidates, request.TopN, numaID, action,
 				dynamicConfig.NumaEvictionRankingMetrics, podToEvictMap)
 		}
 	}
-
+	general.Infof("[DEBUG] GetTopEvictionPods after selecting %d pods to evict", len(podToEvictMap))
 	for uid := range podToEvictMap {
 		targetPods = append(targetPods, podToEvictMap[uid])
 	}
