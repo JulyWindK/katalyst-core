@@ -245,8 +245,16 @@ func (p *DynamicPolicy) SetExclusiveIRQCPUSet(irqCPUSet machine.CPUSet) error {
 		return fmt.Errorf("calculate machineState by newPodEntries failed with error: %v", err)
 	}
 
-	p.state.SetPodEntries(newPodEntries, true)
-	p.state.SetMachineState(machineState, true)
+	p.state.SetPodEntries(newPodEntries, false)
+	p.state.SetMachineState(machineState, false)
+
+	err = p.adjustAllocationEntries(false)
+	if err != nil {
+		general.ErrorS(err, "adjustAllocationEntries failed")
+	}
+	if err := p.state.StoreState(); err != nil {
+		general.ErrorS(err, "store state failed")
+	}
 
 	_ = p.emitter.StoreInt64(util.MetricNameSetExclusiveIRQCPUSize, int64(irqCPUSetSize), metrics.MetricTypeNameRaw)
 	general.Infof("persistent irq exclusive cpu set %v successful", irqCPUSet.String())
