@@ -453,7 +453,7 @@ func (m *EvictionManger) collectEvictionResult(ctx context.Context, pods []*v1.P
 				}
 			}
 		}
-
+		general.Infof("[DEBUG] GetTopEvictionPods of plugin: %s with %d pods to evict", pluginName, len(activePods))
 		resp, err := m.endpoints[pluginName].GetTopEvictionPods(context.Background(), &pluginapi.GetTopEvictionPodsRequest{
 			ActivePods:               activePods,
 			TopN:                     1,
