@@ -93,6 +93,7 @@ func (e *EvictionHelper) selectTopNPodsToEvictByMetrics(activePods []*v1.Pod, to
 	action int, rankingMetrics []string, podToEvictMap map[string]*v1.Pod,
 ) {
 	filteredPods := e.filterPods(activePods, action)
+	general.Infof("[DEBUG]selectTopNPodsToEvictByMetrics after filter pods:%v", len(filteredPods))
 	if filteredPods != nil {
 		general.NewMultiSorter(e.getEvictionCmpFuncs(rankingMetrics, numaID)...).Sort(native.NewPodSourceImpList(filteredPods))
 		for i := 0; uint64(i) < general.MinUInt64(topN, uint64(len(filteredPods))); i++ {
