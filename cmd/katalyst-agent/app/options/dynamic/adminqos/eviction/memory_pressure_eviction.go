@@ -38,6 +38,8 @@ type MemoryPressureEvictionOptions struct {
 	ReclaimedGracePeriod                    int64
 	EnableRSSOveruseEviction                bool
 	RSSOveruseRateThreshold                 float64
+	NumaEvictAnnotationSelector             []string
+	NumaEvictLabelSelector                  []string
 }
 
 // NewMemoryPressureEvictionOptions returns a new MemoryPressureEvictionOptions
@@ -89,6 +91,10 @@ func (o *MemoryPressureEvictionOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 		"whether to enable pod-level rss overuse eviction")
 	fs.Float64Var(&o.RSSOveruseRateThreshold, "eviction-rss-overuse-rate-threshold", o.RSSOveruseRateThreshold,
 		"the threshold for the rate of rss overuse threshold")
+	fs.StringSliceVar(&o.NumaEvictAnnotationSelector, "eviction-numa-annotation-selector", o.NumaEvictAnnotationSelector,
+		"the annotation selector used to filter pods for eviction at the NUMA level")
+	fs.StringSliceVar(&o.NumaEvictLabelSelector, "eviction-numa-label-selector", o.NumaEvictLabelSelector,
+		"the label selector used to filter pods for eviction at the NUMA level")
 }
 
 // ApplyTo applies MemoryPressureEvictionOptions to MemoryPressureEvictionConfiguration
@@ -110,6 +116,8 @@ func (o *MemoryPressureEvictionOptions) ApplyTo(c *eviction.MemoryPressureEvicti
 	c.ReclaimedGracePeriod = o.ReclaimedGracePeriod
 	c.EnableRSSOveruseEviction = o.EnableRSSOveruseEviction
 	c.RSSOveruseRateThreshold = o.RSSOveruseRateThreshold
+	c.NumaEvictAnnotationSelector = o.NumaEvictAnnotationSelector
+	c.NumaEvictLabelSelector = o.NumaEvictLabelSelector
 
 	return nil
 }

@@ -79,6 +79,8 @@ type MemoryPressureEvictionConfiguration struct {
 	RSSOveruseRateThreshold                 float64
 	GracePeriod                             int64
 	ReclaimedGracePeriod                    int64
+	NumaEvictAnnotationSelector             []string
+	NumaEvictLabelSelector                  []string
 }
 
 func NewMemoryPressureEvictionPluginConfiguration() *MemoryPressureEvictionConfiguration {
@@ -140,6 +142,14 @@ func (c *MemoryPressureEvictionConfiguration) ApplyConfiguration(conf *crd.Dynam
 
 		if config.RSSOveruseRateThreshold != nil {
 			c.RSSOveruseRateThreshold = *(config.RSSOveruseRateThreshold)
+		}
+
+		if len(config.NumaEvictAnnotationSelector) > 0 {
+			c.NumaEvictAnnotationSelector = config.NumaEvictAnnotationSelector
+		}
+
+		if len(config.NumaEvictLabelSelector) > 0 {
+			c.NumaEvictLabelSelector = config.NumaEvictLabelSelector
 		}
 	}
 }
