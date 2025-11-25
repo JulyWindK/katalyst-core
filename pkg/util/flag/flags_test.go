@@ -67,8 +67,8 @@ func TestReservedMemoryVar(t *testing.T) {
 			},
 		},
 		{
-			desc: "valid input with ';' as separator for multiple reserved-memory arguments",
-			argc: "blah --reserved-memory=0:memory=1Gi,hugepages-1Gi=1Gi;1:memory=1Gi",
+			desc: "valid input with '/' as separator for multiple reserved-memory arguments",
+			argc: "blah --reserved-memory=0:memory=1Gi,hugepages-1Gi=1Gi/1:memory=1Gi",
 			expectVal: []native.MemoryReservation{
 				{
 					NumaNode: 0,

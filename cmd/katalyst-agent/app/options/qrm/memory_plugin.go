@@ -143,7 +143,7 @@ func (o *MemoryOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	fs.Uint64Var(&o.ReservedMemoryGB, "memory-resource-plugin-reserved",
 		o.ReservedMemoryGB, "reserved memory(GB) for system agents")
 	fs.Var(&utilflag.ReservedMemoryVar{Value: &o.ReservedNumaMemory}, "memory-resource-plugin-numa-reserved",
-		"reserved numa memory for system agents")
+		"reserved numa memory for system agents. (e.g. --reserved-memory 0:memory=1Gi,hugepages-1M=2Gi/1:memory=2Gi). ")
 	fs.BoolVar(&o.SkipMemoryStateCorruption, "skip-memory-state-corruption",
 		o.SkipMemoryStateCorruption, "if set true, we will skip memory state corruption")
 	fs.BoolVar(&o.EnableSettingMemoryMigrate, "enable-setting-memory-migrate",

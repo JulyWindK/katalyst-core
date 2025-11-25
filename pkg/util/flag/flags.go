@@ -44,7 +44,7 @@ func (v *ReservedMemoryVar) Set(s string) error {
 		return nil
 	}
 
-	numaNodeReservations := strings.Split(s, ";")
+	numaNodeReservations := strings.Split(s, "/")
 	for _, reservation := range numaNodeReservations {
 		numaNodeReservation := strings.Split(reservation, ":")
 		if len(numaNodeReservation) != 2 {
