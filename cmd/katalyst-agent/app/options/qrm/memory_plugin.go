@@ -19,6 +19,8 @@ package qrm
 import (
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
+
 	cliflag "k8s.io/component-base/cli/flag"
 
 	qrmconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/qrm"
@@ -229,9 +231,11 @@ func (o *MemoryOptions) ApplyTo(conf *qrmconfig.MemoryQRMPluginConfig) error {
 	conf.MonGroupEnabledClosIDs = o.MonGroupEnabledClosIDs
 	conf.MonGroupMaxCountRatio = o.MonGroupMaxCountRatio
 
+	general.Infof("[DEBUG] option reserved numa memory: %v", o.ReservedNumaMemory)
 	for _, reservation := range o.ReservedNumaMemory {
 		conf.ReservedNumaMemory[reservation.NumaNode] = reservation.Limits
 	}
+	general.Infof("[DEBUG] configreserved numa memory: %v", conf.ReservedNumaMemory)
 
 	return nil
 }
