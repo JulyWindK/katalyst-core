@@ -42,6 +42,8 @@ const (
 	// DefaultNumaFreeBelowWatermarkTimesReclaimedThreshold is the default threshold for the number of times
 	// that NUMA's free memory of the reclaimed instance falls below the watermark.
 	DefaultNumaFreeBelowWatermarkTimesReclaimedThreshold = 2
+	// DefaultNumaFreeConstraintFastEvictionWaitCycle is the waiting cycle when memory is tight and fast eviction is needed.
+	DefaultNumaFreeConstraintFastEvictionWaitCycle = 1
 	// DefaultSystemFreeMemoryThresholdMinimum is the minimum of free memory threshold.
 	DefaultSystemFreeMemoryThresholdMinimum = "0Gi"
 	// DefaultSystemKswapdRateThreshold is the default threshold for the rate of kswapd reclaiming rate
@@ -74,6 +76,7 @@ type MemoryPressureEvictionConfiguration struct {
 	NumaVictimMinimumUtilizationThreshold         float64
 	NumaFreeBelowWatermarkTimesThreshold          int
 	NumaFreeBelowWatermarkTimesReclaimedThreshold int
+	NumaFreeConstraintFastEvictionWaitCycle       int
 	SystemFreeMemoryThresholdMinimum              int64
 	SystemKswapdRateThreshold                     int
 	SystemKswapdRateExceedDurationThreshold       int
@@ -114,6 +117,10 @@ func (c *MemoryPressureEvictionConfiguration) ApplyConfiguration(conf *crd.Dynam
 
 		if config.NumaFreeBelowWatermarkTimesReclaimedThreshold != nil {
 			c.NumaFreeBelowWatermarkTimesReclaimedThreshold = *(config.NumaFreeBelowWatermarkTimesReclaimedThreshold)
+		}
+
+		if config.NumaFreeConstraintFastEvictionWaitCycle != nil {
+			c.NumaFreeConstraintFastEvictionWaitCycle = *(config.NumaFreeConstraintFastEvictionWaitCycle)
 		}
 
 		if config.SystemFreeMemoryThresholdMinimum != nil {
