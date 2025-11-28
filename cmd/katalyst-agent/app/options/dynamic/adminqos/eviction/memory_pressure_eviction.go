@@ -30,6 +30,7 @@ type MemoryPressureEvictionOptions struct {
 	NumaVictimMinimumUtilizationThreshold         float64
 	NumaFreeBelowWatermarkTimesThreshold          int
 	NumaFreeBelowWatermarkTimesReclaimedThreshold int
+	NumaFreeConstraintFastEvictionWaitCycle       int
 	SystemFreeMemoryThresholdMinimum              string
 	SystemKswapdRateThreshold                     int
 	SystemKswapdRateExceedDurationThreshold       int
@@ -51,6 +52,7 @@ func NewMemoryPressureEvictionOptions() *MemoryPressureEvictionOptions {
 		NumaVictimMinimumUtilizationThreshold:         eviction.DefaultNumaVictimMinimumUtilizationThreshold,
 		NumaFreeBelowWatermarkTimesThreshold:          eviction.DefaultNumaFreeBelowWatermarkTimesThreshold,
 		NumaFreeBelowWatermarkTimesReclaimedThreshold: eviction.DefaultNumaFreeBelowWatermarkTimesReclaimedThreshold,
+		NumaFreeConstraintFastEvictionWaitCycle:       eviction.DefaultNumaFreeConstraintFastEvictionWaitCycle,
 		SystemFreeMemoryThresholdMinimum:              eviction.DefaultSystemFreeMemoryThresholdMinimum,
 		SystemKswapdRateThreshold:                     eviction.DefaultSystemKswapdRateThreshold,
 		SystemKswapdRateExceedDurationThreshold:       eviction.DefaultSystemKswapdRateExceedDurationThreshold,
@@ -77,6 +79,8 @@ func (o *MemoryPressureEvictionOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 		"the threshold for the number of times NUMA's free memory falls below the watermark")
 	fs.IntVar(&o.NumaFreeBelowWatermarkTimesReclaimedThreshold, "eviction-numa-free-below-watermark-times-reclaimed-threshold", o.NumaFreeBelowWatermarkTimesReclaimedThreshold,
 		"the threshold for the number of times NUMA's free memory of the reclaimed instance falls below the watermark.")
+	fs.IntVar(&o.NumaFreeConstraintFastEvictionWaitCycle, "eviction-numa-free-constrained-fast-eviction-wait-cycle", o.NumaFreeConstraintFastEvictionWaitCycle,
+		"the waiting cycle when memory is tight and fast eviction is needed.")
 	fs.StringVar(&o.SystemFreeMemoryThresholdMinimum, "eviction-system-free-memory-threshold-minimum", o.SystemFreeMemoryThresholdMinimum,
 		"the minimum of free memory threshold,it should be a string can be parsed to a quantity, e.g. 10Gi,20Ki")
 	fs.IntVar(&o.SystemKswapdRateThreshold, "eviction-system-kswapd-rate-threshold", o.SystemKswapdRateThreshold,
@@ -108,6 +112,7 @@ func (o *MemoryPressureEvictionOptions) ApplyTo(c *eviction.MemoryPressureEvicti
 	c.NumaVictimMinimumUtilizationThreshold = o.NumaVictimMinimumUtilizationThreshold
 	c.NumaFreeBelowWatermarkTimesThreshold = o.NumaFreeBelowWatermarkTimesThreshold
 	c.NumaFreeBelowWatermarkTimesReclaimedThreshold = o.NumaFreeBelowWatermarkTimesReclaimedThreshold
+	c.NumaFreeConstraintFastEvictionWaitCycle = o.NumaFreeConstraintFastEvictionWaitCycle
 	quantity, err := resource.ParseQuantity(o.SystemFreeMemoryThresholdMinimum)
 	if err != nil {
 		return err
