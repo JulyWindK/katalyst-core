@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager"
-	"k8s.io/kubernetes/pkg/kubelet/checkpointmanager/errors"
 
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/advisorsvc"
 	"github.com/kubewharf/katalyst-core/pkg/agent/sysadvisor/types"
@@ -219,11 +218,6 @@ func NewMetaCacheImp(conf *config.Configuration, emitterPool metricspool.Metrics
 		containerCreateTimestamp: make(map[string]int64),
 	}
 
-	// Restore from checkpoint before any function call to metacache api
-	if err := mc.restoreState(); err != nil {
-		return mc, err
-	}
-
 	return mc, nil
 }
 
@@ -374,9 +368,8 @@ func (mc *MetaCacheImp) AddContainer(podUID string, containerName string, contai
 	}
 
 	mc.setContainerCreateTimestamp(podUID, containerName, time.Now().UnixNano())
-	if mc.setContainerInfo(podUID, containerName, containerInfo) {
-		return mc.storeState()
-	}
+	mc.setContainerInfo(podUID, containerName, containerInfo)
+
 	return nil
 }
 
@@ -384,9 +377,7 @@ func (mc *MetaCacheImp) SetContainerInfo(podUID string, containerName string, co
 	mc.podMutex.Lock()
 	defer mc.podMutex.Unlock()
 
-	if mc.setContainerInfo(podUID, containerName, containerInfo) {
-		return mc.storeState()
-	}
+	mc.setContainerInfo(podUID, containerName, containerInfo)
 	return nil
 }
 
@@ -409,8 +400,6 @@ func (mc *MetaCacheImp) RangeAndUpdateContainer(f func(podUID string, containerN
 	mc.podMutex.Lock()
 	defer mc.podMutex.Unlock()
 
-	oldPodEntries := mc.podEntries.Clone()
-
 	for podUID, podInfo := range mc.podEntries {
 		for containerName, containerInfo := range podInfo {
 			if !f(podUID, containerName, containerInfo) {
@@ -419,9 +408,6 @@ func (mc *MetaCacheImp) RangeAndUpdateContainer(f func(podUID string, containerN
 		}
 	}
 
-	if !reflect.DeepEqual(oldPodEntries, mc.podEntries) {
-		return mc.storeState()
-	}
 	return nil
 }
 
@@ -429,9 +415,7 @@ func (mc *MetaCacheImp) DeleteContainer(podUID string, containerName string) err
 	mc.podMutex.Lock()
 	defer mc.podMutex.Unlock()
 
-	if mc.deleteContainer(podUID, containerName) {
-		return mc.storeState()
-	}
+	mc.deleteContainer(podUID, containerName)
 	return nil
 }
 
@@ -444,7 +428,6 @@ func (mc *MetaCacheImp) ClearContainers() error {
 	}
 	if len(mc.podEntries) != 0 {
 		mc.podEntries = map[string]types.ContainerEntries{}
-		return mc.storeState()
 	}
 
 	return nil
@@ -454,7 +437,6 @@ func (mc *MetaCacheImp) RangeAndDeleteContainer(f func(containerInfo *types.Cont
 	mc.podMutex.Lock()
 	defer mc.podMutex.Unlock()
 
-	needStoreState := false
 	for _, podInfo := range mc.podEntries {
 		for _, containerInfo := range podInfo {
 			if safeTime > 0 {
@@ -466,16 +448,11 @@ func (mc *MetaCacheImp) RangeAndDeleteContainer(f func(containerInfo *types.Cont
 			if f(containerInfo) {
 				klog.Warningf("RangeAndDeleteContainer delete container %s/%s with safe time (%d) and create time (%d)",
 					containerInfo.PodUID, containerInfo.ContainerName, safeTime, mc.getContainerCreateTimestamp(containerInfo.PodUID, containerInfo.ContainerName))
-				if mc.deleteContainer(containerInfo.PodUID, containerInfo.ContainerName) {
-					needStoreState = true
-				}
+				mc.deleteContainer(containerInfo.PodUID, containerInfo.ContainerName)
 			}
 		}
 	}
 
-	if needStoreState {
-		return mc.storeState()
-	}
 	return nil
 }
 
@@ -511,7 +488,7 @@ func (mc *MetaCacheImp) RemovePod(podUID string) error {
 	}
 	delete(mc.podEntries, podUID)
 
-	return mc.storeState()
+	return nil
 }
 
 func (mc *MetaCacheImp) SetPoolInfo(poolName string, poolInfo *types.PoolInfo) error {
@@ -524,7 +501,7 @@ func (mc *MetaCacheImp) SetPoolInfo(poolName string, poolInfo *types.PoolInfo) e
 
 	mc.poolEntries[poolName] = poolInfo
 
-	return mc.storeState()
+	return nil
 }
 
 func (mc *MetaCacheImp) DeletePool(poolName string) error {
@@ -537,24 +514,19 @@ func (mc *MetaCacheImp) DeletePool(poolName string) error {
 
 	delete(mc.poolEntries, poolName)
 
-	return mc.storeState()
+	return nil
 }
 
 func (mc *MetaCacheImp) GCPoolEntries(livingPoolNameSet sets.String) error {
 	mc.poolMutex.Lock()
 	defer mc.poolMutex.Unlock()
 
-	needStoreState := false
 	for poolName := range mc.poolEntries {
 		if _, ok := livingPoolNameSet[poolName]; !ok {
 			delete(mc.poolEntries, poolName)
-			needStoreState = true
 		}
 	}
 
-	if needStoreState {
-		return mc.storeState()
-	}
 	return nil
 }
 
@@ -562,12 +534,8 @@ func (mc *MetaCacheImp) SetRegionEntries(entries types.RegionEntries) error {
 	mc.regionMutex.Lock()
 	defer mc.regionMutex.Unlock()
 
-	oldRegionEntries := mc.regionEntries.Clone()
 	mc.regionEntries = entries.Clone()
 
-	if !reflect.DeepEqual(oldRegionEntries, mc.regionEntries) {
-		return mc.storeState()
-	}
 	return nil
 }
 
@@ -579,8 +547,9 @@ func (mc *MetaCacheImp) SetRegionInfo(regionName string, regionInfo *types.Regio
 		return nil
 	} else {
 		mc.regionEntries[regionName] = regionInfo
-		return mc.storeState()
 	}
+
+	return nil
 }
 
 // SetInferenceResult sets specified model inference result
@@ -628,72 +597,12 @@ func (mc *MetaCacheImp) SetHeadroomEntries(resourceName string, headroomInfo *ty
 		}
 		mc.headroomEntries[resourceName] = headroomInfo.Clone()
 	}
-	return mc.storeState()
+	return nil
 }
 
 /*
 	other helper functions
 */
-
-func (mc *MetaCacheImp) storeState() error {
-	checkpoint := NewMetaCacheCheckpoint()
-	checkpoint.PodEntries = mc.podEntries
-	checkpoint.PoolEntries = mc.poolEntries
-	checkpoint.RegionEntries = mc.regionEntries
-	checkpoint.HeadroomEntries = mc.headroomEntries
-
-	startTime := time.Now()
-	defer func(t time.Time) {
-		elapsed := time.Since(t)
-		if elapsed > storeStateWarningDuration {
-			klog.Errorf("[metacache] store state took too long time, duration %v", elapsed)
-		}
-		_ = mc.emitter.StoreFloat64(metricMetaCacheStoreStateDuration, float64(elapsed/time.Millisecond), metrics.MetricTypeNameRaw)
-	}(startTime)
-
-	if err := mc.checkpointManager.CreateCheckpoint(mc.checkpointName, checkpoint); err != nil {
-		klog.Errorf("[metacache] store state failed: %v", err)
-		return err
-	}
-	klog.Infof("[metacache] store state succeeded")
-
-	return nil
-}
-
-func (mc *MetaCacheImp) restoreState() error {
-	checkpoint := NewMetaCacheCheckpoint()
-
-	foundAndSkippedStateCorruption := false
-	if err := mc.checkpointManager.GetCheckpoint(mc.checkpointName, checkpoint); err != nil {
-		if err == errors.ErrCheckpointNotFound {
-			// create a new store state
-			klog.Infof("[metacache] checkpoint %v doesn't exist, create it", mc.checkpointName, err)
-			return mc.storeState()
-		} else if err == errors.ErrCorruptCheckpoint {
-			if !mc.skipStateCorruption {
-				return err
-			}
-
-			foundAndSkippedStateCorruption = true
-		} else {
-			return err
-		}
-	}
-
-	mc.podEntries = checkpoint.PodEntries
-	mc.poolEntries = checkpoint.PoolEntries
-	mc.regionEntries = checkpoint.RegionEntries
-	mc.headroomEntries = checkpoint.HeadroomEntries
-
-	if foundAndSkippedStateCorruption {
-		klog.Infof("[metacache] checkpoint %v recovery corrupt, create it", mc.checkpointName)
-		return mc.storeState()
-	}
-
-	klog.Infof("[metacache] restore state succeeded")
-
-	return nil
-}
 
 func (mc *MetaCacheImp) setContainerCreateTimestamp(podUID, containerName string, timestamp int64) {
 	mc.containerCreateTimestamp[fmt.Sprintf("%s/%s", podUID, containerName)] = timestamp
