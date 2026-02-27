@@ -40,6 +40,18 @@ func DeepCopyIntMap(origin map[string]int) map[string]int {
 	return res
 }
 
+func DeepCopyUint64Map(origin map[string]uint64) map[string]uint64 {
+	if origin == nil {
+		return nil
+	}
+
+	res := make(map[string]uint64, len(origin))
+	for key, val := range origin {
+		res[key] = val
+	}
+	return res
+}
+
 func DeepCopyIntToIntMap(origin map[int]int) map[int]int {
 	if origin == nil {
 		return nil
