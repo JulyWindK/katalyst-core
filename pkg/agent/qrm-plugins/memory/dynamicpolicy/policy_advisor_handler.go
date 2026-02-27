@@ -344,7 +344,7 @@ func (p *DynamicPolicy) handleAdvisorResp(advisorResp *advisorsvc.ListAndWatchRe
 			general.Warningf("advisorResp.ExtraEntries has nil calculationInfo")
 			continue
 		} else if calculationInfo.CalculationResult == nil {
-			general.Warningf("advisorResp.ExtraEntry with CgroupPath: %s has nil CalculationResult", calculationInfo.CgroupPath)
+			general.Warningf("advisorResp.ExtraEntry with CGroupPath: %s has nil CalculationResult", calculationInfo.CgroupPath)
 			continue
 		}
 

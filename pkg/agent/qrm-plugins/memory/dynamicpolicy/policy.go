@@ -24,6 +24,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/dynamicpolicy/userwatermark"
+
+	"github.com/kubewharf/katalyst-core/pkg/util/cgroup/common"
+
 	"github.com/cilium/ebpf"
 	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
@@ -143,6 +147,7 @@ type DynamicPolicy struct {
 	enableSettingMemoryMigrate bool
 	enableSettingSockMem       bool
 	enableSettingFragMem       bool
+	enableUserWatermark        bool
 	enableMemoryAdvisor        bool
 	getAdviceInterval          time.Duration
 	memoryAdvisorSocketAbsPath string
@@ -221,6 +226,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		enableSettingSockMem:        conf.EnableSettingSockMem,
 		enableSettingFragMem:        conf.EnableSettingFragMem,
 		enableMemoryAdvisor:         conf.EnableMemoryAdvisor,
+		enableUserWatermark:         conf.EnableUserWatermark,
 		getAdviceInterval:           conf.GetAdviceInterval,
 		memoryAdvisorSocketAbsPath:  conf.MemoryAdvisorSocketAbsPath,
 		memoryPluginSocketAbsPath:   conf.MemoryPluginSocketAbsPath,
@@ -440,6 +446,12 @@ func (p *DynamicPolicy) Start() (err error) {
 		if err != nil {
 			general.Infof("setFragMem failed, err=%v", err)
 		}
+	}
+	if p.enableUserWatermark && common.CheckCgroup2UnifiedMode() {
+		general.Infof("setUserWatermark enabled")
+
+		userWatermarkReclaimManager := userwatermark.NewUserWatermarkReclaimManager(p.qosConfig, p.dynamicConf, p.emitter, p.metaServer)
+		go userWatermarkReclaimManager.Run(p.stopCh)
 	}
 
 	go wait.Until(func() {

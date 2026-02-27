@@ -514,7 +514,7 @@ func (tmo *transparentMemoryOffloading) Reconcile(status *types.MemoryPressureSt
 			}
 			// load QoSLevelConfig
 			if helper.IsValidQosLevel(containerInfo.QoSLevel) {
-				if tmoConfigDetail, exist := tmo.conf.GetDynamicConfiguration().QoSLevelConfigs[katalystapiconsts.QoSLevel(containerInfo.QoSLevel)]; exist {
+				if tmoConfigDetail, exist := tmo.conf.GetDynamicConfiguration().QoSLevelConfig[katalystapiconsts.QoSLevel(containerInfo.QoSLevel)]; exist {
 					tmo.containerTmoEngines[podContainerName].LoadConf(tmoConfigDetail)
 					general.Infof("Load QosLevel %s TMO config for podContainerName %s, enableTMO: %v, enableSwap: %v, interval: %v, policy: %v",
 						containerInfo.QoSLevel, podContainerName,
@@ -593,7 +593,7 @@ func (tmo *transparentMemoryOffloading) Reconcile(status *types.MemoryPressureSt
 
 	// delete tmo engines for not existed cgroups
 	for cgpath := range tmo.cgpathTmoEngines {
-		if _, exist := tmo.conf.GetDynamicConfiguration().CgroupConfigs[cgpath]; !exist {
+		if _, exist := tmo.conf.GetDynamicConfiguration().CgroupConfig[cgpath]; !exist {
 			delete(tmo.cgpathTmoEngines, cgpath)
 		}
 	}

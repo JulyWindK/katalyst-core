@@ -17,6 +17,7 @@ limitations under the License.
 package dynamic
 
 import (
+	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/options/dynamic/userwatermark"
 	"k8s.io/apimachinery/pkg/util/errors"
 	cliflag "k8s.io/component-base/cli/flag"
 
@@ -32,6 +33,7 @@ type DynamicOptions struct {
 	*tmo.TransparentMemoryOffloadingOptions
 	*strategygroup.StrategyGroupOptions
 	*irqtuning.IRQTuningOptions
+	*userwatermark.UserWatermarkOptions
 }
 
 func NewDynamicOptions() *DynamicOptions {
@@ -40,6 +42,7 @@ func NewDynamicOptions() *DynamicOptions {
 		TransparentMemoryOffloadingOptions: tmo.NewTransparentMemoryOffloadingOptions(),
 		StrategyGroupOptions:               strategygroup.NewStrategyGroupOptions(),
 		IRQTuningOptions:                   irqtuning.NewIRQTuningOptions(),
+		UserWatermarkOptions:               userwatermark.NewUserWatermarkOptions(),
 	}
 }
 
@@ -48,6 +51,7 @@ func (o *DynamicOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	o.TransparentMemoryOffloadingOptions.AddFlags(fss)
 	o.StrategyGroupOptions.AddFlags(fss)
 	o.IRQTuningOptions.AddFlags(fss)
+	o.UserWatermarkOptions.AddFlags(fss)
 }
 
 func (o *DynamicOptions) ApplyTo(c *dynamic.Configuration) error {
@@ -56,5 +60,6 @@ func (o *DynamicOptions) ApplyTo(c *dynamic.Configuration) error {
 	errList = append(errList, o.TransparentMemoryOffloadingOptions.ApplyTo(c.TransparentMemoryOffloadingConfiguration))
 	errList = append(errList, o.StrategyGroupOptions.ApplyTo(c.StrategyGroupConfiguration))
 	errList = append(errList, o.IRQTuningOptions.ApplyTo(c.IRQTuningConfiguration))
+	errList = append(errList, o.UserWatermarkOptions.ApplyTo(c.UserWatermarkConfiguration))
 	return errors.NewAggregate(errList)
 }
