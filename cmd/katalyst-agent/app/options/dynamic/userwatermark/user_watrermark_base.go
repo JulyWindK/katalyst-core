@@ -39,11 +39,11 @@ func NewUserWatermarkOptions() *UserWatermarkOptions {
 func (o *UserWatermarkOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	fs := fss.FlagSet("user-watermark")
 
-	fs.BoolVar(&o.EnableReclaimer, "enable-reclaimer", o.EnableReclaimer,
+	fs.BoolVar(&o.EnableReclaimer, "enable-user-watermark-reclaimer", o.EnableReclaimer,
 		"whether to enable memory reclaimer")
-	fs.Int64Var(&o.ReconcileInterval, "reconcile-interval", o.ReconcileInterval,
+	fs.Int64Var(&o.ReconcileInterval, "user-watermark-reconcile-interval", o.ReconcileInterval,
 		"the interval to reconcile memory")
-	fs.StringVar(&o.ServiceLabel, "service-label", o.ServiceLabel,
+	fs.StringVar(&o.ServiceLabel, "user-watermark-pod-service-label", o.ServiceLabel,
 		"the service label to filter")
 
 	o.DefaultOptions.AddFlags(fss)

@@ -51,29 +51,29 @@ func NewDefaultOptions() *DefaultOptions {
 func (o *DefaultOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	fs := fss.FlagSet("user-watermark")
 
-	fs.BoolVar(&o.EnableMemoryReclaim, "enable-memory-reclaim", o.EnableMemoryReclaim,
+	fs.BoolVar(&o.EnableMemoryReclaim, "enable-user-watermark-memory-reclaim", o.EnableMemoryReclaim,
 		"whether to enable memory reclaim")
-	fs.Int64Var(&o.ReclaimInterval, "reclaim-interval", o.ReclaimInterval,
+	fs.Int64Var(&o.ReclaimInterval, "user-watermark-reclaim-interval", o.ReclaimInterval,
 		"the interval to reclaim memory")
-	fs.Uint64Var(&o.ScaleFactor, "scale-factor", o.ScaleFactor,
+	fs.Uint64Var(&o.ScaleFactor, "user-watermark-scale-factor", o.ScaleFactor,
 		"the scale factor to reclaim memory")
-	fs.Uint64Var(&o.SingleReclaimSize, "single-reclaim-size", o.SingleReclaimSize,
+	fs.Uint64Var(&o.SingleReclaimSize, "user-watermark-single-reclaim-size", o.SingleReclaimSize,
 		"the max memory reclaim size in one reclaim cycle")
-	fs.Float64Var(&o.SingleReclaimFactor, "single-reclaim-factor", o.SingleReclaimFactor,
+	fs.Float64Var(&o.SingleReclaimFactor, "user-watermark-single-reclaim-factor", o.SingleReclaimFactor,
 		"the factor to reclaim memory")
-	fs.DurationVar(&o.BackoffDuration, "backoff-duration", o.BackoffDuration,
+	fs.DurationVar(&o.BackoffDuration, "user-watermark-backoff-duration", o.BackoffDuration,
 		"the duration to backoff after reclaim failed")
-	fs.StringVar(&o.FeedbackPolicy, "feedback-policy", o.FeedbackPolicy,
+	fs.StringVar(&o.FeedbackPolicy, "user-watermark-feedback-policy", o.FeedbackPolicy,
 		"the feedback policy to reclaim memory")
-	fs.Uint64Var(&o.ReclaimFailedThreshold, "reclaim-failed-threshold", o.ReclaimFailedThreshold,
+	fs.Uint64Var(&o.ReclaimFailedThreshold, "user-watermark-reclaim-failed-threshold", o.ReclaimFailedThreshold,
 		"the threshold to trigger reclaim failed")
-	fs.DurationVar(&o.FailureFreezePeriod, "failure-freeze-period", o.FailureFreezePeriod,
+	fs.DurationVar(&o.FailureFreezePeriod, "user-watermark-failure-freeze-period", o.FailureFreezePeriod,
 		"the period to freeze reclaim after trigger reclaim failed")
-	fs.Float64Var(&o.PsiAvg60Threshold, "psi-avg60-threshold", o.PsiAvg60Threshold,
+	fs.Float64Var(&o.PsiAvg60Threshold, "user-watermark-psi-avg60-threshold", o.PsiAvg60Threshold,
 		"the threshold to trigger reclaim failed")
-	fs.Float64Var(&o.ReclaimAccuracyTarget, "reclaim-accuracy-target", o.ReclaimAccuracyTarget,
+	fs.Float64Var(&o.ReclaimAccuracyTarget, "user-watermark-reclaim-accuracy-target", o.ReclaimAccuracyTarget,
 		"the target reclaim accuracy")
-	fs.Float64Var(&o.ReclaimScanEfficiencyTarget, "reclaim-scan-efficiency-target", o.ReclaimScanEfficiencyTarget,
+	fs.Float64Var(&o.ReclaimScanEfficiencyTarget, "user-watermark-reclaim-scan-efficiency-target", o.ReclaimScanEfficiencyTarget,
 		"the target reclaim scan efficiency")
 }
 
