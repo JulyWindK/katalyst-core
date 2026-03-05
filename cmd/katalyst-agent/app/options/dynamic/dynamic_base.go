@@ -22,6 +22,7 @@ import (
 
 	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/options/dynamic/adminqos"
 	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/options/dynamic/irqtuning"
+	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/options/dynamic/oompriority"
 	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/options/dynamic/strategygroup"
 	"github.com/kubewharf/katalyst-core/cmd/katalyst-agent/app/options/dynamic/tmo"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
@@ -32,6 +33,7 @@ type DynamicOptions struct {
 	*tmo.TransparentMemoryOffloadingOptions
 	*strategygroup.StrategyGroupOptions
 	*irqtuning.IRQTuningOptions
+	*oompriority.OOMPriorityOptions
 }
 
 func NewDynamicOptions() *DynamicOptions {
@@ -40,6 +42,7 @@ func NewDynamicOptions() *DynamicOptions {
 		TransparentMemoryOffloadingOptions: tmo.NewTransparentMemoryOffloadingOptions(),
 		StrategyGroupOptions:               strategygroup.NewStrategyGroupOptions(),
 		IRQTuningOptions:                   irqtuning.NewIRQTuningOptions(),
+		OOMPriorityOptions:                 oompriority.NewOOMPriorityOptions(),
 	}
 }
 
@@ -48,6 +51,7 @@ func (o *DynamicOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	o.TransparentMemoryOffloadingOptions.AddFlags(fss)
 	o.StrategyGroupOptions.AddFlags(fss)
 	o.IRQTuningOptions.AddFlags(fss)
+	o.OOMPriorityOptions.AddFlags(fss)
 }
 
 func (o *DynamicOptions) ApplyTo(c *dynamic.Configuration) error {
@@ -56,5 +60,6 @@ func (o *DynamicOptions) ApplyTo(c *dynamic.Configuration) error {
 	errList = append(errList, o.TransparentMemoryOffloadingOptions.ApplyTo(c.TransparentMemoryOffloadingConfiguration))
 	errList = append(errList, o.StrategyGroupOptions.ApplyTo(c.StrategyGroupConfiguration))
 	errList = append(errList, o.IRQTuningOptions.ApplyTo(c.IRQTuningConfiguration))
+	errList = append(errList, o.OOMPriorityOptions.ApplyTo(c.OOMPriorityConfiguration))
 	return errors.NewAggregate(errList)
 }
