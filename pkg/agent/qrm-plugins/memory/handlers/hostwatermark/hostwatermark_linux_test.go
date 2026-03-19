@@ -25,6 +25,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/bytedance/mockey"
+	"github.com/prometheus/procfs"
 	"github.com/stretchr/testify/require"
 
 	coreconfig "github.com/kubewharf/katalyst-core/pkg/config"
@@ -38,9 +40,29 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 	utilmetric "github.com/kubewharf/katalyst-core/pkg/util/metric"
+	procm "github.com/kubewharf/katalyst-core/pkg/util/procfs/manager"
 )
 
 var hostWatermarkTestMu sync.Mutex
+
+var (
+	defaultMemTotal      uint64 = 1000
+	defaultHugePageSize  uint64 = 10
+	defaultHugePageTotal uint64 = 10
+)
+
+func makeNormalMemInfo() procfs.Meminfo {
+	mi := procfs.Meminfo{
+		MemTotal:       &defaultMemTotal,
+		Hugepagesize:   &defaultHugePageSize,
+		HugePagesTotal: &defaultHugePageTotal,
+	}
+	return mi
+}
+
+func makeNilMemInfo() procfs.Meminfo {
+	return procfs.Meminfo{}
+}
 
 func makeTestCoreConf(watermarkScaleFactor int, reservedGB uint64) *coreconfig.Configuration {
 	return &coreconfig.Configuration{
@@ -83,6 +105,10 @@ func TestDetermineTargetWatermarkScaleFactor_DirectValue(t *testing.T) {
 
 	conf := makeTestCoreConf(123, 10)
 
+	hostWatermarkTestMu.Lock()
+	defer hostWatermarkTestMu.Unlock()
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
+
 	target, err := determineTargetWatermarkScaleFactor(conf, metrics.DummyMetrics{}, nil)
 	require.NoError(t, err)
 	require.Equal(t, int64(123), target)
@@ -93,6 +119,10 @@ func TestDetermineTargetWatermarkScaleFactor_AutoCalc_10G_100G(t *testing.T) {
 
 	server := makeTestMetaServerWithNumaTotal(t, 0, 100<<30)
 	conf := makeTestCoreConf(0, 10)
+
+	hostWatermarkTestMu.Lock()
+	defer hostWatermarkTestMu.Unlock()
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
 
 	target, err := determineTargetWatermarkScaleFactor(conf, metrics.DummyMetrics{}, server)
 	require.NoError(t, err)
@@ -105,6 +135,10 @@ func TestDetermineTargetWatermarkScaleFactor_AutoCalc_ZeroTotal(t *testing.T) {
 	server := makeTestMetaServerWithNumaTotal(t, 0, 0)
 	conf := makeTestCoreConf(0, 10)
 
+	hostWatermarkTestMu.Lock()
+	defer hostWatermarkTestMu.Unlock()
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
+
 	_, err := determineTargetWatermarkScaleFactor(conf, metrics.DummyMetrics{}, server)
 	require.Error(t, err)
 }
@@ -113,6 +147,10 @@ func TestDetermineTargetWatermarkScaleFactor_AutoCalc_NilMetaServer(t *testing.T
 	t.Parallel()
 
 	conf := makeTestCoreConf(0, 10)
+
+	hostWatermarkTestMu.Lock()
+	defer hostWatermarkTestMu.Unlock()
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
 
 	_, err := determineTargetWatermarkScaleFactor(conf, metrics.DummyMetrics{}, nil)
 	require.Error(t, err)
@@ -131,6 +169,10 @@ func TestClampWatermarkScaleFactor(t *testing.T) {
 func TestSetHostWatermark_NoTarget_Skipped(t *testing.T) {
 	t.Parallel()
 
+	hostWatermarkTestMu.Lock()
+	defer hostWatermarkTestMu.Unlock()
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
+
 	conf := makeTestCoreConf(0, 0)
 	SetHostWatermark(conf, nil, nil, metrics.DummyMetrics{}, nil)
 }
@@ -145,6 +187,7 @@ func TestSetHostWatermark_SetScaleFactor_WritesFile(t *testing.T) {
 	hostWatermarkTestMu.Lock()
 	oldPath := watermarkScaleFactorPath
 	watermarkScaleFactorPath = targetFile
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
 	defer func() {
 		watermarkScaleFactorPath = oldPath
 		hostWatermarkTestMu.Unlock()
@@ -168,6 +211,7 @@ func TestSetHostWatermark_SetScaleFactor_NoClamp(t *testing.T) {
 	hostWatermarkTestMu.Lock()
 	oldPath := watermarkScaleFactorPath
 	watermarkScaleFactorPath = targetFile
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
 	defer func() {
 		watermarkScaleFactorPath = oldPath
 		hostWatermarkTestMu.Unlock()
@@ -191,6 +235,7 @@ func TestSetHostWatermark_AutoCalc_ClampMin(t *testing.T) {
 	hostWatermarkTestMu.Lock()
 	oldPath := watermarkScaleFactorPath
 	watermarkScaleFactorPath = targetFile
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
 	defer func() {
 		watermarkScaleFactorPath = oldPath
 		hostWatermarkTestMu.Unlock()
@@ -216,6 +261,7 @@ func TestSetHostWatermark_AutoCalc_ClampMax(t *testing.T) {
 	hostWatermarkTestMu.Lock()
 	oldPath := watermarkScaleFactorPath
 	watermarkScaleFactorPath = targetFile
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
 	defer func() {
 		watermarkScaleFactorPath = oldPath
 		hostWatermarkTestMu.Unlock()
@@ -229,4 +275,28 @@ func TestSetHostWatermark_AutoCalc_ClampMax(t *testing.T) {
 	val, err := general.ReadInt64FromFile(targetFile)
 	require.NoError(t, err)
 	require.Equal(t, int64(500), val)
+}
+
+func TestAdjustWatermarkForHugePages_Unchanged(t *testing.T) {
+	t.Parallel()
+
+	hostWatermarkTestMu.Lock()
+	defer hostWatermarkTestMu.Unlock()
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNilMemInfo(), nil).Build()
+
+	var originalWatermark uint64 = 50
+	newWatermark := adjustWatermarkForHugePages(originalWatermark)
+	require.Equal(t, originalWatermark, newWatermark)
+}
+
+func TestAdjustWatermarkForHugePages(t *testing.T) {
+	t.Parallel()
+
+	hostWatermarkTestMu.Lock()
+	defer hostWatermarkTestMu.Unlock()
+	mockey.Mock(procm.GetMemInfo).IncludeCurrentGoRoutine().Return(makeNormalMemInfo(), nil).Build()
+
+	var originalWatermark uint64 = 500
+	newWatermark := adjustWatermarkForHugePages(originalWatermark)
+	require.Equal(t, 450, newWatermark)
 }
