@@ -50,6 +50,10 @@ type MemoryQRMPluginConfig struct {
 	// NUMABindResultResourceAllocationAnnotationKey: the annotation key for numa bind result resource allocation
 	// it will be used to set cgroup path for numa bind result resource allocation
 	NUMABindResultResourceAllocationAnnotationKey string
+	// EnableMemoryAnnotationValidator enable the memory annotation validator for pods already have memory allocated by runtime
+	EnableMemoryAnnotationValidator bool
+	// MemoryAnnotationValidatorDryRun enable the dry run mode for memory annotation validator
+	MemoryAnnotationValidatorDryRun bool
 	// SockMemQRMPluginConfig: the configuration for sockmem limitation in cgroup and host level
 	SockMemQRMPluginConfig
 	// LogCacheQRMPluginConfig: the configuration for logcache evicting

@@ -43,12 +43,14 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/dynamicpolicy/oom"
 	memoryreactor "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/dynamicpolicy/reactor"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/dynamicpolicy/state"
+	memoryvalidator "github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/dynamicpolicy/validator"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/handlers/fragmem"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/handlers/hostwatermark"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/handlers/logcache"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/memory/handlers/sockmem"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util"
 	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util/reactor"
+	"github.com/kubewharf/katalyst-core/pkg/agent/qrm-plugins/util/validator"
 	"github.com/kubewharf/katalyst-core/pkg/agent/utilcomponent/featuregatenegotiation"
 	"github.com/kubewharf/katalyst-core/pkg/agent/utilcomponent/periodicalhandler"
 	"github.com/kubewharf/katalyst-core/pkg/config"
@@ -165,6 +167,9 @@ type DynamicPolicy struct {
 
 	numaAllocationReactor                         reactor.AllocationReactor
 	numaBindResultResourceAllocationAnnotationKey string
+
+	memoryAnnotationValidator validator.AnnotationValidator
+	annotationValidatorDryRun bool
 }
 
 func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration,
@@ -237,6 +242,7 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 		resctrlHinter:               newResctrlHinter(&conf.ResctrlConfig, wrappedEmitter),
 		enableNonBindingShareCoresMemoryResourceCheck: conf.EnableNonBindingShareCoresMemoryResourceCheck,
 		numaBindResultResourceAllocationAnnotationKey: conf.NUMABindResultResourceAllocationAnnotationKey,
+		annotationValidatorDryRun:                     conf.NICAnnotationValidatorDryRun,
 	}
 
 	policyImplement.allocationHandlers = map[string]util.AllocationHandler{
@@ -296,6 +302,13 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 				agentCtx.MetaServer.PodFetcher,
 				agentCtx.Client.KubeClient,
 			))
+	}
+
+	policyImplement.memoryAnnotationValidator = validator.DummyAnnotationValidator{}
+	if conf.EnableMemoryAnnotationValidator {
+		policyImplement.memoryAnnotationValidator = memoryvalidator.NewMemoryAnnotationValidator(conf,
+			agentCtx.Client.KubeClient,
+			agentCtx.MetaServer.PodFetcher)
 	}
 
 	return true, &agent.PluginWrapper{GenericPlugin: pluginWrapper}, nil
@@ -919,6 +932,23 @@ func (p *DynamicPolicy) Allocate(ctx context.Context,
 	// since GetKatalystQoSLevelFromResourceReq function will filter annotations,
 	// we should do it before GetKatalystQoSLevelFromResourceReq.
 	isDebugPod := util.IsDebugPod(req.Annotations, p.podDebugAnnoKeys)
+
+	valid, err := p.memoryAnnotationValidator.ValidatePodAnnotation(ctx, req.PodUid, req.PodNamespace, req.PodName)
+	if !isDebugPod || !valid || err != nil {
+		general.Warningf("pod annotations verification failed: %v", err)
+
+		metricTags := []metrics.MetricTag{
+			{Key: "pod_uid", Val: req.PodUid},
+			{Key: "pod_namespace", Val: req.PodNamespace},
+			{Key: "pod_name", Val: req.PodName},
+			{Key: "error_message", Val: metric.MetricTagValueFormat(err)},
+		}
+		p.emitter.StoreInt64(util.MetricNamePodAnnotationVerificationFailed, 1, metrics.MetricTypeNameRaw, metricTags...)
+
+		if !p.annotationValidatorDryRun {
+			return nil, fmt.Errorf("pod annotations verification failed: %v", err)
+		}
+	}
 
 	existReallocAnno, isReallocation := util.IsReallocation(req.Annotations)
 

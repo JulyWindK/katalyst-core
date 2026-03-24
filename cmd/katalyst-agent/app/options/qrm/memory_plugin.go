@@ -42,6 +42,8 @@ type MemoryOptions struct {
 	EnableNonBindingShareCoresMemoryResourceCheck bool
 	EnableNUMAAllocationReactor                   bool
 	NUMABindResultResourceAllocationAnnotationKey string
+	EnableMemoryAnnotationValidator               bool
+	MemoryAnnotationValidatorDryRun               bool
 
 	SockMemOptions
 	LogCacheOptions
@@ -126,6 +128,8 @@ func NewMemoryOptions() *MemoryOptions {
 		EnableNonBindingShareCoresMemoryResourceCheck: true,
 		EnableNUMAAllocationReactor:                   false,
 		NUMABindResultResourceAllocationAnnotationKey: consts.QRMResourceAnnotationKeyNUMABindResult,
+		EnableMemoryAnnotationValidator:               true,
+		MemoryAnnotationValidatorDryRun:               true,
 		SockMemOptions: SockMemOptions{
 			EnableSettingSockMem: false,
 			SetGlobalTCPMemRatio: 20,  // default: 20% * {host total memory}
@@ -187,6 +191,10 @@ func (o *MemoryOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 		o.EnableNUMAAllocationReactor, "enable numa allocation reactor for numa binding pods to patch pod numa binding result annotation")
 	fs.StringVar(&o.NUMABindResultResourceAllocationAnnotationKey, "numa-bind-result-resource-allocation-annotation-key",
 		o.NUMABindResultResourceAllocationAnnotationKey, "the key of numa bind result resource allocation annotation")
+	fs.BoolVar(&o.EnableMemoryAnnotationValidator, "enable-memory-annotation-validator",
+		o.EnableMemoryAnnotationValidator, "enable the memory annotation validator for pods already have memory allocated by runtime")
+	fs.BoolVar(&o.MemoryAnnotationValidatorDryRun, "memory-annotation-validator-dry-run",
+		o.MemoryAnnotationValidatorDryRun, "enable the dry run mode for memory annotation validator")
 	fs.StringVar(&o.OOMPriorityPinnedMapAbsPath, "oom-priority-pinned-bpf-map-path",
 		o.OOMPriorityPinnedMapAbsPath, "the absolute path of oom priority pinned bpf map")
 	fs.BoolVar(&o.EnableSettingSockMem, "enable-setting-sockmem",
@@ -248,6 +256,8 @@ func (o *MemoryOptions) ApplyTo(conf *qrmconfig.MemoryQRMPluginConfig) error {
 	conf.EnableOOMPriority = o.EnableOOMPriority
 	conf.EnableNonBindingShareCoresMemoryResourceCheck = o.EnableNonBindingShareCoresMemoryResourceCheck
 	conf.EnableNUMAAllocationReactor = o.EnableNUMAAllocationReactor
+	conf.EnableMemoryAnnotationValidator = o.EnableMemoryAnnotationValidator
+	conf.MemoryAnnotationValidatorDryRun = o.MemoryAnnotationValidatorDryRun
 	conf.NUMABindResultResourceAllocationAnnotationKey = o.NUMABindResultResourceAllocationAnnotationKey
 	conf.OOMPriorityPinnedMapAbsPath = o.OOMPriorityPinnedMapAbsPath
 	conf.EnableSettingSockMem = o.EnableSettingSockMem
