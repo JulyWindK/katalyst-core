@@ -138,6 +138,8 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 		}
 	}
 
+	general.Infof("[DEBUG]start reconcile manager containerNamesMap: %v", containerNamesMap)
+
 	// update tmo config for specified cgroup paths
 	for cgpath := range m.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.CgroupConfig {
 		general.Infof("Get Cgroup config for specific cgroup path %v", cgpath)
