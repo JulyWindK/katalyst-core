@@ -131,7 +131,7 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 			_, exist := m.containerReclaimer[podContainerName]
 			if !exist {
 				m.containerReclaimer[podContainerName] = NewUserWatermarkReclaimer(instanceInfo, m.metaServer, m.emitter, m.dynamicConf)
-				general.InfofV(5, "Create UserWatermarkReclaimer for pod: %v, container name: %s", pod.Name, containerInfo.ContainerName)
+				general.InfofV(5, "Create UserWatermarkReclaimer for pod container name: %v", podContainerName)
 			}
 		}
 	}
@@ -171,23 +171,27 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 
 	// start reclaim reclaimer for each container
 	for podContainerName, reclaimer := range m.containerReclaimer {
-		if !m.started[string(podContainerName)] {
-			go reclaimer.Run()
-			m.started[string(podContainerName)] = true
-
-			general.Infof("Start UserWatermarkReclaimer for pod container name: %v", podContainerName)
+		if m.started[string(podContainerName)] {
+			general.InfofV(5, "UserWatermarkReclaimer for pod container name: %v has started", podContainerName)
+			continue
 		}
-		general.InfofV(5, "UserWatermarkReclaimer for pod container name: %v has started", podContainerName)
+		// start the reclaimer
+		go reclaimer.Run()
+		m.started[string(podContainerName)] = true
+
+		general.Infof("Start UserWatermarkReclaimer for pod container name: %v", podContainerName)
 	}
 
 	// start reclaim reclaimer for each cgroups
 	for cgpath, reclaimer := range m.cgroupPathReclaimer {
-		if !m.started[cgpath] {
-			go reclaimer.Run()
-			m.started[cgpath] = true
-
-			general.Infof("Start UserWatermarkReclaimer for cgroup path: %v", cgpath)
+		if m.started[cgpath] {
+			general.InfofV(5, "UserWatermarkReclaimer for cgroup path: %v has started", cgpath)
+			continue
 		}
-		general.InfofV(5, "UserWatermarkReclaimer for cgroup path: %v has started", cgpath)
+		// start the reclaimer
+		go reclaimer.Run()
+		m.started[cgpath] = true
+
+		general.Infof("Start UserWatermarkReclaimer for cgroup path: %v", cgpath)
 	}
 }
