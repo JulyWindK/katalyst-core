@@ -77,6 +77,8 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 	general.InfofV(5, "UserWatermarkReclaimManage start to reconcile")
 	_ = m.emitter.StoreInt64(MetricNameUserWatermarkReclaimEnabled, 1, metrics.MetricTypeNameRaw)
 
+	general.Infof("[DEBUG]start reconcile manager containerReclaimer: %v", m.containerReclaimer)
+
 	containerNamesMap := make(map[katalystcoreconsts.PodContainerName]bool)
 	podList, err := m.metaServer.GetPodList(context.Background(), native.PodIsActive)
 	if err != nil {
@@ -194,4 +196,6 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 
 		general.Infof("Start UserWatermarkReclaimer for cgroup path: %v", cgpath)
 	}
+
+	general.Infof("[DEBUG]end reconcile manager containerReclaimer: %v", m.containerReclaimer)
 }
