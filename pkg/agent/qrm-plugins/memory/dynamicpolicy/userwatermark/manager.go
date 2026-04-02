@@ -77,6 +77,7 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 	general.InfofV(5, "UserWatermarkReclaimManage start to reconcile")
 	_ = m.emitter.StoreInt64(MetricNameUserWatermarkReclaimEnabled, 1, metrics.MetricTypeNameRaw)
 
+	general.Infof("[DEBUG]UserWatermarkReclaimManager config: %v", m.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration)
 	general.Infof("[DEBUG]start reconcile manager containerReclaimer: %v", m.containerReclaimer)
 
 	containerNamesMap := make(map[katalystcoreconsts.PodContainerName]bool)
