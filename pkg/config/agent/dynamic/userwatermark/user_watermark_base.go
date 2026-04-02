@@ -192,6 +192,46 @@ func (c *UserWatermarkConfiguration) ApplyConfiguration(conf *crd.DynamicConfigC
 			c.ServiceLabel = uwc.Spec.Config.ServiceLabel
 		}
 
+		if uwc.Spec.Config.DefaultConfig != nil {
+			if uwc.Spec.Config.DefaultConfig.EnableMemoryReclaim != nil {
+				c.DefaultConfig.EnableMemoryReclaim = *uwc.Spec.Config.DefaultConfig.EnableMemoryReclaim
+			}
+			if uwc.Spec.Config.DefaultConfig.ReclaimInterval != nil {
+				c.DefaultConfig.ReclaimInterval = *uwc.Spec.Config.DefaultConfig.ReclaimInterval
+			}
+			if uwc.Spec.Config.DefaultConfig.ScaleFactor != nil {
+				c.DefaultConfig.ScaleFactor = *uwc.Spec.Config.DefaultConfig.ScaleFactor
+			}
+			if uwc.Spec.Config.DefaultConfig.SingleReclaimFactor != nil {
+				c.DefaultConfig.SingleReclaimFactor = *uwc.Spec.Config.DefaultConfig.SingleReclaimFactor
+			}
+			if uwc.Spec.Config.DefaultConfig.SingleReclaimSize != nil {
+				c.DefaultConfig.SingleReclaimSize = *uwc.Spec.Config.DefaultConfig.SingleReclaimSize
+			}
+			if uwc.Spec.Config.DefaultConfig.BackoffDuration != nil {
+				c.DefaultConfig.BackoffDuration = uwc.Spec.Config.DefaultConfig.BackoffDuration.Duration
+			}
+			if uwc.Spec.Config.DefaultConfig.ReclaimFailedThreshold != nil {
+				c.DefaultConfig.ReclaimFailedThreshold = *uwc.Spec.Config.DefaultConfig.ReclaimFailedThreshold
+			}
+			if uwc.Spec.Config.DefaultConfig.FailureFreezePeriod != nil {
+				c.DefaultConfig.FailureFreezePeriod = uwc.Spec.Config.DefaultConfig.FailureFreezePeriod.Duration
+			}
+			if psiConf := uwc.Spec.Config.DefaultConfig.PSIPolicyConf; psiConf != nil {
+				if psiConf.PSIAvg60Threshold != nil {
+					c.DefaultConfig.PsiAvg60Threshold = *psiConf.PSIAvg60Threshold
+				}
+			}
+			if refaultConf := uwc.Spec.Config.DefaultConfig.RefaultPolicConf; refaultConf != nil {
+				if refaultConf.ReclaimAccuracyTarget != nil {
+					c.DefaultConfig.ReclaimAccuracyTarget = *refaultConf.ReclaimAccuracyTarget
+				}
+				if refaultConf.ReclaimScanEfficiencyTarget != nil {
+					c.DefaultConfig.ReclaimScanEfficiencyTarget = *refaultConf.ReclaimScanEfficiencyTarget
+				}
+			}
+		}
+
 		if uwc.Spec.Config.ServiceConfig != nil {
 			for _, serviceConfig := range uwc.Spec.Config.ServiceConfig {
 				configDetail := NewReclaimConfigDetail(c.DefaultConfig)

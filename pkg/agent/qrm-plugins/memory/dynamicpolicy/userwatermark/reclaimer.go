@@ -331,30 +331,33 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 		return
 	}
 
-	// load default config
-	r.loadConfig(userwatermark.NewReclaimConfigDetail(userWatermarkDynamicConf.DefaultConfig))
+	// get default config
+	reclaimConfig := userwatermark.NewReclaimConfigDetail(userWatermarkDynamicConf.DefaultConfig)
 
 	if r.containerInfo != nil && r.containerInfo.PodUID != "" {
-		// load QoS level config
+		// get QoS level config
 		if helper.IsValidQosLevel(r.containerInfo.QoSLevel) {
 			if qosReclaimConfig, exist := userWatermarkDynamicConf.QoSLevelConfig[katalystapiconsts.QoSLevel(r.containerInfo.QoSLevel)]; exist {
-				r.loadConfig(qosReclaimConfig)
+				reclaimConfig = qosReclaimConfig
 			}
 		}
 
-		// load service config
+		// get service config
 		if serviceName, exist := r.containerInfo.Labels[r.serviceLabel]; exist {
 			if serviceReclaimConfig, exist := userWatermarkDynamicConf.ServiceConfig[serviceName]; exist {
-				r.loadConfig(serviceReclaimConfig)
+				reclaimConfig = serviceReclaimConfig
 			}
 		}
 		return
 	}
 
-	// load cgroup config
+	// get cgroup config
 	if cgroupReclaimConfig, exist := r.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.CgroupConfig[r.cgroupPath]; exist {
-		r.loadConfig(cgroupReclaimConfig)
+		reclaimConfig = cgroupReclaimConfig
 	}
+
+	// load reclaim config
+	r.loadConfig(reclaimConfig)
 }
 
 func (r *userWatermarkReclaimer) loadConfig(config *userwatermark.ReclaimConfigDetail) {
