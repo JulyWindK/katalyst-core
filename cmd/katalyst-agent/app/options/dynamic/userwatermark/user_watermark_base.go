@@ -23,6 +23,10 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/userwatermark"
 )
 
+const (
+	DefaultReconcileInterval = 1
+)
+
 type UserWatermarkOptions struct {
 	EnableReclaimer   bool
 	ReconcileInterval int64
@@ -32,7 +36,8 @@ type UserWatermarkOptions struct {
 
 func NewUserWatermarkOptions() *UserWatermarkOptions {
 	return &UserWatermarkOptions{
-		DefaultOptions: defaultOptions.NewDefaultOptions(),
+		ReconcileInterval: DefaultReconcileInterval,
+		DefaultOptions:    defaultOptions.NewDefaultOptions(),
 	}
 }
 

@@ -25,6 +25,16 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/userwatermark"
 )
 
+const (
+	DefaultReconcileInterval      = 1
+	DefaultBackoffDuration        = 3 * time.Second
+	DefaultSingleReclaimSize      = 1 * 1024 * 1024 * 1024
+	DefaultScaleFactor            = 100
+	DefaultSingleReclaimFactor    = 0.5
+	DefaultReclaimFailedThreshold = 3
+	DefaultFailureFreezePeriod    = 5 * time.Second
+)
+
 type DefaultOptions struct {
 	EnableMemoryReclaim bool
 	ReclaimInterval     int64
@@ -44,7 +54,17 @@ type DefaultOptions struct {
 }
 
 func NewDefaultOptions() *DefaultOptions {
-	return &DefaultOptions{}
+	return &DefaultOptions{
+		EnableMemoryReclaim:    true,
+		ReclaimInterval:        DefaultReconcileInterval,
+		ScaleFactor:            DefaultScaleFactor,
+		SingleReclaimFactor:    DefaultSingleReclaimFactor,
+		SingleReclaimSize:      DefaultSingleReclaimSize,
+		BackoffDuration:        DefaultBackoffDuration,
+		FeedbackPolicy:         string(v1alpha1.UserWatermarkPolicyNameIntegrated),
+		ReclaimFailedThreshold: DefaultReclaimFailedThreshold,
+		FailureFreezePeriod:    DefaultFailureFreezePeriod,
+	}
 }
 
 func (o *DefaultOptions) AddFlags(fss *cliflag.NamedFlagSets) {
