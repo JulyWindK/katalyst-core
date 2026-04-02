@@ -309,6 +309,9 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 		return
 	}
 
+	// load default config
+	r.loadConfig(userwatermark.NewReclaimConfigDetail(userWatermarkDynamicConf.DefaultConfig))
+
 	if r.containerInfo != nil && r.containerInfo.PodUID != "" {
 		// load QoS level config
 		if helper.IsValidQosLevel(r.containerInfo.QoSLevel) {
