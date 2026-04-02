@@ -294,13 +294,11 @@ func (r *userWatermarkReclaimer) Reclaim(reclaimInfo *ReclaimInfo) (ReclaimResul
 		// reclaim state info metrics emit
 		reclaimAccuracyRatio := getReclaimAccuracyRatio(originReclaimStats, currReclaimStats)
 		reclaimScanEfficiencyRatio := getReclaimScanEfficiencyRatio(originReclaimStats, currReclaimStats)
-		r.emitMetric(MetricNameUserWatermarkReclaimStats, 1, metrics.MetricTypeNameRaw,
-			metrics.MetricTag{Key: MetricTagKeyMemoryFree, Val: fmt.Sprintf("%v", free)},
-			metrics.MetricTag{Key: MetricTagKeyMemoryPSI, Val: fmt.Sprintf("%v", currReclaimStats.memPsiAvg60)},
-			metrics.MetricTag{Key: MetricTagKeyReclaimRefault, Val: fmt.Sprintf("%v", currReclaimStats.refault)},
-			metrics.MetricTag{Key: MetricTagKeyReclaimAccuracyRatio, Val: fmt.Sprintf("%v", reclaimAccuracyRatio)},
-			metrics.MetricTag{Key: MetricTagKeyReclaimScanEfficiencyRatio, Val: fmt.Sprintf("%v", reclaimScanEfficiencyRatio)},
-		)
+		r.emitMetric(MetricNameUserWatermarkReclaimMemoryFree, free, metrics.MetricTypeNameRaw)
+		r.emitMetric(MetricNameUserWatermarkReclaimPSI, currReclaimStats.memPsiAvg60, metrics.MetricTypeNameRaw)
+		r.emitMetric(MetricNameUserWatermarkReclaimRefault, currReclaimStats.refault, metrics.MetricTypeNameRaw)
+		r.emitMetric(MetricNameUserWatermarkReclaimAccuracyRatio, reclaimAccuracyRatio, metrics.MetricTypeNameRaw)
+		r.emitMetric(MetricNameUserWatermarkReclaimScanEfficiencyRatio, reclaimScanEfficiencyRatio, metrics.MetricTypeNameRaw)
 
 		if feedbackResult, err := r.feedbackManager.FeedbackResult(originReclaimStats, currReclaimStats, r.reclaimConf, r.emitter); err != nil {
 			result.Reason = fmt.Sprintf("get feedback result failed: %v", err)
@@ -551,17 +549,24 @@ func (r *userWatermarkReclaimer) getMemoryReclaimStats() (ReclaimStats, error) {
 	return *reclaimStats, err
 }
 
-func (r *userWatermarkReclaimer) emitMetric(metricName string, val int64, emitType metrics.MetricTypeName, tags ...metrics.MetricTag) {
+func (r *userWatermarkReclaimer) emitMetric(metricName string, val interface{}, emitType metrics.MetricTypeName, tags ...metrics.MetricTag) {
 	baseTags := []metrics.MetricTag{
 		{Key: MetricTagKeyCGroupPath, Val: r.cgroupPath},
 	}
 	if r.containerInfo != nil {
-		baseTags = append(baseTags, metrics.MetricTag{Key: MetricTagKeyPodName, Val: r.containerInfo.PodName})
+		baseTags = append(baseTags, metrics.MetricTag{Key: MetricTagKeyWorkloadName, Val: r.containerInfo.PodName})
 		baseTags = append(baseTags, metrics.MetricTag{Key: MetricTagKeyContainerName, Val: r.containerInfo.ContainerName})
 	}
 	tags = append(baseTags, tags...)
 
-	_ = r.emitter.StoreInt64(metricName, val, emitType, tags...)
+	if val, ok := val.(int64); ok {
+		_ = r.emitter.StoreInt64(metricName, val, emitType, tags...)
+		return
+	}
+	if val, ok := val.(float64); ok {
+		_ = r.emitter.StoreFloat64(metricName, val, emitType, tags...)
+		return
+	}
 }
 
 func GetContainerCgroupPath(podUID, containerId string) (string, error) {
