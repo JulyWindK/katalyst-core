@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/crd"
+
 	"github.com/cilium/ebpf"
 	"google.golang.org/grpc"
 	v1 "k8s.io/api/core/v1"
@@ -265,6 +267,11 @@ func NewDynamicPolicy(agentCtx *agent.GenericContext, conf *config.Configuration
 	if policyImplement.enableOOMPriority {
 		policyImplement.enhancementHandlers.Register(apiconsts.QRMPhaseRemovePod,
 			apiconsts.PodAnnotationMemoryEnhancementOOMPriority, policyImplement.clearOOMPriority)
+	}
+
+	err = agentCtx.ConfigurationManager.AddConfigWatcher(crd.UserWatermarkConfigurationGVR)
+	if err != nil {
+		return false, nil, err
 	}
 
 	pluginWrapper, err := skeleton.NewRegistrationPluginWrapper(policyImplement, conf.QRMPluginSocketDirs,
