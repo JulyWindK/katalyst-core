@@ -109,7 +109,7 @@ func NewUserWatermarkReclaimer(instanceInfo ReclaimInstance, metaServer *metaser
 
 		serviceLabel:    dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.ServiceLabel,
 		containerInfo:   &types.ContainerInfo{},
-		reclaimConf:     userwatermark.NewReclaimConfigDetail(userwatermark.NewUserWatermarkDefaultConfiguration()),
+		reclaimConf:     userwatermark.NewReclaimConfigDetail(dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.DefaultConfig),
 		feedbackManager: NewFeedbackManager(),
 	}
 
