@@ -221,7 +221,7 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 	if err != nil || !result.Success {
 		r.failedCount++
 
-		general.Warningf("Memory reclaim failed, podName:%v containerName:%v cgroupPath: %s, result: %v", r.containerInfo.PodName, r.containerInfo.ContainerName, r.cgroupPath, result)
+		general.Warningf("Memory reclaim failed, podName:%v containerName:%v cgroupPath: %s, result: %+v", r.containerInfo.PodName, r.containerInfo.ContainerName, r.cgroupPath, result)
 		time.Sleep(r.reclaimConf.BackoffDuration)
 	} else {
 		r.failedCount = 0
@@ -375,12 +375,37 @@ func (r *userWatermarkReclaimer) loadConfig(config *userwatermark.ReclaimConfigD
 	general.Infof("[DEBUG]loadConfig get config: %+v", config)
 
 	r.reclaimConf.EnableMemoryReclaim = config.EnableMemoryReclaim
-	r.reclaimConf.ReclaimInterval = config.ReclaimInterval
-	r.reclaimConf.SingleReclaimSize = config.SingleReclaimSize
-	r.reclaimConf.ScaleFactor = config.ScaleFactor
+	if config.ReclaimInterval <= 0 {
+		r.reclaimConf.ReclaimInterval = userwatermark.DefaultReconcileInterval
+		general.Warningf("Load config detail failed, the ReclaimInterval(%v) is invalid, use default value %v", config.ReclaimInterval, userwatermark.DefaultReconcileInterval)
+	} else {
+		r.reclaimConf.ReclaimInterval = config.ReclaimInterval
+	}
+
+	if config.SingleReclaimSize <= 0 || config.SingleReclaimSize > 10*userwatermark.DefaultSingleReclaimSize {
+		r.reclaimConf.SingleReclaimSize = userwatermark.DefaultSingleReclaimSize
+		general.Warningf("Load config detail failed, the SingleReclaimSize(%v) is invalid, use default value %v", config.SingleReclaimSize, userwatermark.DefaultSingleReclaimSize)
+	} else {
+		r.reclaimConf.SingleReclaimSize = config.SingleReclaimSize
+	}
+
+	if config.ScaleFactor < 0 || config.ScaleFactor > 1000 {
+		r.reclaimConf.ScaleFactor = userwatermark.DefaultScaleFactor
+		general.Warningf("Load config detail failed, the ScaleFactor(%v) is invalid, use default value %v", config.ScaleFactor, userwatermark.DefaultScaleFactor)
+	} else {
+		r.reclaimConf.ScaleFactor = config.ScaleFactor
+	}
+
 	r.reclaimConf.BackoffDuration = config.BackoffDuration
 	r.reclaimConf.FeedbackPolicy = config.FeedbackPolicy
-	r.reclaimConf.ReclaimFailedThreshold = config.ReclaimFailedThreshold
+
+	if config.ReclaimFailedThreshold <= 0 || config.ReclaimFailedThreshold > 5*userwatermark.DefaultReclaimFailedThreshold {
+		r.reclaimConf.ReclaimFailedThreshold = userwatermark.DefaultReclaimFailedThreshold
+		general.Warningf("Load config detail failed, the ReclaimFailedThreshold(%v) is invalid, use default value %v", config.ReclaimFailedThreshold, userwatermark.DefaultReclaimFailedThreshold)
+	} else {
+		r.reclaimConf.ReclaimFailedThreshold = config.ReclaimFailedThreshold
+	}
+
 	r.reclaimConf.FailureFreezePeriod = config.FailureFreezePeriod
 
 	if config.PSIPolicyConf != nil {

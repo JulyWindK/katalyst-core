@@ -35,6 +35,10 @@ const (
 	DefaultSingleReclaimFactor    = 0.5
 	DefaultReclaimFailedThreshold = 3
 	DefaultFailureFreezePeriod    = 5 * time.Second
+
+	DefaultPSIPolicyPSIAvg60Threshold               float64 = 0.1
+	DefaultRefaultPolicyReclaimAccuracyTarget       float64 = 0.99
+	DefaultRefaultPolicyReclaimScanEfficiencyTarget float64 = 0.6
 )
 
 type UserWatermarkDefaultConfiguration struct {
@@ -58,15 +62,18 @@ type UserWatermarkDefaultConfiguration struct {
 
 func NewUserWatermarkDefaultConfiguration() *UserWatermarkDefaultConfiguration {
 	return &UserWatermarkDefaultConfiguration{
-		EnableMemoryReclaim:    true,
-		ReclaimInterval:        DefaultReconcileInterval,
-		ScaleFactor:            DefaultScaleFactor,
-		SingleReclaimFactor:    DefaultSingleReclaimFactor,
-		SingleReclaimSize:      DefaultSingleReclaimSize,
-		BackoffDuration:        DefaultBackoffDuration,
-		FeedbackPolicy:         v1alpha1.UserWatermarkPolicyNameIntegrated,
-		ReclaimFailedThreshold: DefaultReclaimFailedThreshold,
-		FailureFreezePeriod:    DefaultFailureFreezePeriod,
+		EnableMemoryReclaim:         true,
+		ReclaimInterval:             DefaultReconcileInterval,
+		ScaleFactor:                 DefaultScaleFactor,
+		SingleReclaimFactor:         DefaultSingleReclaimFactor,
+		SingleReclaimSize:           DefaultSingleReclaimSize,
+		BackoffDuration:             DefaultBackoffDuration,
+		FeedbackPolicy:              v1alpha1.UserWatermarkPolicyNameIntegrated,
+		ReclaimFailedThreshold:      DefaultReclaimFailedThreshold,
+		FailureFreezePeriod:         DefaultFailureFreezePeriod,
+		PsiAvg60Threshold:           DefaultPSIPolicyPSIAvg60Threshold,
+		ReclaimAccuracyTarget:       DefaultRefaultPolicyReclaimAccuracyTarget,
+		ReclaimScanEfficiencyTarget: DefaultRefaultPolicyReclaimScanEfficiencyTarget,
 	}
 }
 

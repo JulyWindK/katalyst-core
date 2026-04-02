@@ -33,6 +33,10 @@ const (
 	DefaultSingleReclaimFactor    = 0.5
 	DefaultReclaimFailedThreshold = 3
 	DefaultFailureFreezePeriod    = 5 * time.Second
+
+	DefaultPSIPolicyPSIAvg60Threshold               float64 = 0.1
+	DefaultRefaultPolicyReclaimAccuracyTarget       float64 = 0.99
+	DefaultRefaultPolicyReclaimScanEfficiencyTarget float64 = 0.6
 )
 
 type DefaultOptions struct {
@@ -55,15 +59,18 @@ type DefaultOptions struct {
 
 func NewDefaultOptions() *DefaultOptions {
 	return &DefaultOptions{
-		EnableMemoryReclaim:    true,
-		ReclaimInterval:        DefaultReconcileInterval,
-		ScaleFactor:            DefaultScaleFactor,
-		SingleReclaimFactor:    DefaultSingleReclaimFactor,
-		SingleReclaimSize:      DefaultSingleReclaimSize,
-		BackoffDuration:        DefaultBackoffDuration,
-		FeedbackPolicy:         string(v1alpha1.UserWatermarkPolicyNameIntegrated),
-		ReclaimFailedThreshold: DefaultReclaimFailedThreshold,
-		FailureFreezePeriod:    DefaultFailureFreezePeriod,
+		EnableMemoryReclaim:         true,
+		ReclaimInterval:             DefaultReconcileInterval,
+		ScaleFactor:                 DefaultScaleFactor,
+		SingleReclaimFactor:         DefaultSingleReclaimFactor,
+		SingleReclaimSize:           DefaultSingleReclaimSize,
+		BackoffDuration:             DefaultBackoffDuration,
+		FeedbackPolicy:              string(v1alpha1.UserWatermarkPolicyNameIntegrated),
+		ReclaimFailedThreshold:      DefaultReclaimFailedThreshold,
+		FailureFreezePeriod:         DefaultFailureFreezePeriod,
+		PsiAvg60Threshold:           DefaultPSIPolicyPSIAvg60Threshold,
+		ReclaimAccuracyTarget:       DefaultRefaultPolicyReclaimAccuracyTarget,
+		ReclaimScanEfficiencyTarget: DefaultRefaultPolicyReclaimScanEfficiencyTarget,
 	}
 }
 
