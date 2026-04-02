@@ -354,7 +354,6 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 				general.Infof("[DEBUG]LoadConfig get serviceReclaimConfig: %+v", reclaimConfig)
 			}
 		}
-		return
 	}
 
 	// get cgroup config
