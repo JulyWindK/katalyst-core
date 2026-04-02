@@ -137,7 +137,7 @@ func (r *userWatermarkReclaimer) Stop() {
 func (r *userWatermarkReclaimer) run() (done bool, err error) {
 	// 1. load the latest configuration
 	r.LoadConfig()
-	general.Infof("[DEBUG] Load config: %v", r.reclaimConf)
+	general.Infof("[DEBUG] Load config: %+v", r.reclaimConf)
 	r.feedbackManager.UpdateFeedbackPolicy(r.reclaimConf.FeedbackPolicy)
 
 	if !r.reclaimConf.EnableMemoryReclaim {
