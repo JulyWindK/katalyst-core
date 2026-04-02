@@ -177,6 +177,7 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 
 	// get memory limit and usage
 	memLimit, memUsage, err := GetCGroupMemoryLimitAndUsage(r.cgroupPath)
+	general.Infof("[DEBUG] GetCGroupMemoryLimitAndUsage %v result: limit=%v, usage=%v, err: %v", r.cgroupPath, memLimit, memUsage, err)
 	if err != nil {
 		general.Warningf("Get cgroup(%s) memory limit and usage failed, err: %v", r.cgroupPath, err)
 		return false, nil
@@ -188,6 +189,7 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 	// calculate memory watermark
 	mwc := NewMemoryWatermarkCalculator(r.cgroupPath, r.reclaimConf.ScaleFactor, r.reclaimConf.SingleReclaimFactor, r.reclaimConf.SingleReclaimSize)
 	lowWatermark, highWatermark := mwc.GetWatermark(memLimit)
+	general.Infof("[DEBUG] GetWatermark %v result: lowWatermark=%v, highWatermark=%v", r.cgroupPath, lowWatermark, highWatermark)
 
 	// 3. determine if memory reclamation is necessary
 	free := memLimit - memUsage
@@ -212,6 +214,7 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 		ReclaimTarget:    reclaimTarget,
 		SingleReclaimMax: singleReclaimMax,
 	}
+	general.Infof("[DEBUG] ReclaimInfo %v result: %+v", r.cgroupPath, reclaimInfo)
 
 	// 4. perform memory reclamation and hibernate to a certain extent depending on the reclaim state
 	result, err := r.Reclaim(reclaimInfo)
@@ -333,12 +336,14 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 
 	// get default config
 	reclaimConfig := userwatermark.NewReclaimConfigDetail(userWatermarkDynamicConf.DefaultConfig)
+	general.Infof("[DEBUG]LoadConfig get defaultConfig: %+v", reclaimConfig)
 
 	if r.containerInfo != nil && r.containerInfo.PodUID != "" {
 		// get QoS level config
 		if helper.IsValidQosLevel(r.containerInfo.QoSLevel) {
 			if qosReclaimConfig, exist := userWatermarkDynamicConf.QoSLevelConfig[katalystapiconsts.QoSLevel(r.containerInfo.QoSLevel)]; exist {
 				reclaimConfig = qosReclaimConfig
+				general.Infof("[DEBUG]LoadConfig get qosReclaimConfig: %+v", reclaimConfig)
 			}
 		}
 
@@ -346,6 +351,7 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 		if serviceName, exist := r.containerInfo.Labels[r.serviceLabel]; exist {
 			if serviceReclaimConfig, exist := userWatermarkDynamicConf.ServiceConfig[serviceName]; exist {
 				reclaimConfig = serviceReclaimConfig
+				general.Infof("[DEBUG]LoadConfig get serviceReclaimConfig: %+v", reclaimConfig)
 			}
 		}
 		return
@@ -354,6 +360,7 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 	// get cgroup config
 	if cgroupReclaimConfig, exist := r.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.CgroupConfig[r.cgroupPath]; exist {
 		reclaimConfig = cgroupReclaimConfig
+		general.Infof("[DEBUG]LoadConfig get cgroupReclaimConfig: %+v", reclaimConfig)
 	}
 
 	// load reclaim config
@@ -366,6 +373,7 @@ func (r *userWatermarkReclaimer) loadConfig(config *userwatermark.ReclaimConfigD
 			r.containerInfo.PodName, r.containerInfo.ContainerName, r.cgroupPath, r.containerInfo.QoSLevel)
 		return
 	}
+	general.Infof("[DEBUG]loadConfig get config: %+v", config)
 
 	r.reclaimConf.EnableMemoryReclaim = config.EnableMemoryReclaim
 	r.reclaimConf.ReclaimInterval = config.ReclaimInterval

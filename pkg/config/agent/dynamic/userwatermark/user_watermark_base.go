@@ -19,6 +19,8 @@ package userwatermark
 import (
 	"time"
 
+	"github.com/kubewharf/katalyst-core/pkg/util/general"
+
 	"github.com/kubewharf/katalyst-api/pkg/apis/config/v1alpha1"
 	"github.com/kubewharf/katalyst-api/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/crd"
@@ -255,4 +257,10 @@ func (c *UserWatermarkConfiguration) ApplyConfiguration(conf *crd.DynamicConfigC
 			}
 		}
 	}
+	general.Infof("[DEBUG]ApplyConfiguration get dynamic config: %+v", conf.UserWatermarkConfiguration.Spec.Config)
+	general.Infof("[DEBUG]ApplyConfiguration get config: %+v", c)
+	general.Infof("[DEBUG]ApplyConfiguration get default config: %+v", c.DefaultConfig)
+	general.Infof("[DEBUG]ApplyConfiguration get service config: %+v", c.ServiceConfig)
+	general.Infof("[DEBUG]ApplyConfiguration get qos level config: %+v", c.QoSLevelConfig)
+	general.Infof("[DEBUG]ApplyConfiguration get cgroup config: %+v", c.CgroupConfig)
 }
