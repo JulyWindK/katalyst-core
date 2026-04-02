@@ -24,8 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/wait"
-
 	katalystapiconsts "github.com/kubewharf/katalyst-api/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/agent/sysadvisor/plugin/qosaware/resource/helper"
 	"github.com/kubewharf/katalyst-core/pkg/agent/sysadvisor/types"
@@ -122,7 +120,30 @@ func NewUserWatermarkReclaimer(instanceInfo ReclaimInstance, metaServer *metaser
 }
 
 func (r *userWatermarkReclaimer) Run() {
-	_ = wait.PollUntil(time.Duration(r.reclaimConf.ReclaimInterval)*time.Second, r.run, r.stopCh)
+	general.Infof("UserWatermarkReclaimer started for cgroup %s", r.cgroupPath)
+	for {
+		// 1. Execute the run function
+		done, err := r.run()
+		if done || err != nil {
+			general.Infof("UserWatermarkReclaimer run completed with done=%v, err=%v", done, err)
+			return
+		}
+
+		// 2. Get the latest reclaim interval
+		interval := r.reclaimConf.ReclaimInterval
+		if interval <= 0 {
+			interval = userwatermark.DefaultReclaimInterval
+		}
+
+		// 3. Wait for the next interval or until stop signal
+		select {
+		case <-time.After(time.Duration(interval) * time.Second):
+			// Continue to next iteration
+		case <-r.stopCh:
+			general.Infof("UserWatermarkReclaimer stopped for cgroup %s", r.cgroupPath)
+			return
+		}
+	}
 }
 
 func (r *userWatermarkReclaimer) Stop() {

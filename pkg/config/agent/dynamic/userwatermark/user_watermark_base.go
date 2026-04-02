@@ -26,6 +26,7 @@ import (
 
 const (
 	DefaultReconcileInterval      = 1
+	DefaultReclaimInterval        = 3
 	DefaultBackoffDuration        = 3 * time.Second
 	DefaultSingleReclaimSize      = 1 * 1024 * 1024 * 1024
 	DefaultScaleFactor            = 100

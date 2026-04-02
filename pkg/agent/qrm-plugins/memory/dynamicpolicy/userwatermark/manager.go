@@ -20,12 +20,11 @@ import (
 	"context"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/wait"
-
 	katalystapiconsts "github.com/kubewharf/katalyst-api/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/agent/sysadvisor/plugin/qosaware/resource/helper"
 	"github.com/kubewharf/katalyst-core/pkg/agent/sysadvisor/types"
 	dynamicconfig "github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic"
+	"github.com/kubewharf/katalyst-core/pkg/config/agent/dynamic/userwatermark"
 	"github.com/kubewharf/katalyst-core/pkg/config/generic"
 	katalystcoreconsts "github.com/kubewharf/katalyst-core/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/metaserver"
@@ -64,7 +63,26 @@ func NewUserWatermarkReclaimManager(qosConfig *generic.QoSConfiguration, dynamic
 
 // Run starts the UserWatermarkReclaimManager periodically.
 func (m *UserWatermarkReclaimManager) Run(stopCh chan struct{}) {
-	wait.Until(m.reconcile, time.Duration(m.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.ReconcileInterval)*time.Second, stopCh)
+	general.Infof("UserWatermarkReclaimManager started")
+	for {
+		// 1. Get the latest reconcile interval from dynamic configuration
+		interval := m.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.ReconcileInterval
+		if interval <= 0 {
+			interval = userwatermark.DefaultReconcileInterval
+		}
+
+		// 2. Execute reconcile function
+		m.reconcile()
+
+		// 3. Wait for the next interval or until stop signal
+		select {
+		case <-time.After(time.Duration(interval) * time.Second):
+			// Continue to next iteration
+		case <-stopCh:
+			general.Infof("UserWatermarkReclaimManager stopped")
+			return
+		}
+	}
 }
 
 func (m *UserWatermarkReclaimManager) reconcile() {
