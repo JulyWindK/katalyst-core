@@ -78,6 +78,7 @@ type Reclaimer interface {
 	Stop()
 	LoadConfig()
 	GetConfig() *userwatermark.ReclaimConfigDetail
+	UpdateInstanceInfo(ReclaimInstance)
 }
 
 type userWatermarkReclaimer struct {
@@ -219,12 +220,16 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 	if err != nil || !result.Success {
 		r.failedCount++
 
+		r.mutex.RLock()
 		general.Warningf("Memory reclaim failed, podName:%v containerName:%v cgroupPath: %s, result: %+v", r.containerInfo.PodName, r.containerInfo.ContainerName, r.cgroupPath, result)
+		r.mutex.RUnlock()
 		time.Sleep(r.reclaimConf.BackoffDuration)
 	} else {
 		r.failedCount = 0
 	}
 
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
 	general.Infof("Object %v memory watermark reclaimer result: %+v, failedCount: %v", r.cgroupPath, result, r.failedCount)
 	r.emitMetric(MetricNameUserWatermarkReclaimResult, 1, metrics.MetricTypeNameRaw,
 		metrics.MetricTag{Key: MetricTagKeySuccess, Val: fmt.Sprintf("%v", result.Success)},
@@ -243,6 +248,9 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 // It returns a ReclaimResult indicating the success or failure of the reclamation operation,
 // along with an error if any occurred.
 func (r *userWatermarkReclaimer) Reclaim(reclaimInfo *ReclaimInfo) (ReclaimResult, error) {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
 	result := ReclaimResult{}
 	general.InfofV(5, "Object %v memory watermark reclaimer start to reclaim, reclaimInfo: %+v", r.cgroupPath, reclaimInfo)
 
@@ -325,6 +333,9 @@ func (r *userWatermarkReclaimer) GetConfig() *userwatermark.ReclaimConfigDetail 
 }
 
 func (r *userWatermarkReclaimer) LoadConfig() {
+	r.mutex.RLock()
+	defer r.mutex.RUnlock()
+
 	userWatermarkDynamicConf := r.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration
 	if userWatermarkDynamicConf == nil {
 		general.Warningf("Get user watermark dynamic conf is nil")
@@ -415,6 +426,15 @@ func (r *userWatermarkReclaimer) loadConfig(config *userwatermark.ReclaimConfigD
 
 	general.InfofV(5, "Load config detail success, podName:%v containerName:%v cgroupPath: %s conf:%+v",
 		r.containerInfo.PodName, r.containerInfo.ContainerName, r.cgroupPath, r.reclaimConf)
+}
+
+func (r *userWatermarkReclaimer) UpdateInstanceInfo(instance ReclaimInstance) {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+
+	if instance.ContainerInfo != nil {
+		r.containerInfo = instance.ContainerInfo
+	}
 }
 
 func (r *userWatermarkReclaimer) getMemoryReclaimStats() (ReclaimStats, error) {

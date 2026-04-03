@@ -146,10 +146,12 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 
 			podContainerName := native.GeneratePodContainerName(containerInfo.PodName, containerInfo.ContainerName)
 			containerNamesMap[podContainerName] = true
-			_, exist := m.containerReclaimer[podContainerName]
+			reclaimer, exist := m.containerReclaimer[podContainerName]
 			if !exist {
 				m.containerReclaimer[podContainerName] = NewUserWatermarkReclaimer(instanceInfo, m.metaServer, m.emitter, m.dynamicConf)
 				general.InfofV(5, "Create UserWatermarkReclaimer for pod container name: %v", podContainerName)
+			} else {
+				reclaimer.UpdateInstanceInfo(instanceInfo)
 			}
 		}
 	}
