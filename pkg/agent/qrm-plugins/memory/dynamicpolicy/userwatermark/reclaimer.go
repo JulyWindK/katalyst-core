@@ -344,14 +344,14 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 
 	// get default config
 	reclaimConfig := userwatermark.NewReclaimConfigDetail(userWatermarkDynamicConf.DefaultConfig)
-	general.Infof("[DEBUG]LoadConfig get defaultConfig: %+v", reclaimConfig)
+	general.InfofV(5, "LoadConfig get object %v defaultConfig: %+v", r.cgroupPath, reclaimConfig)
 
 	if r.containerInfo != nil && r.containerInfo.PodUID != "" {
 		// get QoS level config
 		if helper.IsValidQosLevel(r.containerInfo.QoSLevel) {
 			if qosReclaimConfig, exist := userWatermarkDynamicConf.QoSLevelConfig[katalystapiconsts.QoSLevel(r.containerInfo.QoSLevel)]; exist {
 				reclaimConfig = qosReclaimConfig
-				general.Infof("[DEBUG]LoadConfig get qosReclaimConfig: %+v", reclaimConfig)
+				general.InfofV(5, "LoadConfig get object %v qosReclaimConfig: %+v", r.cgroupPath, reclaimConfig)
 			}
 		}
 
@@ -359,7 +359,7 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 		if serviceName, exist := r.containerInfo.Labels[r.serviceLabel]; exist {
 			if serviceReclaimConfig, exist := userWatermarkDynamicConf.ServiceConfig[serviceName]; exist {
 				reclaimConfig = serviceReclaimConfig
-				general.Infof("[DEBUG]LoadConfig get serviceReclaimConfig: %+v", reclaimConfig)
+				general.InfofV(5, "LoadConfig get object %v serviceReclaimConfig: %+v", r.cgroupPath, reclaimConfig)
 			}
 		}
 	}
@@ -367,7 +367,7 @@ func (r *userWatermarkReclaimer) LoadConfig() {
 	// get cgroup config
 	if cgroupReclaimConfig, exist := r.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.CgroupConfig[r.cgroupPath]; exist {
 		reclaimConfig = cgroupReclaimConfig
-		general.Infof("[DEBUG]LoadConfig get cgroupReclaimConfig: %+v", reclaimConfig)
+		general.InfofV(5, "LoadConfig get object %v cgroupReclaimConfig: %+v", r.cgroupPath, reclaimConfig)
 	}
 
 	// load reclaim config
