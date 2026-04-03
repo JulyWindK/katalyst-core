@@ -192,8 +192,8 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 
 	// 3. determine if memory reclamation is necessary
 	free := memLimit - memUsage
-	if free >= highWatermark {
-		general.Warningf("Memory watermark reclaimer skip cgroup %s due to free(%d) >= highWatermark(%d)", r.cgroupPath, free, highWatermark)
+	if free >= lowWatermark {
+		general.Warningf("Memory watermark reclaimer skip cgroup %s due to free(%d) >= lowWatermark(%d)", r.cgroupPath, free, lowWatermark)
 		return false, nil
 	}
 
@@ -225,6 +225,7 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 		r.failedCount = 0
 	}
 
+	general.Infof("Object %v memory watermark reclaimer result: %+v, failedCount: %v", r.cgroupPath, result, r.failedCount)
 	r.emitMetric(MetricNameUserWatermarkReclaimResult, 1, metrics.MetricTypeNameRaw,
 		metrics.MetricTag{Key: MetricTagKeySuccess, Val: fmt.Sprintf("%v", result.Success)},
 		metrics.MetricTag{Key: MetricTagKeyReason, Val: result.Reason},
