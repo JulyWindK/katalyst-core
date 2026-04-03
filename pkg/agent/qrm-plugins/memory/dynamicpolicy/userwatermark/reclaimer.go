@@ -257,7 +257,7 @@ func (r *userWatermarkReclaimer) Reclaim(reclaimInfo *ReclaimInfo) (ReclaimResul
 		return result, fmt.Errorf(result.Reason)
 	}
 
-	var reclaimed uint64
+	var reclaimed, free uint64
 	remaining := reclaimInfo.ReclaimTarget
 	start := time.Now()
 
@@ -278,7 +278,7 @@ func (r *userWatermarkReclaimer) Reclaim(reclaimInfo *ReclaimInfo) (ReclaimResul
 			result.Reason = fmt.Sprintf("Get cgroup(%s) memory limit and usage failed, err: %v", r.cgroupPath, err)
 			return result, fmt.Errorf(result.Reason)
 		}
-		free := memLimit - memUsage
+		free = memLimit - memUsage
 		if reachedHighWatermark(free, reclaimInfo.HighWaterMark) {
 			break
 		}
@@ -314,7 +314,7 @@ func (r *userWatermarkReclaimer) Reclaim(reclaimInfo *ReclaimInfo) (ReclaimResul
 		metrics.MetricTag{Key: MetricTagKeySuccess, Val: fmt.Sprintf("%v", result.Success)})
 	general.InfoS("Memory watermark reclaim finished", "podName", r.containerInfo.PodName, "containerName",
 		r.containerInfo.ContainerName, "cgroupPath", r.cgroupPath, "duration", duration, "reclaimedBytes", reclaimed,
-		"reclaimTarget", reclaimInfo.ReclaimTarget, "highWatermark", reclaimInfo.HighWaterMark)
+		"reclaimTarget", reclaimInfo.ReclaimTarget, "highWatermark", reclaimInfo.HighWaterMark, "currentFree(Bytes)", free)
 
 	return result, nil
 }
