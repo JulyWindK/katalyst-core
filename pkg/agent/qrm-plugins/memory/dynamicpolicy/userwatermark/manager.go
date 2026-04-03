@@ -95,9 +95,6 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 	general.InfofV(5, "UserWatermarkReclaimManager start to reconcile, config: %+v", m.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration)
 	_ = m.emitter.StoreInt64(MetricNameUserWatermarkReclaimEnabled, 1, metrics.MetricTypeNameRaw)
 
-	general.Infof("[DEBUG]UserWatermarkReclaimManager config: %+v", m.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration)
-	general.Infof("[DEBUG]start reconcile manager containerReclaimer: %v", m.containerReclaimer)
-
 	containerNamesMap := make(map[katalystcoreconsts.PodContainerName]bool)
 	podList, err := m.metaServer.GetPodList(context.Background(), native.PodIsActive)
 	if err != nil {
@@ -156,8 +153,6 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 			}
 		}
 	}
-
-	general.Infof("[DEBUG]reconcile manager containerNamesMap: %v", containerNamesMap)
 
 	// update tmo config for specified cgroup paths
 	for cgpath := range m.dynamicConf.GetDynamicConfiguration().UserWatermarkConfiguration.CgroupConfig {
@@ -219,5 +214,4 @@ func (m *UserWatermarkReclaimManager) reconcile() {
 	}
 
 	general.InfofV(5, "current containerReclaimer: %+v, cgroupPathReclaimer: %+v", m.containerReclaimer, m.cgroupPathReclaimer)
-	general.Infof("[DEBUG]end reconcile manager containerReclaimer: %v", m.containerReclaimer)
 }

@@ -158,7 +158,6 @@ func (r *userWatermarkReclaimer) Stop() {
 func (r *userWatermarkReclaimer) run() (done bool, err error) {
 	// 1. load the latest configuration
 	r.LoadConfig()
-	general.Infof("[DEBUG] Load config: %+v", r.reclaimConf)
 	r.feedbackManager.UpdateFeedbackPolicy(r.reclaimConf.FeedbackPolicy)
 
 	if !r.reclaimConf.EnableMemoryReclaim {
@@ -178,7 +177,6 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 	// get memory limit and usage
 	memLimit, memUsage, err := GetCGroupMemoryLimitAndUsage(r.cgroupPath)
 	general.InfofV(5, "Get cgroup %v memory limit and usage result: limit=%v, usage=%v, err: %v", r.cgroupPath, memLimit, memUsage, err)
-	general.Infof("[DEBUG] GetCGroupMemoryLimitAndUsage %v result: limit=%v, usage=%v, err: %v", r.cgroupPath, memLimit, memUsage, err)
 	if err != nil {
 		general.Warningf("Get cgroup(%s) memory limit and usage failed, err: %v", r.cgroupPath, err)
 		return false, nil
@@ -191,7 +189,6 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 	mwc := NewMemoryWatermarkCalculator(r.cgroupPath, r.reclaimConf.ScaleFactor, r.reclaimConf.SingleReclaimFactor, r.reclaimConf.SingleReclaimSize)
 	lowWatermark, highWatermark := mwc.GetWatermark(memLimit)
 	general.InfofV(5, "Get object %v watermark, lowWatermark=%v, highWatermark=%v", r.cgroupPath, lowWatermark, highWatermark)
-	general.Infof("[DEBUG] GetWatermark %v result: lowWatermark=%v, highWatermark=%v", r.cgroupPath, lowWatermark, highWatermark)
 
 	// 3. determine if memory reclamation is necessary
 	free := memLimit - memUsage
@@ -216,7 +213,6 @@ func (r *userWatermarkReclaimer) run() (done bool, err error) {
 		ReclaimTarget:    reclaimTarget,
 		SingleReclaimMax: singleReclaimMax,
 	}
-	general.Infof("[DEBUG] ReclaimInfo %v result: %+v", r.cgroupPath, reclaimInfo)
 
 	// 4. perform memory reclamation and hibernate to a certain extent depending on the reclaim state
 	result, err := r.Reclaim(reclaimInfo)
@@ -373,7 +369,6 @@ func (r *userWatermarkReclaimer) loadConfig(config *userwatermark.ReclaimConfigD
 		return
 	}
 	general.InfofV(5, "loadConfig get config: %+v", config)
-	general.Infof("[DEBUG]loadConfig get config: %+v", config)
 
 	r.reclaimConf.EnableMemoryReclaim = config.EnableMemoryReclaim
 	if config.ReclaimInterval <= 0 {
