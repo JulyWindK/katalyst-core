@@ -19,7 +19,6 @@ package userwatermark
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -36,8 +35,6 @@ import (
 	cgroupmgr "github.com/kubewharf/katalyst-core/pkg/util/cgroup/manager"
 	"github.com/kubewharf/katalyst-core/pkg/util/machine"
 )
-
-var reclaimMutex = sync.Mutex{}
 
 func newTestDynamicConf() *dynamicconfig.DynamicAgentConfiguration {
 	// NewDynamicAgentConfiguration already initializes a non-nil
@@ -208,8 +205,8 @@ func TestGetContainerCgroupPath_SuccessAndError(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		reclaimMutex.Lock()
-		defer reclaimMutex.Unlock()
+		mockeyMutex.Lock()
+		defer mockeyMutex.Unlock()
 
 		defer mockey.UnPatchAll()
 
@@ -223,8 +220,8 @@ func TestGetContainerCgroupPath_SuccessAndError(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		t.Parallel()
-		reclaimMutex.Lock()
-		defer reclaimMutex.Unlock()
+		mockeyMutex.Lock()
+		defer mockeyMutex.Unlock()
 
 		defer mockey.UnPatchAll()
 
@@ -242,8 +239,8 @@ func TestGetCGroupMemoryLimitAndUsage(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		reclaimMutex.Lock()
-		defer reclaimMutex.Unlock()
+		mockeyMutex.Lock()
+		defer mockeyMutex.Unlock()
 
 		defer mockey.UnPatchAll()
 
@@ -258,8 +255,8 @@ func TestGetCGroupMemoryLimitAndUsage(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		t.Parallel()
-		reclaimMutex.Lock()
-		defer reclaimMutex.Unlock()
+		mockeyMutex.Lock()
+		defer mockeyMutex.Unlock()
 
 		defer mockey.UnPatchAll()
 
@@ -273,8 +270,8 @@ func TestGetCGroupMemoryLimitAndUsage(t *testing.T) {
 
 	t.Run("nilStats", func(t *testing.T) {
 		t.Parallel()
-		reclaimMutex.Lock()
-		defer reclaimMutex.Unlock()
+		mockeyMutex.Lock()
+		defer mockeyMutex.Unlock()
 
 		defer mockey.UnPatchAll()
 
@@ -292,8 +289,8 @@ func TestGetCGroupMemoryStats(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		reclaimMutex.Lock()
-		defer reclaimMutex.Unlock()
+		mockeyMutex.Lock()
+		defer mockeyMutex.Unlock()
 
 		defer mockey.UnPatchAll()
 
@@ -321,8 +318,8 @@ func TestGetCGroupMemoryStats(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		t.Parallel()
-		reclaimMutex.Lock()
-		defer reclaimMutex.Unlock()
+		mockeyMutex.Lock()
+		defer mockeyMutex.Unlock()
 
 		defer mockey.UnPatchAll()
 
@@ -350,12 +347,8 @@ func TestReachedHighWatermark(t *testing.T) {
 
 func TestUserWatermarkReclaimer_ReclaimSuccess(t *testing.T) {
 	t.Parallel()
-	calculatorMutex.Lock()
-	defer calculatorMutex.Unlock()
-	managerMutex.Lock()
-	defer managerMutex.Unlock()
-	reclaimMutex.Lock()
-	defer reclaimMutex.Unlock()
+	mockeyMutex.Lock()
+	defer mockeyMutex.Unlock()
 
 	defer mockey.UnPatchAll()
 
@@ -430,8 +423,8 @@ func TestUserWatermarkReclaimer_ReclaimSuccess(t *testing.T) {
 
 func TestUserWatermarkReclaimer_ReclaimGetStatsFailed(t *testing.T) {
 	t.Parallel()
-	reclaimMutex.Lock()
-	defer reclaimMutex.Unlock()
+	mockeyMutex.Lock()
+	defer mockeyMutex.Unlock()
 
 	defer mockey.UnPatchAll()
 

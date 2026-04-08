@@ -39,7 +39,9 @@ import (
 	"github.com/kubewharf/katalyst-core/pkg/util/native"
 )
 
-var managerMutex sync.Mutex
+// mockey maintains a process-wide patch registry; Patch/UnPatchAll is not race-safe.
+// Guard all mockey usage in this package even when tests use t.Parallel().
+var mockeyMutex sync.Mutex
 
 func generateUserWatermarkTestMetaServer(pods []*v1.Pod) *metaserver.MetaServer {
 	podFetcher := &metapod.PodFetcherStub{PodList: pods}
@@ -87,8 +89,8 @@ func TestUserWatermarkReclaimManager_Reconcile_Disabled(t *testing.T) {
 
 func TestUserWatermarkReclaimManager_Reconcile_CreateReclaimers(t *testing.T) {
 	t.Parallel()
-	managerMutex.Lock()
-	defer managerMutex.Unlock()
+	mockeyMutex.Lock()
+	defer mockeyMutex.Unlock()
 
 	defer mockey.UnPatchAll()
 	qosConfig := generic.NewQoSConfiguration()
@@ -151,8 +153,8 @@ func TestUserWatermarkReclaimManager_Reconcile_CreateReclaimers(t *testing.T) {
 
 func TestUserWatermarkReclaimManager_Reconcile_GetPodListError(t *testing.T) {
 	t.Parallel()
-	managerMutex.Lock()
-	defer managerMutex.Unlock()
+	mockeyMutex.Lock()
+	defer mockeyMutex.Unlock()
 
 	defer mockey.UnPatchAll()
 

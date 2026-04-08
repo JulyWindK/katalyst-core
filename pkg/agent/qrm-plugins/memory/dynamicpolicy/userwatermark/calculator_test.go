@@ -17,7 +17,6 @@ limitations under the License.
 package userwatermark
 
 import (
-	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,8 +31,6 @@ const (
 	TestSingleReclaimFactor  = 0.25
 	TestSingleReclaimSize    = 4096
 )
-
-var calculatorMutex sync.Mutex
 
 func NewDefaultMemoryWatermarkCalculator() *WatermarkCalculator {
 	return NewMemoryWatermarkCalculator(TestCGroupPath, TestWatermarkScaleFactor, TestSingleReclaimFactor, TestSingleReclaimSize)
