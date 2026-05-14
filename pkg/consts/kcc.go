@@ -49,4 +49,5 @@ const (
 const (
 	KCCTargetConfFieldNameCollisionCount     = "collisionCount"
 	KCCTargetConfFieldNameObservedGeneration = "observedGeneration"
+	KCCTargetConfFieldNameRolloutStartedAt   = "rolloutStartedAt"
 )

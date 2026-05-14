@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -53,7 +54,124 @@ func IsCNCUpdated(
 	return false
 }
 
-// ApplyKCCTargetConfigToCNC sets the hash value for the given configurations in CNC
+type MatchKind string
+
+const (
+	MatchKindNone      MatchKind = "None"
+	MatchKindNodeNames MatchKind = "NodeNames"
+	MatchKindSelector  MatchKind = "Selector"
+	MatchKindGlobal    MatchKind = "Global"
+	MatchKindAmbiguous MatchKind = "Ambiguous"
+	MatchKindError     MatchKind = "Error"
+)
+
+type CNCMatchSnapshot struct {
+	TargetName      string
+	TargetNamespace string
+	MatchKind       MatchKind
+	Priority        int32
+	PartialCanary   bool
+	ConfigHash      string
+	TargetHash      string
+	Paused          bool
+}
+
+func (s CNCMatchSnapshot) IsPartialCanary() bool {
+	return s.PartialCanary
+}
+
+func GetCNCMatchSnapshot(
+	cnc *apisv1alpha1.CustomNodeConfig,
+	kccTargetList []util.KCCTargetResource,
+) CNCMatchSnapshot {
+	matchedList, kind, err := findMatchedKCCTargetListWithKindForNode(cnc, kccTargetList)
+	if err != nil {
+		return CNCMatchSnapshot{MatchKind: MatchKindError}
+	}
+
+	if len(matchedList) == 0 {
+		return CNCMatchSnapshot{MatchKind: MatchKindNone}
+	}
+
+	if len(matchedList) > 1 {
+		sort.SliceStable(matchedList, func(i, j int) bool {
+			return matchedList[i].GetPriority() > matchedList[j].GetPriority()
+		})
+
+		if matchedList[0].GetPriority() == matchedList[1].GetPriority() {
+			return CNCMatchSnapshot{MatchKind: MatchKindAmbiguous}
+		}
+	}
+
+	target := matchedList[0]
+	snapshot := CNCMatchSnapshot{
+		TargetName:      target.GetName(),
+		TargetNamespace: target.GetNamespace(),
+		MatchKind:       kind,
+		Priority:        target.GetPriority(),
+		Paused:          target.GetPaused(),
+	}
+
+	hash, _ := target.GenerateConfigHash()
+	snapshot.ConfigHash = hash
+
+	targetHash, _ := target.GenerateTargetSpecHash()
+	snapshot.TargetHash = targetHash
+
+	if canary := target.GetCanary(); canary != nil {
+		if canary.Type == intstr.String && canary.StrVal == "100%" {
+			snapshot.PartialCanary = false
+		} else {
+			snapshot.PartialCanary = true
+		}
+	}
+
+	return snapshot
+}
+
+func findMatchedKCCTargetListWithKindForNode(
+	cnc *apisv1alpha1.CustomNodeConfig,
+	kccTargetList []util.KCCTargetResource,
+) ([]util.KCCTargetResource, MatchKind, error) {
+	var matchedNodeNameConfigs, matchedLabelSelectorConfigs, matchedGlobalConfigs []util.KCCTargetResource
+	for _, targetResource := range kccTargetList {
+		nodeNames := targetResource.GetNodeNames()
+		labelSelector := targetResource.GetLabelSelector()
+		if len(nodeNames) > 0 {
+			if sets.NewString(nodeNames...).Has(cnc.GetName()) {
+				matchedNodeNameConfigs = append(matchedNodeNameConfigs, targetResource)
+			}
+			continue
+		}
+
+		if labelSelector != "" {
+			selector, err := labels.Parse(labelSelector)
+			if err != nil {
+				return nil, MatchKindError, err
+			}
+
+			cncLabels := cnc.GetLabels()
+			if selector.Matches(labels.Set(cncLabels)) {
+				matchedLabelSelectorConfigs = append(matchedLabelSelectorConfigs, targetResource)
+			}
+			continue
+		}
+
+		matchedGlobalConfigs = append(matchedGlobalConfigs, targetResource)
+	}
+
+	if len(matchedNodeNameConfigs) > 0 {
+		return matchedNodeNameConfigs, MatchKindNodeNames, nil
+	} else if len(matchedLabelSelectorConfigs) > 0 {
+		return matchedLabelSelectorConfigs, MatchKindSelector, nil
+	} else if len(matchedGlobalConfigs) > 0 {
+		return matchedGlobalConfigs, MatchKindGlobal, nil
+	}
+
+	return nil, MatchKindNone, nil
+}
+
+// RemoveKCCTargetConfigFromCNC sets the hash value for the given configurations in CNC
 func ApplyKCCTargetConfigToCNC(
 	cnc *apisv1alpha1.CustomNodeConfig,
 	gvr metav1.GroupVersionResource,
@@ -142,9 +260,7 @@ func findMatchedKCCTargetListForNode(
 		if labelSelector != "" {
 			selector, err := labels.Parse(labelSelector)
 			if err != nil {
-				// if some label selector config parse failed, we make all label selector config invalid
-				matchedLabelSelectorConfigs = append(matchedLabelSelectorConfigs, targetResource)
-				continue
+				return nil, fmt.Errorf("parse label selector failed for target %s: %v", targetResource.GetName(), err)
 			}
 
 			cncLabels := cnc.GetLabels()

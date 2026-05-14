@@ -126,6 +126,10 @@ func (n *KCCTargetResourceNPD) GetGenericStatus() configv1alpha1.GenericConfigSt
 
 func (n *KCCTargetResourceNPD) SetGenericStatus(status configv1alpha1.GenericConfigStatus) {}
 
+func (n *KCCTargetResourceNPD) GetRolloutStartedAt() *metav1.Time { return nil }
+
+func (n *KCCTargetResourceNPD) SetRolloutStartedAt(startedAt *metav1.Time) {}
+
 func (n *KCCTargetResourceNPD) GetObservedGeneration() int64 { return 0 }
 
 func (n *KCCTargetResourceNPD) SetObservedGeneration(generation int64) {}
@@ -157,6 +161,30 @@ func (n *KCCTargetResourceNPD) DeepCopy() KCCTargetResource {
 	return &KCCTargetResourceNPD{
 		n.Unstructured.DeepCopy(),
 	}
+}
+
+func (n *KCCTargetResourceNPD) GenerateTargetSpecHash() (string, error) {
+	const npdConfigHashLength = 12
+	data := struct {
+		LabelSelector string              `json:"labelSelector"`
+		Priority      int32               `json:"priority"`
+		NodeNames     []string            `json:"nodeNames"`
+		Canary        *intstr.IntOrString `json:"canary"`
+		Paused        bool                `json:"paused"`
+	}{
+		LabelSelector: n.GetLabelSelector(),
+		Priority:      n.GetPriority(),
+		NodeNames:     n.GetNodeNames(),
+		Canary:        n.GetCanary(),
+		Paused:        n.GetPaused(),
+	}
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	return general.GenerateHash(b, npdConfigHashLength), nil
 }
 
 func (n *KCCTargetResourceNPD) GenerateConfigHash() (string, error) {

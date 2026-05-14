@@ -23,6 +23,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -34,6 +35,7 @@ import (
 	configinformers "github.com/kubewharf/katalyst-api/pkg/client/informers/externalversions/config/v1alpha1"
 	kcclient "github.com/kubewharf/katalyst-core/pkg/client"
 	"github.com/kubewharf/katalyst-core/pkg/config/controller"
+	"github.com/kubewharf/katalyst-core/pkg/util"
 	"github.com/kubewharf/katalyst-core/pkg/util/native"
 )
 
@@ -138,6 +140,10 @@ func (k *KatalystCustomConfigTargetHandler) GetTargetAccessorByGVR(gvr metav1.Gr
 		return accessor, true
 	}
 	return nil, false
+}
+
+func (k *KatalystCustomConfigTargetHandler) GetKCCTargetResource(gvr metav1.GroupVersionResource, obj *unstructured.Unstructured) (util.KCCTargetResource, error) {
+	return util.ToKCCTargetResource(obj.DeepCopy()), nil
 }
 
 // RangeGVRTargetAccessor is used to walk through all accessors and perform the given function

@@ -51,9 +51,12 @@ type KCCTargetResource interface {
 	SetGenericStatus(status v1alpha1.GenericConfigStatus)
 	GetObservedGeneration() int64
 	SetObservedGeneration(generation int64)
+	GetRolloutStartedAt() *metav1.Time
+	SetRolloutStartedAt(startedAt *metav1.Time)
 	GetCollisionCount() *int32
 	SetCollisionCount(count *int32)
 	GenerateConfigHash() (string, error)
+	GenerateTargetSpecHash() (string, error)
 	DeepCopy() KCCTargetResource
 	CheckValid() bool
 	CheckExpired(now time.Time) bool
@@ -179,6 +182,26 @@ func (g KCCTargetResourceGeneral) SetObservedGeneration(generation int64) {
 	_ = unstructured.SetNestedField(g.Object, generation, consts.ObjectFieldNameStatus, consts.KCCTargetConfFieldNameObservedGeneration)
 }
 
+func (g KCCTargetResourceGeneral) GetRolloutStartedAt() *metav1.Time {
+	val, _, _ := unstructured.NestedString(g.Object, consts.ObjectFieldNameStatus, consts.KCCTargetConfFieldNameRolloutStartedAt)
+	if val == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, val)
+	if err != nil {
+		return nil
+	}
+	return &metav1.Time{Time: t}
+}
+
+func (g KCCTargetResourceGeneral) SetRolloutStartedAt(startedAt *metav1.Time) {
+	if startedAt == nil {
+		unstructured.RemoveNestedField(g.Object, consts.ObjectFieldNameStatus, consts.KCCTargetConfFieldNameRolloutStartedAt)
+	} else {
+		_ = unstructured.SetNestedField(g.Object, startedAt.Format(time.RFC3339), consts.ObjectFieldNameStatus, consts.KCCTargetConfFieldNameRolloutStartedAt)
+	}
+}
+
 func (g KCCTargetResourceGeneral) GetCollisionCount() *int32 {
 	val, _, _ := unstructured.NestedFieldCopy(g.Object, consts.ObjectFieldNameStatus, consts.KCCTargetConfFieldNameCollisionCount)
 	if val == nil {
@@ -220,6 +243,9 @@ func (g KCCTargetResourceGeneral) GenerateConfigHash() (string, error) {
 
 		// add status field to consider
 		for k, v := range status.(map[string]interface{}) {
+			if k == consts.KCCTargetConfFieldNameRolloutStartedAt {
+				continue
+			}
 			val.(map[string]interface{})[fmt.Sprintf("%s/%s", consts.ObjectFieldNameStatus, k)] = v
 		}
 	}
@@ -230,6 +256,29 @@ func (g KCCTargetResourceGeneral) GenerateConfigHash() (string, error) {
 	}
 
 	return general.GenerateHash(data, kccConfigHashLength), nil
+}
+
+func (g KCCTargetResourceGeneral) GenerateTargetSpecHash() (string, error) {
+	data := struct {
+		LabelSelector string              `json:"labelSelector"`
+		Priority      int32               `json:"priority"`
+		NodeNames     []string            `json:"nodeNames"`
+		Canary        *intstr.IntOrString `json:"canary"`
+		Paused        bool                `json:"paused"`
+	}{
+		LabelSelector: g.GetLabelSelector(),
+		Priority:      g.GetPriority(),
+		NodeNames:     g.GetNodeNames(),
+		Canary:        g.GetCanary(),
+		Paused:        g.GetPaused(),
+	}
+
+	b, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	return general.GenerateHash(b, kccConfigHashLength), nil
 }
 
 func (g KCCTargetResourceGeneral) DeepCopy() KCCTargetResource {

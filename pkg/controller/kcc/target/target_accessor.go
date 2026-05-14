@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -61,9 +62,10 @@ type KatalystCustomConfigTargetAccessor interface {
 
 type DummyKatalystCustomConfigTargetAccessor struct{}
 
-func (d DummyKatalystCustomConfigTargetAccessor) Start()                               {}
-func (d DummyKatalystCustomConfigTargetAccessor) Stop()                                {}
-func (d DummyKatalystCustomConfigTargetAccessor) Enqueue(_ *unstructured.Unstructured) {}
+func (d DummyKatalystCustomConfigTargetAccessor) Start() {}
+func (d DummyKatalystCustomConfigTargetAccessor) Stop()  {}
+func (d DummyKatalystCustomConfigTargetAccessor) Enqueue(_ string, _ *unstructured.Unstructured) {
+}
 func (d DummyKatalystCustomConfigTargetAccessor) List(_ labels.Selector) ([]*unstructured.Unstructured, error) {
 	return nil, nil
 }
@@ -236,15 +238,25 @@ func (k *RealKatalystCustomConfigTargetAccessor) addTargetEventHandle(obj interf
 	k.enqueueTarget(t)
 }
 
-func (k *RealKatalystCustomConfigTargetAccessor) updateTargetEventHandle(_, new interface{}) {
-	t, ok := new.(*unstructured.Unstructured)
+func (k *RealKatalystCustomConfigTargetAccessor) updateTargetEventHandle(old, new interface{}) {
+	oldTarget, ok := old.(*unstructured.Unstructured)
+	if !ok {
+		klog.Errorf("cannot convert old obj to *unstructured.Unstructured: %v", old)
+		return
+	}
+
+	newTarget, ok := new.(*unstructured.Unstructured)
 	if !ok {
 		klog.Errorf("cannot convert obj to *unstructured.Unstructured: %v", new)
 		return
 	}
 
-	klog.V(4).Infof("notice update of %s, %s", k.gvr, native.GenerateUniqObjectNameKey(t))
-	k.enqueueTarget(t)
+	if !targetNeedsReconcile(oldTarget, newTarget) {
+		return
+	}
+
+	klog.V(4).Infof("notice update of %s, %s", k.gvr, native.GenerateUniqObjectNameKey(newTarget))
+	k.enqueueTarget(newTarget)
 }
 
 func (k *RealKatalystCustomConfigTargetAccessor) deleteTargetEventHandle(obj interface{}) {
@@ -273,6 +285,26 @@ func (k *RealKatalystCustomConfigTargetAccessor) enqueueTarget(obj *unstructured
 	for _, info := range k.targetHandlerFuncWithSyncQueueMap {
 		info.syncQueue.Add(key)
 	}
+}
+
+func targetNeedsReconcile(oldTarget, newTarget *unstructured.Unstructured) bool {
+	if oldTarget == nil || newTarget == nil {
+		return true
+	}
+
+	oldSpec, _, err := unstructured.NestedFieldNoCopy(oldTarget.Object, "spec")
+	if err != nil {
+		return true
+	}
+	newSpec, _, err := unstructured.NestedFieldNoCopy(newTarget.Object, "spec")
+	if err != nil {
+		return true
+	}
+	if !apiequality.Semantic.DeepEqual(oldSpec, newSpec) {
+		return true
+	}
+
+	return !apiequality.Semantic.DeepEqual(oldTarget.GetDeletionTimestamp(), newTarget.GetDeletionTimestamp())
 }
 
 func (k *RealKatalystCustomConfigTargetAccessor) generateWorker(queue targetHandlerFuncWithSyncQueue) func() {
