@@ -36,7 +36,7 @@ require (
 	github.com/samber/lo v1.39.0
 	github.com/slok/kubewebhook v0.11.0
 	github.com/smartystreets/goconvey v1.6.4
-	github.com/spf13/afero v1.6.0
+	github.com/spf13/afero v1.9.2
 	github.com/spf13/cobra v1.6.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.3
@@ -49,10 +49,10 @@ require (
 	go.opentelemetry.io/otel/sdk/export/metric v0.20.0
 	go.opentelemetry.io/otel/sdk/metric v0.20.0
 	go.uber.org/atomic v1.9.0
-	golang.org/x/exp v0.0.0-20220303212507-bbda1eaf7a17
+	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 	golang.org/x/sys v0.29.0
-	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
-	gonum.org/v1/gonum v0.8.2
+	golang.org/x/time v0.3.0
+	gonum.org/v1/gonum v0.11.0
 	google.golang.org/grpc v1.57.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 	gopkg.in/yaml.v3 v3.0.1
