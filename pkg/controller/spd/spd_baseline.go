@@ -34,6 +34,15 @@ func (sc *SPDController) updateBaselineSentinel(spd *v1alpha1.ServiceProfileDesc
 		return nil
 	}
 
+	// the cluster-level default SPD has no TargetRef and no real workload behind it,
+	// so baseline-sentinel calculation (which requires resolving pods via workload
+	// lister) is not applicable. Clear stale annotations and return early.
+	if isDefaultSPD(sc.conf, spd) {
+		util.SetSPDBaselineSentinel(spd, nil)
+		util.SetSPDExtendedBaselineSentinel(spd, nil)
+		return nil
+	}
+
 	// delete baseline sentinel annotation if baseline percent or extended indicator not set
 	if spd.Spec.BaselinePercent == nil && len(spd.Spec.ExtendedIndicator) == 0 {
 		util.SetSPDBaselineSentinel(spd, nil)

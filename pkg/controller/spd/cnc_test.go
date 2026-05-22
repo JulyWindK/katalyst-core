@@ -45,9 +45,13 @@ func Test_cncCacheController_Run(t *testing.T) {
 		pod                    *v1.Pod
 		workload               *appsv1.StatefulSet
 		spd                    *apiworkload.ServiceProfileDescriptor
+		defaultSPD             *apiworkload.ServiceProfileDescriptor
 		cnc                    *configapi.CustomNodeConfig
 		spdPodLabelIndexerKeys []string
 		enableCNCCache         bool
+		enableDefaultSPDSync   bool
+		defaultSPDNamespace    string
+		defaultSPDName         string
 	}
 	tests := []struct {
 		name    string
@@ -353,6 +357,151 @@ func Test_cncCacheController_Run(t *testing.T) {
 				Status: configapi.CustomNodeConfigStatus{},
 			},
 		},
+		{
+			name: "default spd is propagated to dedicated DefaultServiceProfileConfig field",
+			fields: fields{
+				pod: &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pod1",
+						Namespace: "default",
+					},
+					Spec: v1.PodSpec{
+						NodeName: "node1",
+					},
+				},
+				workload: &appsv1.StatefulSet{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       "StatefulSet",
+						APIVersion: "apps/v1",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sts1",
+						Namespace: "default",
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"workload": "sts1"},
+						},
+						Template: v1.PodTemplateSpec{Spec: v1.PodSpec{}},
+					},
+				},
+				spd: &apiworkload.ServiceProfileDescriptor{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      "sts1",
+					},
+					Spec: apiworkload.ServiceProfileDescriptorSpec{
+						TargetRef: apis.CrossVersionObjectReference{
+							Kind:       stsGVK.Kind,
+							Name:       "sts1",
+							APIVersion: stsGVK.GroupVersion().String(),
+						},
+					},
+					Status: apiworkload.ServiceProfileDescriptorStatus{
+						AggMetrics: []apiworkload.AggPodMetrics{},
+					},
+				},
+				defaultSPD: &apiworkload.ServiceProfileDescriptor{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "katalyst-system",
+						Name:      "default-spd",
+					},
+					Spec: apiworkload.ServiceProfileDescriptorSpec{
+						BaselinePercent: pointer.Int32(50),
+					},
+					Status: apiworkload.ServiceProfileDescriptorStatus{
+						AggMetrics: []apiworkload.AggPodMetrics{},
+					},
+				},
+				cnc: &configapi.CustomNodeConfig{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node1",
+					},
+				},
+				enableCNCCache:       true,
+				enableDefaultSPDSync: true,
+				defaultSPDNamespace:  "katalyst-system",
+				defaultSPDName:       "default-spd",
+			},
+			wantCNC: &configapi.CustomNodeConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node1",
+				},
+				// default SPD should NOT pollute the regular ServiceProfileConfigList,
+				// and should appear in the dedicated DefaultServiceProfileConfig field.
+				Status: configapi.CustomNodeConfigStatus{
+					DefaultServiceProfileConfig: &configapi.TargetConfig{
+						ConfigNamespace: "katalyst-system",
+						ConfigName:      "default-spd",
+						Hash:            "763c6d92ed34",
+					},
+				},
+			},
+		},
+		{
+			name: "default spd is cleared from DefaultServiceProfileConfig when default sync disabled",
+			fields: fields{
+				pod: &v1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "pod1",
+						Namespace: "default",
+					},
+					Spec: v1.PodSpec{NodeName: "node1"},
+				},
+				workload: &appsv1.StatefulSet{
+					TypeMeta: metav1.TypeMeta{
+						Kind:       "StatefulSet",
+						APIVersion: "apps/v1",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "sts1",
+						Namespace: "default",
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"workload": "sts1"},
+						},
+						Template: v1.PodTemplateSpec{Spec: v1.PodSpec{}},
+					},
+				},
+				spd: &apiworkload.ServiceProfileDescriptor{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "default",
+						Name:      "sts1",
+					},
+					Spec: apiworkload.ServiceProfileDescriptorSpec{
+						TargetRef: apis.CrossVersionObjectReference{
+							Kind:       stsGVK.Kind,
+							Name:       "sts1",
+							APIVersion: stsGVK.GroupVersion().String(),
+						},
+					},
+					Status: apiworkload.ServiceProfileDescriptorStatus{
+						AggMetrics: []apiworkload.AggPodMetrics{},
+					},
+				},
+				cnc: &configapi.CustomNodeConfig{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "node1",
+					},
+					Status: configapi.CustomNodeConfigStatus{
+						DefaultServiceProfileConfig: &configapi.TargetConfig{
+							ConfigNamespace: "katalyst-system",
+							ConfigName:      "default-spd",
+							Hash:            "stale",
+						},
+					},
+				},
+				enableCNCCache:       true,
+				enableDefaultSPDSync: false,
+			},
+			wantCNC: &configapi.CustomNodeConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "node1",
+				},
+				Status: configapi.CustomNodeConfigStatus{},
+			},
+		},
 	}
 	for _, tt := range tests {
 		tt := tt
@@ -363,6 +512,9 @@ func Test_cncCacheController_Run(t *testing.T) {
 				EnableCNCCache:         tt.fields.enableCNCCache,
 				SPDPodLabelIndexerKeys: tt.fields.spdPodLabelIndexerKeys,
 				SPDWorkloadGVResources: []string{"statefulsets.v1.apps"},
+				EnableDefaultSPDSync:   tt.fields.enableDefaultSPDSync,
+				DefaultSPDNamespace:    tt.fields.defaultSPDNamespace,
+				DefaultSPDName:         tt.fields.defaultSPDName,
 			}
 			genericConfig := &generic.GenericConfiguration{}
 			controllerConf := &controller.GenericControllerConfiguration{
@@ -370,8 +522,12 @@ func Test_cncCacheController_Run(t *testing.T) {
 			}
 
 			ctx := context.TODO()
+			internalObjs := []runtime.Object{tt.fields.spd, tt.fields.cnc}
+			if tt.fields.defaultSPD != nil {
+				internalObjs = append(internalObjs, tt.fields.defaultSPD)
+			}
 			controlCtx, err := katalystbase.GenerateFakeGenericContext([]runtime.Object{tt.fields.pod},
-				[]runtime.Object{tt.fields.spd, tt.fields.cnc}, []runtime.Object{tt.fields.workload})
+				internalObjs, []runtime.Object{tt.fields.workload})
 			assert.NoError(t, err)
 
 			spdController, err := NewSPDController(ctx, controlCtx, genericConfig, controllerConf,

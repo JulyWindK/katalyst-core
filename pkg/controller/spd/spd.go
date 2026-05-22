@@ -241,6 +241,10 @@ func (sc *SPDController) Run() {
 	}
 	klog.Infof("caches are synced for %s controller", spdControllerName)
 
+	// best-effort bootstrap of the cluster-level default SPD before workers start
+	// so that downstream CNC propagation and agent fallback can light up at once.
+	sc.ensureDefaultSPD(sc.ctx)
+
 	for i := 0; i < workloadWorkerCount; i++ {
 		go wait.Until(sc.workloadWorker, time.Second, sc.ctx.Done())
 	}
@@ -264,6 +268,109 @@ func (sc *SPDController) Run() {
 	}
 
 	<-sc.ctx.Done()
+}
+
+// ensureDefaultSPD bootstraps the cluster-level default SPD when the controller
+// is configured with both DefaultSPDNamespace and DefaultSPDName. The default
+// SPD is the singleton fallback used by agents when a workload-level SPD is
+// missing, so the controller is responsible for guaranteeing its presence:
+//
+//   - if it does not exist on the API server, create an empty skeleton with
+//     the well-known default annotation;
+//   - if it already exists but lacks the default annotation, patch only the
+//     annotation in place so that operators can fill in spec/baseline freely
+//     without the controller stomping on their changes;
+//   - if it already exists with the annotation, do nothing (idempotent).
+//
+// The auto-discovery mode (DefaultSPDName empty) is intentionally not
+// auto-created: in that mode the cluster admin owns the lifecycle of the
+// default SPD and selects which one is "default" via the annotation.
+//
+// Failures are logged and emitted as metrics but do not block controller
+// startup; the next controller restart re-runs this routine.
+func (sc *SPDController) ensureDefaultSPD(ctx context.Context) {
+	if !sc.conf.EnableDefaultSPDSync {
+		return
+	}
+	ns := sc.conf.DefaultSPDNamespace
+	name := sc.conf.DefaultSPDName
+	if ns == "" || name == "" {
+		return
+	}
+
+	existing, err := sc.spdLister.ServiceProfileDescriptors(ns).Get(name)
+	switch {
+	case err == nil:
+		if hasDefaultSPDAnnotation(existing) {
+			return
+		}
+		patched := existing.DeepCopy()
+		setDefaultSPDAnnotation(patched)
+		if _, uErr := sc.spdControl.UpdateSPD(ctx, patched, metav1.UpdateOptions{}); uErr != nil {
+			klog.Errorf("[spd] patch default spd annotation %s/%s failed: %v", ns, name, uErr)
+			_ = sc.metricsEmitter.StoreInt64("ensure_default_spd_failed", 1, metrics.MetricTypeNameCount,
+				metrics.MetricTag{Key: "reason", Val: "patch"})
+			return
+		}
+		klog.Infof("[spd] patched default annotation onto existing default spd %s/%s", ns, name)
+	case errors.IsNotFound(err):
+		skeleton := buildDefaultSPDSkeleton(ns, name)
+		if _, cErr := sc.spdControl.CreateSPD(ctx, skeleton, metav1.CreateOptions{}); cErr != nil {
+			if errors.IsAlreadyExists(cErr) {
+				// concurrent creation by another controller replica is fine
+				return
+			}
+			klog.Errorf("[spd] create default spd %s/%s failed: %v", ns, name, cErr)
+			_ = sc.metricsEmitter.StoreInt64("ensure_default_spd_failed", 1, metrics.MetricTypeNameCount,
+				metrics.MetricTag{Key: "reason", Val: "create"})
+			return
+		}
+		klog.Infof("[spd] created cluster-level default spd %s/%s", ns, name)
+	default:
+		klog.Errorf("[spd] lookup default spd %s/%s failed: %v", ns, name, err)
+		_ = sc.metricsEmitter.StoreInt64("ensure_default_spd_failed", 1, metrics.MetricTypeNameCount,
+			metrics.MetricTag{Key: "reason", Val: "get"})
+	}
+}
+
+// hasDefaultSPDAnnotation reports whether the given spd already carries the
+// well-known default-SPD annotation.
+func hasDefaultSPDAnnotation(spd *apiworkload.ServiceProfileDescriptor) bool {
+	if spd == nil {
+		return false
+	}
+	v, ok := spd.GetAnnotations()[consts.SPDAnnotationDefaultKey]
+	return ok && v == consts.SPDAnnotationDefaultValue
+}
+
+// setDefaultSPDAnnotation stamps the well-known default-SPD annotation on the
+// given spd in-place; callers are expected to have DeepCopy'd already.
+func setDefaultSPDAnnotation(spd *apiworkload.ServiceProfileDescriptor) {
+	if spd == nil {
+		return
+	}
+	if spd.Annotations == nil {
+		spd.Annotations = map[string]string{}
+	}
+	spd.Annotations[consts.SPDAnnotationDefaultKey] = consts.SPDAnnotationDefaultValue
+}
+
+// buildDefaultSPDSkeleton constructs the minimal default SPD object created by
+// the controller on first boot. It deliberately leaves spec.targetRef empty
+// (the default SPD has no workload behind it) and leaves indicators/baseline
+// untouched so that operators can fill them in later.
+func buildDefaultSPDSkeleton(namespace, name string) *apiworkload.ServiceProfileDescriptor {
+	return &apiworkload.ServiceProfileDescriptor{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: namespace,
+			Name:      name,
+			Annotations: map[string]string{
+				consts.SPDAnnotationDefaultKey: consts.SPDAnnotationDefaultValue,
+			},
+		},
+		Spec:   apiworkload.ServiceProfileDescriptorSpec{},
+		Status: apiworkload.ServiceProfileDescriptorStatus{},
+	}
 }
 
 func (sc *SPDController) GetIndicatorPlugins() (plugins []indicatorplugin.IndicatorPlugin) {
@@ -623,6 +730,12 @@ func (sc *SPDController) cleanSPD() {
 	}
 
 	for _, spd := range spdList {
+		// skip the cluster-level default SPD: it is intentionally created without a
+		// real workload behind it, so the regular workload-based GC rules do not apply.
+		if isDefaultSPD(sc.conf, spd) {
+			continue
+		}
+
 		gvr, _ := meta.UnsafeGuessKindToResource(schema.FromAPIVersionAndKind(spd.Spec.TargetRef.APIVersion, spd.Spec.TargetRef.Kind))
 		workloadLister, ok := sc.workloadLister[gvr]
 		if !ok {

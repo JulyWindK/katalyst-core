@@ -35,6 +35,10 @@ type SPDOptions struct {
 	IndicatorPlugins       []string
 	BaselinePercent        map[string]int64
 
+	EnableDefaultSPDSync bool
+	DefaultSPDNamespace  string
+	DefaultSPDName       string
+
 	*ResourcePortraitIndicatorPluginOptions
 }
 
@@ -44,6 +48,10 @@ func NewSPDOptions() *SPDOptions {
 		ResyncPeriod:    time.Second * 30,
 		EnableCNCCache:  true,
 		BaselinePercent: map[string]int64{},
+
+		EnableDefaultSPDSync: false,
+		DefaultSPDNamespace:  "default",
+		DefaultSPDName:       "default-spd",
 
 		ResourcePortraitIndicatorPluginOptions: NewResourcePortraitIndicatorPluginOptions(),
 	}
@@ -66,6 +74,12 @@ func (o *SPDOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 		"A list of indicator plugins to be used")
 	fs.StringToInt64Var(&o.BaselinePercent, "spd-qos-baseline-percent", o.BaselinePercent, ""+
 		"A map of qosLeve to default baseline percent[0,100]")
+	fs.BoolVar(&o.EnableDefaultSPDSync, "spd-enable-default-sync", o.EnableDefaultSPDSync,
+		"Whether to propagate the cluster-level default SPD's hash to all CNCs to enable agent fallback")
+	fs.StringVar(&o.DefaultSPDNamespace, "spd-default-namespace", o.DefaultSPDNamespace,
+		"Namespace of the cluster-level default SPD")
+	fs.StringVar(&o.DefaultSPDName, "spd-default-name", o.DefaultSPDName,
+		"Name of the cluster-level default SPD; empty means auto-discover by annotation")
 
 	o.ResourcePortraitIndicatorPluginOptions.AddFlags(fss)
 }
@@ -78,6 +92,9 @@ func (o *SPDOptions) ApplyTo(c *controller.SPDConfig) error {
 	c.EnableCNCCache = o.EnableCNCCache
 	c.IndicatorPlugins = o.IndicatorPlugins
 	c.BaselinePercent = o.BaselinePercent
+	c.EnableDefaultSPDSync = o.EnableDefaultSPDSync
+	c.DefaultSPDNamespace = o.DefaultSPDNamespace
+	c.DefaultSPDName = o.DefaultSPDName
 
 	if err := o.ResourcePortraitIndicatorPluginOptions.ApplyTo(c.ResourcePortraitIndicatorPluginConfig); err != nil {
 		return err

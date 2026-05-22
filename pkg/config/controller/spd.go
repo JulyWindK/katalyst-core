@@ -38,6 +38,18 @@ type SPDConfig struct {
 
 	BaselinePercent map[string]int64
 
+	// EnableDefaultSPDSync controls whether the controller should propagate the
+	// cluster-level default SPD's hash to all CNCs so that agents can fall back
+	// to it.
+	EnableDefaultSPDSync bool
+	// DefaultSPDNamespace is the namespace where the cluster-level default SPD
+	// resides. When DefaultSPDName is empty, the controller will discover default
+	// SPDs in this namespace by the SPDAnnotationDefaultKey annotation.
+	DefaultSPDNamespace string
+	// DefaultSPDName is the explicit name of the cluster-level default SPD;
+	// empty means auto-discover via the SPDAnnotationDefaultKey annotation.
+	DefaultSPDName string
+
 	*ResourcePortraitIndicatorPluginConfig
 }
 

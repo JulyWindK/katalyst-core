@@ -54,6 +54,9 @@ const (
 	metricsNameCacheNotFound            = "spd_manager_cache_not_found"
 	metricsNameUpdateCacheSuccess       = "spd_manager_update_cache_success"
 	metricsNameDeleteCache              = "spd_manager_delete_cache"
+	metricsNameDefaultSPDFallback       = "spd_manager_default_spd_fallback"
+	metricsNameDefaultSPDHashHit        = "spd_manager_default_spd_hash_hit"
+	metricsNameDefaultSPDHashMismatch   = "spd_manager_default_spd_hash_mismatch"
 )
 
 var SPDNameNotFoundError = pkgerrors.New("get SPD name not found")
@@ -95,6 +98,20 @@ type spdFetcher struct {
 
 	// spdCache is a cache of namespace/name to current target spd
 	spdCache *Cache
+
+	// enableDefaultSPDFallback enables falling back to a cluster-level default SPD
+	// when the service-level SPD is not available for a pod.
+	enableDefaultSPDFallback bool
+	// defaultSPDNamespace and defaultSPDName describe the cluster-level default SPD.
+	defaultSPDNamespace string
+	defaultSPDName      string
+
+	// defaultSPDMutex protects defaultSPD. The cluster-level default SPD is held
+	// purely in memory: it is fetched on startup and refreshed periodically, and
+	// is intentionally NOT persisted to checkpoint to avoid conflicting with the
+	// regular spdCache that shares the same on-disk namespace.
+	defaultSPDMutex sync.RWMutex
+	defaultSPD      *workloadapis.ServiceProfileDescriptor
 }
 
 // NewSPDFetcher creates a spd manager to implement SPDFetcher
@@ -114,6 +131,9 @@ func NewSPDFetcher(clientSet *client.GenericClientSet, emitter metrics.MetricEmi
 		cncFetcher:                     cncFetcher,
 		spdGetFromRemote:               conf.SPDGetFromRemote,
 		serviceProfileEnableNamespaces: conf.ServiceProfileEnableNamespaces,
+		enableDefaultSPDFallback:       conf.EnableDefaultSPDFallback,
+		defaultSPDNamespace:            conf.DefaultSPDNamespace,
+		defaultSPDName:                 conf.DefaultSPDName,
 	}
 
 	m.getPodSPDNameFunc = util.GetPodSPDName
@@ -127,6 +147,38 @@ func NewSPDFetcher(clientSet *client.GenericClientSet, emitter metrics.MetricEmi
 }
 
 func (s *spdFetcher) GetSPD(ctx context.Context, podMeta metav1.ObjectMeta) (*workloadapis.ServiceProfileDescriptor, error) {
+	spd, err := s.getServiceSPD(ctx, podMeta)
+	if err == nil {
+		return spd, nil
+	}
+	if !s.shouldFallback(err) {
+		return nil, err
+	}
+
+	// fall back to the cluster-level default SPD when configured
+	if !s.enableDefaultSPDFallback || s.defaultSPDName == "" || s.defaultSPDNamespace == "" {
+		return nil, err
+	}
+
+	defSPD := s.loadDefaultSPD()
+	if defSPD == nil {
+		// cold start fallback: try a synchronous remote fetch once.
+		s.refreshDefaultSPD(ctx)
+		defSPD = s.loadDefaultSPD()
+	}
+	if defSPD == nil {
+		return nil, err
+	}
+
+	_ = s.emitter.StoreInt64(metricsNameDefaultSPDFallback, 1, metrics.MetricTypeNameCount,
+		metrics.MetricTag{Key: "spdNamespace", Val: s.defaultSPDNamespace},
+		metrics.MetricTag{Key: "spdName", Val: s.defaultSPDName})
+	return defSPD, nil
+}
+
+// getServiceSPD encapsulates the original (service-level) SPD lookup so that
+// GetSPD can branch into the default-SPD fallback path on failure.
+func (s *spdFetcher) getServiceSPD(ctx context.Context, podMeta metav1.ObjectMeta) (*workloadapis.ServiceProfileDescriptor, error) {
 	spdName, err := s.getPodSPDNameFunc(podMeta)
 	if err != nil {
 		general.Warningf("get spd for pod (%v/%v) err %v", podMeta.Namespace, podMeta.Name, err)
@@ -139,6 +191,116 @@ func (s *spdFetcher) GetSPD(ctx context.Context, podMeta metav1.ObjectMeta) (*wo
 	}
 
 	return s.getSPDByNamespaceName(ctx, spdNamespace, spdName)
+}
+
+// shouldFallback decides whether the given error from the service-level SPD
+// lookup is recoverable by falling back to the default SPD. We only fall back
+// on definitive "not-found" errors so that transient errors do not silently
+// degrade pods to the default profile.
+func (s *spdFetcher) shouldFallback(err error) bool {
+	return IsSPDNameOrResourceNotFound(err)
+}
+
+// loadDefaultSPD returns the in-memory cluster-level default SPD snapshot.
+func (s *spdFetcher) loadDefaultSPD() *workloadapis.ServiceProfileDescriptor {
+	s.defaultSPDMutex.RLock()
+	defer s.defaultSPDMutex.RUnlock()
+	return s.defaultSPD
+}
+
+// storeDefaultSPD updates the in-memory cluster-level default SPD snapshot.
+func (s *spdFetcher) storeDefaultSPD(spd *workloadapis.ServiceProfileDescriptor) {
+	s.defaultSPDMutex.Lock()
+	defer s.defaultSPDMutex.Unlock()
+	s.defaultSPD = spd
+}
+
+// getDefaultSPDTargetConfig fetches the cluster-level default SPD identity and
+// hash from the local CNC's dedicated DefaultServiceProfileConfig field.
+// Returns (nil, nil) when the field is unset (e.g. controller has not synced yet).
+func (s *spdFetcher) getDefaultSPDTargetConfig(ctx context.Context) (*configapis.TargetConfig, error) {
+	currentCNC, err := s.cncFetcher.GetCNC(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if currentCNC == nil {
+		return nil, nil
+	}
+	return currentCNC.Status.DefaultServiceProfileConfig, nil
+}
+
+// refreshDefaultSPD synchronously refreshes the cluster-level default SPD
+// in-memory snapshot. It first consults the local CNC's
+// DefaultServiceProfileConfig field for hash-based rate limiting, and only
+// hits APIServer when the local snapshot's hash differs from the CNC hash
+// (or when the CNC field is missing as a fallback).
+//
+// The default SPD is intentionally not persisted to checkpoint to avoid
+// conflicting with the regular spdCache that shares the same on-disk namespace.
+func (s *spdFetcher) refreshDefaultSPD(ctx context.Context) {
+	if !s.enableDefaultSPDFallback || s.defaultSPDName == "" || s.defaultSPDNamespace == "" {
+		return
+	}
+
+	baseTag := []metrics.MetricTag{
+		{Key: "spdNamespace", Val: s.defaultSPDNamespace},
+		{Key: "spdName", Val: s.defaultSPDName},
+	}
+
+	targetConfig, err := s.getDefaultSPDTargetConfig(ctx)
+	if err != nil {
+		klog.Warningf("[spd-manager] get default spd target config from cnc failed: %v, fall back to remote fetch", err)
+		_ = s.emitter.StoreInt64(metricsNameGetCNCTargetConfigFailed, 1, metrics.MetricTypeNameCount, baseTag...)
+		s.fetchAndStoreDefaultSPD(ctx)
+		return
+	}
+	if targetConfig == nil {
+		// CNC has not yet propagated the default SPD; fall back to remote fetch
+		// so that the agent can serve fallback even before the controller syncs.
+		s.fetchAndStoreDefaultSPD(ctx)
+		return
+	}
+
+	// Defensive guard: the controller's default SPD identity should match the
+	// agent's configuration. If they diverge, log and skip refresh to avoid
+	// silently fetching an unintended SPD.
+	if targetConfig.ConfigNamespace != s.defaultSPDNamespace ||
+		targetConfig.ConfigName != s.defaultSPDName {
+		klog.Warningf("[spd-manager] default spd identity mismatch: cnc=%s/%s, agent=%s/%s",
+			targetConfig.ConfigNamespace, targetConfig.ConfigName,
+			s.defaultSPDNamespace, s.defaultSPDName)
+		_ = s.emitter.StoreInt64(metricsNameDefaultSPDHashMismatch, 1, metrics.MetricTypeNameCount, baseTag...)
+		return
+	}
+
+	// Hash-based rate limiting: skip remote fetch when local snapshot is in sync.
+	cur := s.loadDefaultSPD()
+	if cur != nil && targetConfig.Hash != "" && util.GetSPDHash(cur) == targetConfig.Hash {
+		_ = s.emitter.StoreInt64(metricsNameDefaultSPDHashHit, 1, metrics.MetricTypeNameCount, baseTag...)
+		return
+	}
+
+	s.fetchAndStoreDefaultSPD(ctx)
+}
+
+// fetchAndStoreDefaultSPD performs the actual remote Get for the cluster-level
+// default SPD and updates the in-memory snapshot.
+func (s *spdFetcher) fetchAndStoreDefaultSPD(ctx context.Context) {
+	spd, err := s.client.InternalClient.WorkloadV1alpha1().
+		ServiceProfileDescriptors(s.defaultSPDNamespace).
+		Get(ctx, s.defaultSPDName, metav1.GetOptions{ResourceVersion: "0"})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// remote default SPD has been deleted; clear the in-memory snapshot
+			// so that subsequent fallback returns NotFound instead of stale data.
+			s.storeDefaultSPD(nil)
+			return
+		}
+		klog.Warningf("[spd-manager] refresh default spd %s/%s failed: %v",
+			s.defaultSPDNamespace, s.defaultSPDName, err)
+		return
+	}
+	s.storeDefaultSPD(spd)
 }
 
 // SetGetPodSPDNameFunc set get spd name function to override default getPodSPDNameFunc before started
@@ -158,6 +320,14 @@ func (s *spdFetcher) Run(ctx context.Context) {
 
 	go s.spdCache.Run(ctx)
 	go wait.UntilWithContext(ctx, s.sync, 30*time.Second)
+	if s.enableDefaultSPDFallback && s.defaultSPDName != "" && s.defaultSPDNamespace != "" {
+		// fetch the cluster-level default SPD on startup so that fallback can be
+		// served immediately without an extra round-trip on the first request.
+		s.refreshDefaultSPD(ctx)
+		// periodically refresh the cluster-level default SPD regardless of
+		// whether any pod on this node references it.
+		go wait.UntilWithContext(ctx, s.refreshDefaultSPD, 30*time.Second)
+	}
 	<-ctx.Done()
 }
 

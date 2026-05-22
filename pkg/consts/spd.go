@@ -21,3 +21,12 @@ const (
 	ServiceProfileDescriptorAnnotationKeyConfigHash    = "spd.katalyst.kubewharf.io/config.hash"
 	ServiceProfileDescriptorAnnotationKeyLastFetchTime = "spd.katalyst.kubewharf.io/lastFetchTime"
 )
+
+// const variables for cluster-level default spd fallback.
+const (
+	// SPDAnnotationDefaultKey identifies an SPD as the cluster-level default SPD.
+	// The SPD controller discovers default SPDs by this annotation when DefaultSPDName
+	// is not explicitly configured.
+	SPDAnnotationDefaultKey   = "spd.katalyst.kubewharf.io/default"
+	SPDAnnotationDefaultValue = "true"
+)
