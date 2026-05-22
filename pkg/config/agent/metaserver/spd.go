@@ -23,6 +23,16 @@ type SPDConfiguration struct {
 	ServiceProfileCacheTTL            time.Duration
 	SPDGetFromRemote                  bool
 	ServiceProfileEnableNamespaces    []string
+
+	// EnableDefaultSPDFallback enables falling back to a cluster-level default SPD
+	// when the service-level SPD cannot be found for a pod.
+	EnableDefaultSPDFallback bool
+	// DefaultSPDNamespace is the namespace where the cluster-level default SPD lives.
+	DefaultSPDNamespace string
+	// DefaultSPDName is the name of the cluster-level default SPD.
+	// When empty, the default SPD must be specified by the
+	// PodAnnotationSPDDefaultNameKey annotation on each pod.
+	DefaultSPDName string
 }
 
 func NewSPDConfiguration() *SPDConfiguration {

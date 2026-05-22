@@ -43,6 +43,7 @@ import (
 	apiListers "github.com/kubewharf/katalyst-api/pkg/client/listers/workload/v1alpha1"
 	"github.com/kubewharf/katalyst-core/pkg/client/control"
 	"github.com/kubewharf/katalyst-core/pkg/config/controller"
+	corectsts "github.com/kubewharf/katalyst-core/pkg/consts"
 	"github.com/kubewharf/katalyst-core/pkg/metrics"
 	"github.com/kubewharf/katalyst-core/pkg/util"
 	"github.com/kubewharf/katalyst-core/pkg/util/general"
@@ -151,6 +152,84 @@ func (c *cncCacheController) cncWorker() {
 	}
 }
 
+// getDefaultSPD returns the cluster-level default SPD according to the
+// controller config:
+//   - if DefaultSPDName is configured, look up by namespace/name directly.
+//   - otherwise, scan SPDs in DefaultSPDNamespace and pick one annotated with
+//     SPDAnnotationDefaultKey=true.
+//
+// returns (nil, nil) when default SPD is not configured or cannot be found.
+func (c *cncCacheController) getDefaultSPD() (*apiworkload.ServiceProfileDescriptor, error) {
+	if !c.conf.EnableDefaultSPDSync {
+		return nil, nil
+	}
+
+	ns := c.conf.DefaultSPDNamespace
+	if ns == "" {
+		return nil, nil
+	}
+
+	if name := c.conf.DefaultSPDName; name != "" {
+		spd, err := c.spdLister.ServiceProfileDescriptors(ns).Get(name)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return spd, nil
+	}
+
+	spdList, err := c.spdLister.ServiceProfileDescriptors(ns).List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	for _, spd := range spdList {
+		if spd == nil {
+			continue
+		}
+		if v, ok := spd.GetAnnotations()[corectsts.SPDAnnotationDefaultKey]; ok &&
+			v == corectsts.SPDAnnotationDefaultValue {
+			return spd, nil
+		}
+	}
+	return nil, nil
+}
+
+// isDefaultSPD returns true if the given spd matches the cluster-level default SPD configuration.
+func (c *cncCacheController) isDefaultSPD(spd *apiworkload.ServiceProfileDescriptor) bool {
+	return isDefaultSPD(c.conf, spd)
+}
+
+// isDefaultSPD is the shared predicate used by both cncCacheController and SPDController
+// to identify the cluster-level default SPD that should not be GC'd by cleanSPD nor
+// missed by CNC propagation.
+func isDefaultSPD(conf *controller.SPDConfig, spd *apiworkload.ServiceProfileDescriptor) bool {
+	if conf == nil || !conf.EnableDefaultSPDSync || spd == nil {
+		return false
+	}
+	if spd.Namespace != conf.DefaultSPDNamespace {
+		return false
+	}
+	if name := conf.DefaultSPDName; name != "" {
+		return spd.Name == name
+	}
+	v, ok := spd.GetAnnotations()[corectsts.SPDAnnotationDefaultKey]
+	return ok && v == corectsts.SPDAnnotationDefaultValue
+}
+
+// enqueueAllCNCs enqueues every CNC; used when the cluster-level default SPD changes.
+func (c *cncCacheController) enqueueAllCNCs() {
+	cncList, err := c.cncLister.List(labels.Everything())
+	if err != nil {
+		general.Errorf("list cnc for default spd propagation failed: %v", err)
+		return
+	}
+	for _, cnc := range cncList {
+		c.enqueueCNC(cnc)
+	}
+}
+
 func (c *cncCacheController) processNextCNC() bool {
 	key, quit := c.cncSyncQueue.Get()
 	if quit {
@@ -194,6 +273,15 @@ func (c *cncCacheController) syncCNC(key string) error {
 		return err
 	}
 
+	// pick up the cluster-level default SPD so that every CNC carries its
+	// identity and hash via a dedicated field for agents to fall back to when
+	// the service-level SPD is missing. The default SPD is intentionally NOT
+	// injected into the regular ServiceProfileConfigList to avoid polluting it.
+	defaultSPD, err := c.getDefaultSPD()
+	if err != nil {
+		general.Errorf("get default spd for cnc %s failed: %v", cnc.Name, err)
+	}
+
 	setCNC := func(cnc *configapis.CustomNodeConfig) {
 		for _, spd := range spdMap {
 			applySPDTargetConfigToCNC(cnc, spd)
@@ -205,6 +293,8 @@ func (c *cncCacheController) syncCNC(key string) error {
 			}
 			return cnc.Status.ServiceProfileConfigList[i].ConfigNamespace < cnc.Status.ServiceProfileConfigList[j].ConfigNamespace
 		})
+
+		applyDefaultSPDTargetConfigToCNC(cnc, defaultSPD)
 	}
 
 	_, err = c.patchCNC(cnc, setCNC)
@@ -250,6 +340,16 @@ func (c *cncCacheController) clearUnusedConfig() {
 				}
 				return false
 			})
+
+		// keep the cluster-level default SPD entry in the dedicated field; clear
+		// it when cnc cache is disabled or the configured default SPD is gone.
+		var defaultSPD *apiworkload.ServiceProfileDescriptor
+		if c.conf.EnableCNCCache {
+			if d, dErr := c.getDefaultSPD(); dErr == nil {
+				defaultSPD = d
+			}
+		}
+		applyDefaultSPDTargetConfigToCNC(cnc, defaultSPD)
 	}
 
 	clearCNCConfigs := func(i int) {
@@ -299,6 +399,10 @@ func (c *cncCacheController) addSPD(obj interface{}) {
 		general.Errorf("cannot convert obj to *apiworkload.ServiceProfileDescriptor")
 		return
 	}
+	if c.isDefaultSPD(spd) {
+		c.enqueueAllCNCs()
+		return
+	}
 	c.enqueueCNCForSPD(spd)
 }
 
@@ -313,6 +417,16 @@ func (c *cncCacheController) updateSPD(oldObj, newObj interface{}) {
 	if !ok {
 		general.Errorf("cannot convert obj to *apiworkload.ServiceProfileDescriptor")
 		return
+	}
+
+	// when the cluster-level default SPD is created/updated/changed identity,
+	// every CNC's default-spd entry must be refreshed.
+	if c.isDefaultSPD(oldSPD) || c.isDefaultSPD(newSPD) {
+		if util.GetSPDHash(oldSPD) != util.GetSPDHash(newSPD) ||
+			c.isDefaultSPD(oldSPD) != c.isDefaultSPD(newSPD) {
+			c.enqueueAllCNCs()
+			return
+		}
 	}
 
 	if util.GetSPDHash(oldSPD) != util.GetSPDHash(newSPD) {
@@ -345,6 +459,12 @@ func (c *cncCacheController) updateCNC(oldObj interface{}, newObj interface{}) {
 
 	if !apiequality.Semantic.DeepEqual(oldCNC.Status.ServiceProfileConfigList,
 		newCNC.Status.ServiceProfileConfigList) {
+		c.enqueueCNC(newCNC)
+		return
+	}
+
+	if !apiequality.Semantic.DeepEqual(oldCNC.Status.DefaultServiceProfileConfig,
+		newCNC.Status.DefaultServiceProfileConfig) {
 		c.enqueueCNC(newCNC)
 	}
 }
@@ -459,5 +579,26 @@ func applySPDTargetConfigToCNC(cnc *configapis.CustomNodeConfig,
 	} else {
 		serviceProfileConfigList = append(serviceProfileConfigList, targetConfig)
 		cnc.Status.ServiceProfileConfigList = serviceProfileConfigList
+	}
+}
+
+// applyDefaultSPDTargetConfigToCNC syncs the cluster-level default SPD identity
+// and hash to the dedicated CNCStatus field. Passing a nil spd clears the field.
+func applyDefaultSPDTargetConfigToCNC(cnc *configapis.CustomNodeConfig,
+	spd *apiworkload.ServiceProfileDescriptor,
+) {
+	if cnc == nil {
+		return
+	}
+
+	if spd == nil {
+		cnc.Status.DefaultServiceProfileConfig = nil
+		return
+	}
+
+	cnc.Status.DefaultServiceProfileConfig = &configapis.TargetConfig{
+		ConfigNamespace: spd.Namespace,
+		ConfigName:      spd.Name,
+		Hash:            util.GetSPDHash(spd),
 	}
 }

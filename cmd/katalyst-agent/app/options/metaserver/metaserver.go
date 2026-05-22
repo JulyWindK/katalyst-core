@@ -43,6 +43,9 @@ const (
 	defaultServiceProfileSkipCorruptionError = true
 	defaultServiceProfileCacheTTL            = 1 * time.Minute
 	defaultSPDGetFromRemote                  = false
+	defaultEnableDefaultSPDFallback          = false
+	defaultDefaultSPDNamespace               = "default"
+	defaultDefaultSPDName                    = "default-spd"
 )
 
 const (
@@ -80,6 +83,9 @@ type MetaServerOptions struct {
 	ServiceProfileSkipCorruptionError bool
 	ServiceProfileCacheTTL            time.Duration
 	SPDGetFromRemote                  bool
+	EnableDefaultSPDFallback          bool
+	DefaultSPDNamespace               string
+	DefaultSPDName                    string
 
 	// configurations for pod-cache
 	KubeletPodCacheSyncPeriod         time.Duration
@@ -114,6 +120,9 @@ func NewMetaServerOptions() *MetaServerOptions {
 		ServiceProfileSkipCorruptionError: defaultServiceProfileSkipCorruptionError,
 		ServiceProfileCacheTTL:            defaultServiceProfileCacheTTL,
 		SPDGetFromRemote:                  defaultSPDGetFromRemote,
+		EnableDefaultSPDFallback:          defaultEnableDefaultSPDFallback,
+		DefaultSPDNamespace:               defaultDefaultSPDNamespace,
+		DefaultSPDName:                    defaultDefaultSPDName,
 
 		KubeletPodCacheSyncPeriod:         defaultKubeletPodCacheSyncPeriod,
 		KubeletPodCacheSyncMaxRate:        defaultKubeletPodCacheSyncMaxRate,
@@ -158,6 +167,12 @@ func (o *MetaServerOptions) AddFlags(fss *cliflag.NamedFlagSets) {
 	fs.DurationVar(&o.ServiceProfileCacheTTL, "service-profile-cache-ttl", o.ServiceProfileCacheTTL,
 		"The ttl of service profile manager cache remote spd")
 	fs.BoolVar(&o.SPDGetFromRemote, "spd-get-from-remote", o.SPDGetFromRemote, "get spd from remote if not in cache")
+	fs.BoolVar(&o.EnableDefaultSPDFallback, "enable-default-spd-fallback", o.EnableDefaultSPDFallback,
+		"Whether to fall back to a cluster-level default SPD when the service-level SPD cannot be found")
+	fs.StringVar(&o.DefaultSPDNamespace, "default-spd-namespace", o.DefaultSPDNamespace,
+		"Namespace of the cluster-level default SPD")
+	fs.StringVar(&o.DefaultSPDName, "default-spd-name", o.DefaultSPDName,
+		"Name of the cluster-level default SPD; empty means rely on per-pod annotation")
 
 	fs.DurationVar(&o.KubeletPodCacheSyncPeriod, "kubelet-pod-cache-sync-period", o.KubeletPodCacheSyncPeriod,
 		"The period of meta server to sync pod from kubelet 10255 port")
@@ -195,6 +210,9 @@ func (o *MetaServerOptions) ApplyTo(c *metaserver.MetaServerConfiguration) error
 	c.ServiceProfileSkipCorruptionError = o.ServiceProfileSkipCorruptionError
 	c.ServiceProfileCacheTTL = o.ServiceProfileCacheTTL
 	c.SPDGetFromRemote = o.SPDGetFromRemote
+	c.EnableDefaultSPDFallback = o.EnableDefaultSPDFallback
+	c.DefaultSPDNamespace = o.DefaultSPDNamespace
+	c.DefaultSPDName = o.DefaultSPDName
 
 	c.KubeletPodCacheSyncPeriod = o.KubeletPodCacheSyncPeriod
 	c.KubeletPodCacheSyncMaxRate = rate.Limit(o.KubeletPodCacheSyncMaxRate)

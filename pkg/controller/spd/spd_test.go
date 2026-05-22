@@ -1287,3 +1287,194 @@ func TestIndicatorUpdater(t *testing.T) {
 	assert.Equal(t, expectedSpd.Status.BusinessStatus, newSPD.Status.BusinessStatus)
 	assert.Equal(t, expectedSpd.Status.AggMetrics, newSPD.Status.AggMetrics)
 }
+
+// TestSPDController_EnsureDefaultSPD verifies that the controller bootstraps the
+// cluster-level default SPD on startup according to its configuration.
+func TestSPDController_EnsureDefaultSPD(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ns   = "katalyst-system"
+		name = "default-spd"
+	)
+
+	tests := []struct {
+		desc           string
+		existingSPD    *apiworkload.ServiceProfileDescriptor
+		conf           *controller.SPDConfig
+		expectExist    bool
+		expectAnnoSet  bool
+		expectSpecKept bool
+	}{
+		{
+			desc:        "create default spd when missing",
+			existingSPD: nil,
+			conf: &controller.SPDConfig{
+				SPDWorkloadGVResources: []string{"statefulsets.v1.apps"},
+				EnableDefaultSPDSync:   true,
+				DefaultSPDNamespace:    ns,
+				DefaultSPDName:         name,
+			},
+			expectExist:   true,
+			expectAnnoSet: true,
+		},
+		{
+			desc: "patch annotation when default spd exists without annotation",
+			existingSPD: &apiworkload.ServiceProfileDescriptor{
+				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+				Spec: apiworkload.ServiceProfileDescriptorSpec{
+					BaselinePercent: pointer.Int32(50),
+				},
+			},
+			conf: &controller.SPDConfig{
+				SPDWorkloadGVResources: []string{"statefulsets.v1.apps"},
+				EnableDefaultSPDSync:   true,
+				DefaultSPDNamespace:    ns,
+				DefaultSPDName:         name,
+			},
+			expectExist:    true,
+			expectAnnoSet:  true,
+			expectSpecKept: true,
+		},
+		{
+			desc: "no-op when default spd already has annotation",
+			existingSPD: &apiworkload.ServiceProfileDescriptor{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: ns,
+					Name:      name,
+					Annotations: map[string]string{
+						consts.SPDAnnotationDefaultKey: consts.SPDAnnotationDefaultValue,
+					},
+				},
+				Spec: apiworkload.ServiceProfileDescriptorSpec{
+					BaselinePercent: pointer.Int32(70),
+				},
+			},
+			conf: &controller.SPDConfig{
+				SPDWorkloadGVResources: []string{"statefulsets.v1.apps"},
+				EnableDefaultSPDSync:   true,
+				DefaultSPDNamespace:    ns,
+				DefaultSPDName:         name,
+			},
+			expectExist:    true,
+			expectAnnoSet:  true,
+			expectSpecKept: true,
+		},
+		{
+			desc:        "skip when EnableDefaultSPDSync is false",
+			existingSPD: nil,
+			conf: &controller.SPDConfig{
+				SPDWorkloadGVResources: []string{"statefulsets.v1.apps"},
+				EnableDefaultSPDSync:   false,
+				DefaultSPDNamespace:    ns,
+				DefaultSPDName:         name,
+			},
+			expectExist: false,
+		},
+		{
+			desc:        "skip auto-create when DefaultSPDName is empty",
+			existingSPD: nil,
+			conf: &controller.SPDConfig{
+				SPDWorkloadGVResources: []string{"statefulsets.v1.apps"},
+				EnableDefaultSPDSync:   true,
+				DefaultSPDNamespace:    ns,
+				DefaultSPDName:         "",
+			},
+			expectExist: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.desc, func(t *testing.T) {
+			t.Parallel()
+
+			internalObjs := []runtime.Object{}
+			if tt.existingSPD != nil {
+				internalObjs = append(internalObjs, tt.existingSPD)
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			controlCtx, err := katalystbase.GenerateFakeGenericContext(nil, internalObjs, nil)
+			assert.NoError(t, err)
+
+			genericConfig := &generic.GenericConfiguration{}
+			controllerConf := &controller.GenericControllerConfiguration{
+				DynamicGVResources: []string{"statefulsets.v1.apps"},
+			}
+			sc, err := NewSPDController(ctx, controlCtx, genericConfig, controllerConf,
+				tt.conf, generic.NewQoSConfiguration(), struct{}{})
+			assert.NoError(t, err)
+
+			controlCtx.StartInformer(ctx)
+			go sc.Run()
+			synced := cache.WaitForCacheSync(ctx.Done(), sc.syncedFunc...)
+			assert.True(t, synced)
+			// allow the bootstrap goroutine to run
+			time.Sleep(500 * time.Millisecond)
+
+			got, getErr := controlCtx.Client.InternalClient.WorkloadV1alpha1().
+				ServiceProfileDescriptors(ns).Get(ctx, name, metav1.GetOptions{})
+
+			if !tt.expectExist {
+				assert.Error(t, getErr, "expected default spd to be absent")
+				return
+			}
+			assert.NoError(t, getErr)
+			assert.NotNil(t, got)
+
+			if tt.expectAnnoSet {
+				assert.Equal(t, consts.SPDAnnotationDefaultValue,
+					got.GetAnnotations()[consts.SPDAnnotationDefaultKey],
+					"default annotation should be present")
+			}
+			if tt.expectSpecKept && tt.existingSPD != nil {
+				assert.Equal(t, tt.existingSPD.Spec.BaselinePercent, got.Spec.BaselinePercent,
+					"existing spec should not be overwritten")
+			}
+		})
+	}
+}
+
+func TestEnsureDefaultSPD_AlreadyExistsRace(t *testing.T) {
+	t.Parallel()
+
+	const (
+		ns   = "katalyst-system"
+		name = "default-spd"
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Pre-populate the SPD so a Create call would return AlreadyExists,
+	// while the lister will not have observed it (we don't start informers).
+	preexisting := &apiworkload.ServiceProfileDescriptor{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: name},
+	}
+	controlCtx, err := katalystbase.GenerateFakeGenericContext(nil,
+		[]runtime.Object{preexisting}, nil)
+	assert.NoError(t, err)
+
+	conf := &controller.SPDConfig{
+		SPDWorkloadGVResources: []string{"statefulsets.v1.apps"},
+		EnableDefaultSPDSync:   true,
+		DefaultSPDNamespace:    ns,
+		DefaultSPDName:         name,
+	}
+	sc, err := NewSPDController(ctx, controlCtx,
+		&generic.GenericConfiguration{},
+		&controller.GenericControllerConfiguration{DynamicGVResources: []string{"statefulsets.v1.apps"}},
+		conf, generic.NewQoSConfiguration(), struct{}{})
+	assert.NoError(t, err)
+
+	// Call ensureDefaultSPD directly without starting informers; lister will
+	// return NotFound, so the controller will attempt Create which returns
+	// AlreadyExists; this must not produce a panic or surface an error.
+	assert.NotPanics(t, func() {
+		sc.ensureDefaultSPD(ctx)
+	})
+}
+
