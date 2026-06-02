@@ -202,7 +202,8 @@ func Test_spdManager_GetSPD(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, s)
 
-			ctx := context.TODO()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
 			_, _ = s.GetSPD(ctx, tt.args.pod.ObjectMeta)
 			go s.Run(ctx)

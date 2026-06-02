@@ -260,8 +260,10 @@ func (s *Cache) clearUnusedSPDs(_ context.Context) {
 		if info == nil {
 			continue
 		}
-		// pinned spd entries (e.g. cluster-default SPDs) must remain in cache
-		if s.IsSPDPinned(key) {
+		// pinned spd entries (e.g. cluster-default SPDs) must remain in cache.
+		// avoid calling IsSPDPinned() here because clearUnusedSPDs already holds
+		// the write lock and RWMutex is not re-entrant.
+		if info.pinned {
 			continue
 		}
 		if info.lastGetTime.Add(s.expiredTime).Before(now) {
